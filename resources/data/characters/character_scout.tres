@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/character_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"scout"
+display_name = "侦察兵"
+callsign = "SCOUT"
+max_hp = 85
+speed = 260
+skill_id = &"tactical_roll"
+skill_name = "战术翻滚"
+skill_desc = "0.25s 无敌位移 200px"
+skill_cd = 12
+primary_weapon = &"shotgun"
+secondary_weapon = &"m9"
+melee_weapon = &"axe"
+unlock_score = 0
+portrait = "scout"
+accent = Color(0.450, 0.820, 0.900, 1.000)
+description = "最快的双腿，滑铲与翻滚让 Hunter 摸不到。"
+soldier_role = &""

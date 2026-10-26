@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"molotov"
+display_name = "燃烧瓶"
+category = &"throwable"
+damage = 0
+pellets = 1
+rpm = 60
+mag_size = 0
+reserve_ammo = 0
+reload_time = 0.0
+spread = 0.0
+effective_range = 90
+score_mult = 1.0
+fire_mode = &"throwable"
+throw_radius = 90
+fuse_time = 0.2
+effect_duration = 8.0
+effect_dps = 12.0
+sprite = "molotov"
+description = "落点 90px 火区 8 秒，对 CEDA 防护服无效。"

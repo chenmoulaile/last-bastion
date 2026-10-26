@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/character_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"assault"
+display_name = "突击兵"
+callsign = "ASSAULT"
+max_hp = 100
+speed = 220
+skill_id = &"assault_rush"
+skill_name = "突击冲锋"
+skill_desc = "4 秒内换弹速度 ×2、移速 +20%"
+skill_cd = 25
+primary_weapon = &"ar15"
+secondary_weapon = &"m9"
+melee_weapon = &"axe"
+unlock_score = 0
+portrait = "assault"
+accent = Color(0.550, 0.780, 0.450, 1.000)
+description = "全能 frontline，AR-15 适配所有距离。"
+soldier_role = &""

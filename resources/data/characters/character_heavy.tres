@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/character_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"heavy"
+display_name = "重装兵"
+callsign = "HEAVY"
+max_hp = 150
+speed = 170
+skill_id = &"shield_wall"
+skill_name = "盾墙"
+skill_desc = "正面减伤 70% 持续 5s，近战伤害 ×2"
+skill_cd = 28
+primary_weapon = &"lmg"
+secondary_weapon = &"m9"
+melee_weapon = &"axe"
+unlock_score = 0
+portrait = "heavy"
+accent = Color(0.950, 0.750, 0.380, 1.000)
+description = "150 HP 的移动堡垒，慢但站得住。"
+soldier_role = &""

@@ -1,0 +1,8 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/levels/level_runner.gd" id="1_runner"]
+[ext_resource type="Resource" path="res://resources/data/levels/l06.tres" id="2_data"]
+
+[node name="L06" type="Node2D"]
+script = ExtResource("1_runner")
+level_data = ExtResource("2_data")

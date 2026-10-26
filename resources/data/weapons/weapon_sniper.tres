@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"sniper"
+display_name = "狙击步枪"
+category = &"primary"
+damage = 90
+pellets = 1
+rpm = 90
+mag_size = 10
+reserve_ammo = 60
+reload_time = 2.4
+spread = 5.0
+effective_range = 900
+score_mult = 1.5
+automatic = false
+pierce = 2
+knockback = 80
+scoped_spread = 0.3
+sprite = "sniper"
+description = "开镜 0.3° 散布，贯穿 2 个目标。累计 50 万分解锁。"

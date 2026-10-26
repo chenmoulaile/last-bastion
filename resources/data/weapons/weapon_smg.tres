@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"smg"
+display_name = "SMG 冲锋枪"
+category = &"primary"
+damage = 14
+pellets = 1
+rpm = 900
+mag_size = 40
+reserve_ammo = 240
+reload_time = 1.5
+spread = 3.5
+effective_range = 380
+score_mult = 1.1
+automatic = true
+knockback = 25
+sprite = "smg"
+description = "高射速，适合清理贴脸的普通感染者。"

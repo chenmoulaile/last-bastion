@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="ZombieData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/zombie_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"hazmat"
+display_name = "防护服僵尸"
+max_hp = 45
+walk_speed_min = 100
+walk_speed_max = 140
+attack_damage = 6
+attack_interval = 0.5
+score_value = 220
+behavior_id = &"common"
+tint = Color(1.000, 0.950, 0.650, 1.000)
+size_scale = 1.0
+anim_map = {}
+is_special = false
+is_uncommon = true
+is_boss = false
+head_hittable = true
+head_immune = false
+fire_immune = true
+front_immune = false
+low_profile = false
+control_kind = &""
+special_weight = 0.0
+sprite_prefix = "hazmat"
+sprite_size = Vector2i(24, 32)
+collision_size = Vector2(14.0, 26.0)
+death_animation = "die"
+codex_category = "uncommon"
+description = "CEDA 员工，免疫燃烧瓶与地面火。"
+pounce_range = 380
+attack_range = 40
+sight_range = 260
+voice_id = &"zombie_growl"

@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"katana"
+display_name = "武士刀"
+category = &"melee"
+damage = 45
+pellets = 1
+rpm = 120
+mag_size = 0
+reserve_ammo = 0
+reload_time = 0.0
+spread = 0.0
+effective_range = 65
+score_mult = 1.0
+automatic = false
+knockback = 100
+melee_arc = 100
+melee_range = 65
+fire_mode = &"melee"
+sprite = "katana"
+description = "特勤 Ninja 专属，可快速连斩。"

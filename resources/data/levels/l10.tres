@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/level_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"l10"
+chapter = 4
+chapter_name = "最后防线"
+title = "大桥决战"
+subtitle = "桥的两端都是死路。"
+theme = &"bridge"
+length = 11000
+default_mode = &"FREE"
+difficulty_scale = 1.0
+base_score = 100000
+par_score = 270000
+time_target = 360
+special_density = 1.5
+special_weights = {"hunter": 0.125, "smoker": 0.125, "boomer": 0.125, "charger": 0.125, "spitter": 0.125, "jockey": 0.125, "tank": 0.125, "witch": 0.125}
+uncommon_weights = {"riot": 0.2, "hazmat": 0.2, "mud": 0.15, "hardhat": 0.15, "clown": 0.15, "scavenger": 0.15}
+bosses = ["tank", "tank"]
+events = [{"at": 0.2, "type": "horde", "count": 22}, {"at": 0.38, "type": "special", "kind": "smoker"}, {"at": 0.52, "type": "boss", "kind": "tank", "count": 2}, {"at": 0.7, "type": "horde", "count": 26, "alarm": true}, {"at": 0.84, "type": "special", "kind": "jockey"}]
+checkpoint_at = 0.5
+hidden_room_at = 0.6
+dark = false
+rain = true
+extraction = "safehouse"
+extraction_defense = 0.0
+tutorial_tips = ["两只 Tank 会分别锁定不同目标。", "燃烧瓶对 Tank 造成 1.5 倍伤害。", "桥面掩体可以挡住投石。"]
+briefing = "大桥上出现两只 Tank。利用车辆与油桶，别被逼到桥边。"
+new_threat = "双 TANK · 全图鉴 · 自由模式"
+player_weapons = []
+commander_squad = []
+ammo_crates = 6
+medkits = 5
+unlocks_weapon = ""
+music_theme = &"bridge"
+escort_vehicle = false

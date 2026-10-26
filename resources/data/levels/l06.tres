@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/level_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"l06"
+chapter = 2
+chapter_name = "城市废墟"
+title = "天台撤离"
+subtitle = "直升机不会等太久。"
+theme = &"city"
+length = 9500
+default_mode = &"SQUAD"
+difficulty_scale = 1.0
+base_score = 100000
+par_score = 220000
+time_target = 300
+special_density = 1.25
+special_weights = {"jockey": 0.3, "boomer": 0.3, "hunter": 0.4}
+uncommon_weights = {"clown": 0.4, "hazmat": 0.2}
+bosses = []
+events = [{"at": 0.25, "type": "special", "kind": "jockey"}, {"at": 0.4, "type": "horde", "count": 20}, {"at": 0.55, "type": "defense", "seconds": 35, "waves": 2, "count": 18}, {"at": 0.7, "type": "special", "kind": "boomer"}]
+checkpoint_at = 0.5
+hidden_room_at = 0.6
+dark = false
+rain = true
+extraction = "helicopter"
+extraction_defense = 90.0
+tutorial_tips = ["Jockey 会骑上你的头操控方向。队友射击时小心误伤。", "小丑的哨音会吸引周围感染者，死亡时还会触发小尸潮。", "撤离倒计时开始后，任意存活成员进入撤离区即可结算。"]
+briefing = "抵达天台，守住直升机坪 90 秒。不要留下任何人。"
+new_threat = "Jockey 骑手 · 小丑 · 90 秒撤离防守"
+player_weapons = []
+commander_squad = []
+ammo_crates = 5
+medkits = 4
+unlocks_weapon = ""
+music_theme = &"city"
+escort_vehicle = false

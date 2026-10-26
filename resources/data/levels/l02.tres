@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/level_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"l02"
+chapter = 1
+chapter_name = "郊区突围"
+title = "补给超市"
+subtitle = "货架之间，没有安全通道。"
+theme = &"suburb"
+length = 9500
+default_mode = &"SQUAD"
+difficulty_scale = 1.0
+base_score = 100000
+par_score = 175000
+time_target = 260
+special_density = 0.85
+special_weights = {"hunter": 0.45, "boomer": 0.55}
+uncommon_weights = {"riot": 0.15}
+bosses = []
+events = [{"at": 0.2, "type": "supply", "kind": "medkit"}, {"at": 0.3, "type": "horde", "count": 16}, {"at": 0.45, "type": "special", "kind": "boomer"}, {"at": 0.55, "type": "supply", "kind": "ammo"}, {"at": 0.62, "type": "defense", "seconds": 45, "waves": 2, "count": 16}, {"at": 0.7, "type": "special", "kind": "hunter"}]
+checkpoint_at = 0.5
+hidden_room_at = 0.35
+dark = false
+rain = false
+extraction = "safehouse"
+extraction_defense = 0.0
+tutorial_tips = ["Boomer 被击杀也会爆炸泼胆汁，远距离解决。", "听到尖啸立刻面向声源；Hunter 扑空会撞墙硬直。", "拾取消防斧后按 Q 切换到近战。"]
+briefing = "收集三处补给，在结账区顶住双波尸潮。消防斧在仓库。"
+new_threat = "Boomer 胖子 · Hunter 猎手 · 消防斧"
+player_weapons = ["axe"]
+commander_squad = []
+ammo_crates = 4
+medkits = 3
+unlocks_weapon = ""
+music_theme = &"suburb"
+escort_vehicle = false

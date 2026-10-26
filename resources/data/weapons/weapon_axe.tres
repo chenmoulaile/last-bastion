@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"axe"
+display_name = "消防斧"
+category = &"melee"
+damage = 60
+pellets = 1
+rpm = 75
+mag_size = 0
+reserve_ammo = 0
+reload_time = 0.0
+spread = 0.0
+effective_range = 60
+score_mult = 1.0
+automatic = false
+knockback = 160
+melee_arc = 120
+melee_range = 60
+fire_mode = &"melee"
+sprite = "axe"
+description = "大硬直重击，破门与斩首都靠它。"

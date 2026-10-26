@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"m9"
+display_name = "M9 手枪"
+category = &"secondary"
+damage = 18
+pellets = 1
+rpm = 400
+mag_size = 15
+reserve_ammo = -1
+reload_time = 1.2
+spread = 1.5
+effective_range = 400
+score_mult = 1.0
+automatic = false
+knockback = 30
+sprite = "m9"
+description = "永远可靠的副武器，备弹无限。"

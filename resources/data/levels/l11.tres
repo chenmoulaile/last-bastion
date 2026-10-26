@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/level_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"l11"
+chapter = 4
+chapter_name = "最后防线"
+title = "最后防线"
+subtitle = "守住这里。直升机是最后的答案。"
+theme = &"bridge"
+length = 12000
+default_mode = &"FREE"
+difficulty_scale = 1.0
+base_score = 100000
+par_score = 300000
+time_target = 420
+special_density = 1.6
+special_weights = {"hunter": 0.125, "smoker": 0.125, "boomer": 0.125, "charger": 0.125, "spitter": 0.125, "jockey": 0.125, "tank": 0.125, "witch": 0.125}
+uncommon_weights = {"riot": 0.2, "hazmat": 0.2, "mud": 0.15, "hardhat": 0.15, "clown": 0.15, "scavenger": 0.15}
+bosses = ["tank", "tank"]
+events = [{"at": 0.2, "type": "defense", "seconds": 40, "waves": 2, "count": 22}, {"at": 0.42, "type": "horde", "count": 28, "alarm": true}, {"at": 0.58, "type": "boss", "kind": "tank"}, {"at": 0.7, "type": "defense", "seconds": 45, "waves": 2, "count": 24}, {"at": 0.82, "type": "boss", "kind": "tank", "count": 2}]
+checkpoint_at = 0.5
+hidden_room_at = 0.5
+dark = false
+rain = true
+extraction = "helicopter"
+extraction_defense = 120.0
+tutorial_tips = ["撤离倒计时开始后，任何存活成员进入撤离区即可结算。", "优先击杀 Boomer 与 Smoker，别让尸潮叠加。", "保留燃烧瓶给 Tank。"]
+briefing = "三道尸潮，两只 Tank，然后登机。最后防线不允许后退。"
+new_threat = "3 波尸潮 · 双 TANK · 直升机终战"
+player_weapons = []
+commander_squad = []
+ammo_crates = 7
+medkits = 5
+unlocks_weapon = ""
+music_theme = &"bridge"
+escort_vehicle = false

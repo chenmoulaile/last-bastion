@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/level_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"l01"
+chapter = 1
+chapter_name = "郊区突围"
+title = "街道突破口"
+subtitle = "天亮之前，穿过街区。"
+theme = &"suburb"
+length = 9000
+default_mode = &"SQUAD"
+difficulty_scale = 1.0
+base_score = 100000
+par_score = 160000
+time_target = 240
+special_density = 0.0
+special_weights = {}
+uncommon_weights = {}
+bosses = []
+events = [{"at": 0.18, "type": "tip", "text": "一只感染者发现了你。枪声会引来更多。"}, {"at": 0.36, "type": "horde", "count": 14, "alarm": false}, {"at": 0.58, "type": "horde", "count": 18, "alarm": false}, {"at": 0.78, "type": "special", "kind": "hunter", "optional": true}]
+checkpoint_at = 0.5
+hidden_room_at = 0.42
+dark = false
+rain = true
+extraction = "safehouse"
+extraction_defense = 0.0
+tutorial_tips = ["A/D 移动，空格跳跃，S 蹲下。跑动中按 S 滑铲。", "鼠标瞄准，左键/J 开火，F 近战推开贴脸的感染者。", "面对门按 E 踹开。门后的感染者会短暂硬直。", "W/S + 开火可以朝斜上/斜下射击。"]
+briefing = "小队从郊区安全屋出发。穿过街道，抵达下一个撤离点。"
+new_threat = "普通感染者 · 尸潮 · 惊动链"
+player_weapons = []
+commander_squad = []
+ammo_crates = 3
+medkits = 2
+unlocks_weapon = ""
+music_theme = &"suburb"
+escort_vehicle = false

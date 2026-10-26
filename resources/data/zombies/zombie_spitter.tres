@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="ZombieData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/zombie_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"spitter"
+display_name = "呕吐者"
+max_hp = 100
+walk_speed_min = 150
+walk_speed_max = 150
+attack_damage = 0
+attack_interval = 1.0
+score_value = 600
+behavior_id = &"spitter"
+tint = Color(1.000, 1.000, 1.000, 1.000)
+size_scale = 1.0
+anim_map = {}
+is_special = true
+is_uncommon = false
+is_boss = false
+head_hittable = true
+head_immune = false
+fire_immune = false
+front_immune = false
+low_profile = false
+control_kind = &""
+special_weight = 1.0
+sprite_prefix = "spitter"
+sprite_size = Vector2i(32, 32)
+collision_size = Vector2(16.0, 28.0)
+death_animation = "die"
+codex_category = "special"
+description = "酸液池封锁路线，死亡也会留下小酸池。"
+pounce_range = 380
+attack_range = 40
+sight_range = 380
+voice_id = &"spitter_hiss"

@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/character_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"medic"
+display_name = "医疗兵"
+callsign = "MEDIC"
+max_hp = 90
+speed = 215
+skill_id = &"field_medic"
+skill_name = "战地医疗"
+skill_desc = "半径 150px 内队友回 35HP、自己回 20"
+skill_cd = 30
+primary_weapon = &"smg"
+secondary_weapon = &"m9"
+melee_weapon = &"axe"
+unlock_score = 0
+portrait = "medic"
+accent = Color(0.920, 0.550, 0.550, 1.000)
+description = "团队续航核心，倒地救援速度更快。"
+soldier_role = &""

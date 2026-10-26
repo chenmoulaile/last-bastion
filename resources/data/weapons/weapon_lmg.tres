@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"lmg"
+display_name = "LMG 轻机枪"
+category = &"primary"
+damage = 18
+pellets = 1
+rpm = 700
+mag_size = 100
+reserve_ammo = 300
+reload_time = 3.8
+spread = 4.5
+effective_range = 500
+score_mult = 1.2
+automatic = true
+knockback = 35
+sprite = "lmg"
+description = "百发弹匣的压制火力。累计 30 万分解锁。"

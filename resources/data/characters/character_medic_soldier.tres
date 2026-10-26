@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/character_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"medic_soldier"
+display_name = "战地医疗兵"
+callsign = "MEDIC"
+max_hp = 80
+speed = 210
+skill_id = &""
+skill_name = ""
+skill_desc = ""
+skill_cd = 0
+primary_weapon = &"smg"
+secondary_weapon = &"m9"
+melee_weapon = &"axe"
+unlock_score = 0
+portrait = "medic"
+accent = Color(0.920, 0.550, 0.550, 1.000)
+description = "自动治疗 80px 内 HP<50 的伤兵。"
+soldier_role = &"medic"

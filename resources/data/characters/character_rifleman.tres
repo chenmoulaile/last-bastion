@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/character_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"rifleman"
+display_name = "步枪手"
+callsign = "RIFLEMAN"
+max_hp = 80
+speed = 215
+skill_id = &""
+skill_name = ""
+skill_desc = ""
+skill_cd = 0
+primary_weapon = &"ar15"
+secondary_weapon = &"m9"
+melee_weapon = &"axe"
+unlock_score = 0
+portrait = "assault"
+accent = Color(0.550, 0.780, 0.450, 1.000)
+description = "均衡的指挥模式基础兵种。"
+soldier_role = &"rifleman"

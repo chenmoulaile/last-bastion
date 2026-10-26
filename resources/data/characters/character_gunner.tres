@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/character_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"gunner"
+display_name = "机枪手"
+callsign = "GUNNER"
+max_hp = 110
+speed = 150
+skill_id = &""
+skill_name = ""
+skill_desc = ""
+skill_cd = 0
+primary_weapon = &"lmg"
+secondary_weapon = &"m9"
+melee_weapon = &"axe"
+unlock_score = 0
+portrait = "heavy"
+accent = Color(0.950, 0.750, 0.380, 1.000)
+description = "HOLD 时优先占据高台与门口。"
+soldier_role = &"gunner"

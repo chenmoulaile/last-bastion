@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="ZombieData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/zombie_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"smoker"
+display_name = "烟鬼"
+max_hp = 250
+walk_speed_min = 120
+walk_speed_max = 120
+attack_damage = 4
+attack_interval = 0.6
+score_value = 800
+behavior_id = &"smoker"
+tint = Color(1.000, 1.000, 1.000, 1.000)
+size_scale = 1.0
+anim_map = {}
+is_special = true
+is_uncommon = false
+is_boss = false
+head_hittable = true
+head_immune = false
+fire_immune = false
+front_immune = false
+low_profile = false
+control_kind = &"tongue"
+special_weight = 1.0
+sprite_prefix = "smoker"
+sprite_size = Vector2i(32, 32)
+collision_size = Vector2(18.0, 28.0)
+death_animation = "die"
+codex_category = "special"
+description = "400px 长舌缠绕拖拽，死亡留下遮挡视野的烟雾。"
+pounce_range = 380
+attack_range = 40
+sight_range = 460
+voice_id = &"smoker_cough"

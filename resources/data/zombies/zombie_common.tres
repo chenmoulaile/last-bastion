@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="ZombieData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/zombie_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"common"
+display_name = "普通感染者"
+max_hp = 30
+walk_speed_min = 120
+walk_speed_max = 180
+attack_damage = 5
+attack_interval = 0.5
+score_value = 100
+behavior_id = &"common"
+tint = Color(1.000, 1.000, 1.000, 1.000)
+size_scale = 1.0
+anim_map = {}
+is_special = false
+is_uncommon = false
+is_boss = false
+head_hittable = true
+head_immune = false
+fire_immune = false
+front_immune = false
+low_profile = false
+control_kind = &""
+special_weight = 0.0
+sprite_prefix = "common_a"
+sprite_size = Vector2i(24, 32)
+collision_size = Vector2(14.0, 26.0)
+death_animation = "die"
+codex_category = "common"
+description = "15% 个体为奔跑型。会被尖叫、枪声和胆汁吸引。"
+pounce_range = 380
+attack_range = 40
+sight_range = 260
+voice_id = &"zombie_growl"

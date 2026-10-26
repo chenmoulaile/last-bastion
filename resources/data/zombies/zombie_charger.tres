@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="ZombieData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/zombie_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"charger"
+display_name = "冲锋者"
+max_hp = 500
+walk_speed_min = 180
+walk_speed_max = 180
+attack_damage = 10
+attack_interval = 0.5
+score_value = 1000
+behavior_id = &"charger"
+tint = Color(1.000, 1.000, 1.000, 1.000)
+size_scale = 1.0
+anim_map = {}
+is_special = true
+is_uncommon = false
+is_boss = false
+head_hittable = true
+head_immune = false
+fire_immune = false
+front_immune = false
+low_profile = false
+control_kind = &"pound"
+special_weight = 1.0
+sprite_prefix = "charger"
+sprite_size = Vector2i(40, 40)
+collision_size = Vector2(24.0, 34.0)
+death_animation = "die"
+codex_category = "special"
+description = "火车头式直线冲锋，抓住玩家撞墙锤击。"
+pounce_range = 380
+attack_range = 40
+sight_range = 420
+voice_id = &"charger_roar"

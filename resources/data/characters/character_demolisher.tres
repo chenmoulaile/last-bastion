@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/character_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"demolisher"
+display_name = "爆破手"
+callsign = "DEMO"
+max_hp = 90
+speed = 195
+skill_id = &""
+skill_name = ""
+skill_desc = ""
+skill_cd = 0
+primary_weapon = &"shotgun"
+secondary_weapon = &"m9"
+melee_weapon = &"axe"
+unlock_score = 0
+portrait = "officer"
+accent = Color(0.850, 0.500, 0.350, 1.000)
+description = "携带 2 枚手雷，尸潮密集点自动投掷。"
+soldier_role = &"demolisher"

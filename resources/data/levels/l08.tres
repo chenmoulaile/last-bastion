@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/level_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"l08"
+chapter = 3
+chapter_name = "军事基地"
+title = "仓库清剿"
+subtitle = "找到电锯。然后让它们进来。"
+theme = &"military"
+length = 10500
+default_mode = &"COMMAND"
+difficulty_scale = 1.0
+base_score = 100000
+par_score = 240000
+time_target = 320
+special_density = 1.35
+special_weights = {"charger": 0.4, "hunter": 0.2, "smoker": 0.2, "spitter": 0.2}
+uncommon_weights = {"hardhat": 0.5, "riot": 0.2}
+bosses = ["charger", "charger"]
+events = [{"at": 0.25, "type": "horde", "count": 22}, {"at": 0.42, "type": "boss", "kind": "charger"}, {"at": 0.58, "type": "defense", "seconds": 40, "waves": 2, "count": 22}, {"at": 0.72, "type": "boss", "kind": "charger"}, {"at": 0.85, "type": "horde", "count": 24}]
+checkpoint_at = 0.5
+hidden_room_at = 0.52
+dark = false
+rain = false
+extraction = "safehouse"
+extraction_defense = 0.0
+tutorial_tips = ["Charger 冲锋时侧向滑铲可以躲过。", "冲锋中单次受到 30+ 伤害会踉跄。", "电锯持续切割，但油量只有 25 秒。"]
+briefing = "仓库里有两名 Charger。隐藏房里有电锯，值得冒险。"
+new_threat = "Charger ×2 · 安全帽工 · 隐藏电锯"
+player_weapons = ["chainsaw"]
+commander_squad = ["rifleman", "rifleman", "rifleman", "gunner", "gunner", "medic", "demolisher"]
+ammo_crates = 6
+medkits = 4
+unlocks_weapon = ""
+music_theme = &"military"
+escort_vehicle = false

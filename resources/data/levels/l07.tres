@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/level_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"l07"
+chapter = 3
+chapter_name = "军事基地"
+title = "检查站"
+subtitle = "收拢残部。兵是消耗品。"
+theme = &"military"
+length = 9000
+default_mode = &"COMMAND"
+difficulty_scale = 1.0
+base_score = 100000
+par_score = 230000
+time_target = 300
+special_density = 1.3
+special_weights = {"hunter": 0.25, "smoker": 0.25, "boomer": 0.25, "spitter": 0.25}
+uncommon_weights = {"hardhat": 0.3, "riot": 0.2}
+bosses = []
+events = [{"at": 0.2, "type": "tip", "text": "指挥模式：按 1-4 下达命令。"}, {"at": 0.32, "type": "defense", "seconds": 45, "waves": 2, "count": 20}, {"at": 0.55, "type": "horde", "count": 22}, {"at": 0.68, "type": "defense", "seconds": 45, "waves": 2, "count": 20}, {"at": 0.82, "type": "special", "kind": "smoker"}]
+checkpoint_at = 0.5
+hidden_room_at = 0.44
+dark = false
+rain = false
+extraction = "safehouse"
+extraction_defense = 0.0
+tutorial_tips = ["1 跟随 / 2 推进 / 3 防守 / 4 集火。", "HOLD 会让机枪手寻找高台与门口。", "士兵阵亡不会复活；检查站的援军房可以补兵。"]
+briefing = "指挥 6 名士兵穿过检查站。用 1-4 下达命令，守住两波进攻。"
+new_threat = "指挥模式 · 四道指令 · 援军房"
+player_weapons = []
+commander_squad = ["rifleman", "rifleman", "rifleman", "gunner", "medic", "demolisher"]
+ammo_crates = 5
+medkits = 3
+unlocks_weapon = ""
+music_theme = &"military"
+escort_vehicle = false

@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="ZombieData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/zombie_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"witch"
+display_name = "女巫"
+max_hp = 1000
+walk_speed_min = 300
+walk_speed_max = 300
+attack_damage = 150
+attack_interval = 1.0
+score_value = 10000
+behavior_id = &"witch"
+tint = Color(1.000, 1.000, 1.000, 1.000)
+size_scale = 1.0
+anim_map = {}
+is_special = true
+is_uncommon = false
+is_boss = true
+head_hittable = false
+head_immune = true
+fire_immune = false
+front_immune = false
+low_profile = false
+control_kind = &""
+special_weight = 0.0
+sprite_prefix = "witch"
+sprite_size = Vector2i(32, 48)
+collision_size = Vector2(16.0, 36.0)
+death_animation = "die"
+codex_category = "special"
+description = "坐地哭泣的地雷。惊动后一击倒地，Crowning 可秒杀。"
+pounce_range = 380
+attack_range = 40
+sight_range = 140
+voice_id = &"witch_cry"

@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"chainsaw"
+display_name = "电锯"
+category = &"melee"
+damage = 25
+pellets = 1
+rpm = 600
+mag_size = 0
+reserve_ammo = 0
+reload_time = 0.0
+spread = 0.0
+effective_range = 55
+score_mult = 1.4
+automatic = true
+knockback = 70
+melee_arc = 90
+melee_range = 55
+fuel = 25.0
+fire_mode = &"chainsaw"
+sprite = "chainsaw"
+description = "持续切割，油量 25 秒。L8 隐藏房。"

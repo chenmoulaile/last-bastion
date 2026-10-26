@@ -1,0 +1,29 @@
+# Godot 4
+.godot/
+.import/
+*.translation
+
+# Export and build products
+build/
+export/
+dist/
+*.exe
+*.pck
+*.zip
+*.dmg
+*.app/
+*.x86_64
+*.x86_32
+*.arm64
+
+# System
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+*.log
+
+# Defensive (this project is GDScript-only)
+.mono/
+data_*/
+mono_crash.*.json

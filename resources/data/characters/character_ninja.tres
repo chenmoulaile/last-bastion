@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/character_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"ninja"
+display_name = "特勤"
+callsign = "NINJA"
+max_hp = 90
+speed = 250
+skill_id = &"shadow_strike"
+skill_name = "影袭"
+skill_desc = "瞬步至 250px 内最近普感背后并处决"
+skill_cd = 18
+primary_weapon = &"katana"
+secondary_weapon = &"m9"
+melee_weapon = &"katana"
+unlock_score = 100000
+portrait = "ninja"
+accent = Color(0.720, 0.550, 0.900, 1.000)
+description = "累计 10 万分解锁。刀比子弹更安静。"
+soldier_role = &""

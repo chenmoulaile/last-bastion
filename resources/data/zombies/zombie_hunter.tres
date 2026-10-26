@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="ZombieData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/zombie_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"hunter"
+display_name = "猎手"
+max_hp = 250
+walk_speed_min = 200
+walk_speed_max = 200
+attack_damage = 5
+attack_interval = 0.5
+score_value = 800
+behavior_id = &"hunter"
+tint = Color(1.000, 1.000, 1.000, 1.000)
+size_scale = 1.0
+anim_map = {}
+is_special = true
+is_uncommon = false
+is_boss = false
+head_hittable = true
+head_immune = false
+fire_immune = false
+front_immune = false
+low_profile = false
+control_kind = &"pin"
+special_weight = 1.0
+sprite_prefix = "hunter"
+sprite_size = Vector2i(32, 32)
+collision_size = Vector2(18.0, 28.0)
+death_animation = "die"
+codex_category = "special"
+description = "蓄力尖啸后抛物线扑击，被扑倒必须由队友打断。"
+pounce_range = 380
+attack_range = 40
+sight_range = 420
+voice_id = &"hunter_scream"

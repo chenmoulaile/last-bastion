@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="ZombieData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/zombie_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"mud"
+display_name = "泥人"
+max_hp = 25
+walk_speed_min = 130
+walk_speed_max = 190
+attack_damage = 5
+attack_interval = 0.5
+score_value = 240
+behavior_id = &"common"
+tint = Color(0.800, 0.750, 0.650, 1.000)
+size_scale = 1.0
+anim_map = {}
+is_special = false
+is_uncommon = true
+is_boss = false
+head_hittable = true
+head_immune = false
+fire_immune = false
+front_immune = false
+low_profile = true
+control_kind = &""
+special_weight = 0.0
+sprite_prefix = "mud"
+sprite_size = Vector2i(24, 32)
+collision_size = Vector2(14.0, 26.0)
+death_animation = "die"
+codex_category = "uncommon"
+description = "低矮轮廓难命中，死亡溅泥遮挡视野。"
+pounce_range = 380
+attack_range = 40
+sight_range = 260
+voice_id = &"zombie_growl"

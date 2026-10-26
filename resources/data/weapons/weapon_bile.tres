@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"bile"
+display_name = "胆汁瓶"
+category = &"throwable"
+damage = 0
+pellets = 1
+rpm = 60
+mag_size = 0
+reserve_ammo = 0
+reload_time = 0.0
+spread = 0.0
+effective_range = 150
+score_mult = 1.0
+fire_mode = &"throwable"
+throw_radius = 150
+fuse_time = 0.0
+effect_duration = 15.0
+effect_dps = 0.0
+sprite = "bile"
+description = "命中点吸引普通感染者 15 秒。"

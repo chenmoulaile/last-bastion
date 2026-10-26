@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/zombies/zombie_hunter.gd" id="1_script"]
+
+[node name="ZombieHunter" type="CharacterBody2D"]
+floor_snap_length = 8.0
+script = ExtResource("1_script")
