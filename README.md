@@ -262,7 +262,7 @@ $GODOT --headless --path . res://tests/narrative.tscn
 | Smoke | 32 | 0 |
 | Campaign | 209 | 0 |
 | Integration | 91 | 0 |
-| Narrative | 104 | 0 |
+| Narrative | 106 | 0 |
 
 ### 性能门禁
 

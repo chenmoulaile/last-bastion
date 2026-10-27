@@ -401,7 +401,7 @@ GODOT=/path/to/Godot_v4.7.2-stable_win64.exe
 $GODOT --headless --path . res://tests/smoke.tscn        # 32 项
 $GODOT --headless --path . res://tests/campaign.tscn     # 209 项
 $GODOT --headless --path . res://tests/integration.tscn  # 91 项
-$GODOT --headless --path . res://tests/narrative.tscn    # 104 项
+$GODOT --headless --path . res://tests/narrative.tscn    # 106 项
 ```
 
 `narrative.tscn` 覆盖：

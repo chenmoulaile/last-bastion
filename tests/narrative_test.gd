@@ -246,6 +246,25 @@ func _test_passives() -> void:
 
 	_level_scene.queue_free()
 	_level_scene = null
+	await get_tree().process_frame
+
+	# Archive squad: the other three survivors must spawn as AI allies.
+	GameManager.selected_character = &"lin_yuan"
+	GameManager.selected_squad = [&"marcus", &"lucia", &"victor"]
+	GameManager.start_level(&"l01", &"SQUAD", &"NORMAL", &"lin_yuan", GameManager.selected_squad)
+	var squad_scene: Node = load("res://scenes/levels/l01.tscn").instantiate()
+	add_child(squad_scene)
+	await get_tree().create_timer(0.5, true, false, true).timeout
+	_check(squad_scene.get_allies().size() == 3, "archive squad spawns three allies")
+	var ally_ids: Array[String] = []
+	for ally in squad_scene.get_allies():
+		if ally != null and is_instance_valid(ally):
+			ally_ids.append(String(ally.get("data").id))
+	_check("marcus" in ally_ids and "lucia" in ally_ids and "victor" in ally_ids,
+		"allies use the other three survivors")
+	squad_scene.queue_free()
+	await get_tree().process_frame
+	GameManager.selected_squad = []
 	GameManager.change_state(GameManager.State.MENU)
 	await get_tree().process_frame
 

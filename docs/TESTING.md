@@ -148,7 +148,7 @@ Windows 发行版启动验证：
 "$GODOT" --headless --path . res://tests/narrative.tscn
 ```
 
-覆盖 104 项：
+覆盖 106 项：
 
 | 分组 | 检查内容 |
 |---|---|
