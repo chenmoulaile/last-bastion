@@ -27,3 +27,6 @@ desktop.ini
 .mono/
 data_*/
 mono_crash.*.json
+
+# Local assistant workspace data
+.workbuddy-ai/
