@@ -34,33 +34,38 @@ func _build() -> void:
 		continue_text = "继续战役"
 	if _continue_level != null:
 		continue_text += "  " + String(_continue_level.id).to_upper()
-	var continue_button := UIKit.button(continue_text, 196, 24, true)
-	continue_button.position = Vector2(8, 16)
+	var continue_button := UIKit.button(continue_text, 196, 22, true)
+	continue_button.position = Vector2(8, 18)
 	continue_button.pressed.connect(_on_continue)
 	menu_panel.add_child(continue_button)
 
-	var level_button := UIKit.button("章节选择", 196, 24)
-	level_button.position = Vector2(8, 44)
+	var level_button := UIKit.button("章节选择", 196, 22)
+	level_button.position = Vector2(8, 42)
 	level_button.pressed.connect(func() -> void: go(&"levels"))
 	menu_panel.add_child(level_button)
 
-	var character_button := UIKit.button("角色档案", 196, 24)
-	character_button.position = Vector2(8, 72)
-	character_button.pressed.connect(func() -> void: go(&"characters"))
-	menu_panel.add_child(character_button)
+	var survivor_button := UIKit.button("幸存者小队", 196, 22)
+	survivor_button.position = Vector2(8, 66)
+	survivor_button.pressed.connect(func() -> void: go(&"survivors"))
+	menu_panel.add_child(survivor_button)
 
-	var settings_button := UIKit.button("设置", 196, 24)
-	settings_button.position = Vector2(8, 100)
+	var archive_button := UIKit.button("档案库  " + _archive_summary(), 196, 22)
+	archive_button.position = Vector2(8, 90)
+	archive_button.pressed.connect(func() -> void: go(&"archives"))
+	menu_panel.add_child(archive_button)
+
+	var settings_button := UIKit.button("设置", 196, 22)
+	settings_button.position = Vector2(8, 114)
 	settings_button.pressed.connect(func() -> void: go(&"settings"))
 	menu_panel.add_child(settings_button)
 
-	var credits_button := UIKit.button("制作人员", 196, 24)
-	credits_button.position = Vector2(8, 128)
+	var credits_button := UIKit.button("制作人员", 196, 22)
+	credits_button.position = Vector2(8, 138)
 	credits_button.pressed.connect(func() -> void: go(&"credits"))
 	menu_panel.add_child(credits_button)
 
-	var quit_button := UIKit.button("退出游戏", 196, 24)
-	quit_button.position = Vector2(8, 156)
+	var quit_button := UIKit.button("退出游戏", 196, 22)
+	quit_button.position = Vector2(8, 162)
 	quit_button.pressed.connect(func() -> void: go(&"quit"))
 	menu_panel.add_child(quit_button)
 
@@ -110,8 +115,8 @@ func _build_archive() -> void:
 	next.clip_text = true
 	panel.add_child(next)
 
-	var mode := UIKit.label("模式 %s · 难度 %s" % [UIKit.mode_name(GameManager.current_mode),
-		UIKit.difficulty_name(GameManager.current_difficulty)], 8, UIKit.MUTED)
+	var mode := UIKit.label("模式 %s · 难度 %s · 档案 %s" % [UIKit.mode_name(GameManager.current_mode),
+		UIKit.difficulty_name(GameManager.current_difficulty), _archive_summary()], 8, UIKit.MUTED)
 	mode.position = Vector2(8, 132)
 	mode.size = Vector2(268, 10)
 	panel.add_child(mode)
@@ -165,3 +170,9 @@ func _on_continue() -> void:
 		go(&"levels")
 		return
 	go(&"briefing", {"level_id": String(_continue_level.id)})
+
+
+func _archive_summary() -> String:
+	if ArchiveManager == null:
+		return "0/0"
+	return "%d/%d" % [ArchiveManager.unlocked_count(), ArchiveManager.total_count()]

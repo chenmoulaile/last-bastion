@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/character_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"lin_yuan"
+display_name = "林远"
+callsign = "LYNX"
+character_id = "lin_yuan"
+codename = "山猫"
+roster = &"archive"
+max_hp = 90
+speed = 232
+stealth_speed_multiplier = 1.0
+melee_damage = 55.0
+passive_ability_id = &"passive_lin_yuan"
+passive_name = "山猫步"
+passive_desc = "潜行不减速；背后处决不惊动其他感染者，处决后 3 秒内对敌人不可见。"
+passive_cooldown = 0.0
+skill_id = &"tactical_roll"
+skill_name = "低姿突进"
+skill_desc = "短距离翻滚，翻滚期间无伤，可用于穿过感染者间隙。"
+skill_cd = 9.0
+primary_weapon = &"smg"
+secondary_weapon = &"m9"
+melee_weapon = &"katana"
+unlock_score = 0
+portrait = "ninja"
+visual_base = "ninja"
+palette_tint = Color(0.74, 0.72, 0.70, 1.000)
+accent = Color(0.72, 0.30, 0.26, 1.000)
+dialogue_color = Color(0.78, 0.34, 0.30, 1.000)
+description = "沉默的搜索者。他只为一个人来。"
+unlock_archive_types = Array[String](["rumor", "evidence", "complicity", "the_deep"])
+monologue = "我女儿在这里。够了吗？"
+language = "zh"
+voice_pitch = 0.86

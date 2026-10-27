@@ -1,0 +1,224 @@
+{
+  "_comment": "档案碎片内容表。security_level: 1=传闻 2=证据 3=共谋 4=深渊。required_character 为空表示任何人可解锁。",
+  "fragments": [
+    {
+      "fragment_id": "rumor_dock_whisper",
+      "title": "码头工人的话",
+      "security_level": 1,
+      "chapter": 1,
+      "level": 1,
+      "source": "裂城港口 · 装卸工 米格尔",
+      "timestamp": "2019-10-03",
+      "content_text": "“九月十一号那天，港口没停过工。军车一辆接一辆，装的全是冷藏柜。有人问里面是什么，穿黑制服的说：饲料。”\n\n“后来码头就封了。封条上印着一个圆圈，中间一道横线——地平线。”"
+    },
+    {
+      "fragment_id": "rumor_fever_map",
+      "title": "锈蚀热扩散图（手绘）",
+      "security_level": 1,
+      "chapter": 1,
+      "level": 1,
+      "source": "安全屋墙面 · 无名",
+      "timestamp": "2019-10-07",
+      "content_text": "一张旧城区地图，用红笔圈出十七个点，全部沿着一条地下线路排布。每个点旁边写着同一个数字：1.7。\n\n地图背面有一行小字：“不是从港口开始的。是从下面。”"
+    },
+    {
+      "fragment_id": "rumor_marlo_debt",
+      "title": "马洛的欠条",
+      "security_level": 1,
+      "chapter": 1,
+      "level": 2,
+      "source": "锈帮码头 · 账房",
+      "timestamp": "2019-09-28",
+      "content_text": "“今收到地平线安保预付货款 40 箱医疗耗材。以码头三号仓库通行权抵押。”\n\n签名处是马洛的手印，旁边还有一行用铅笔补的字：“他们没说要活的。”"
+    },
+    {
+      "fragment_id": "evidence_cold_chain",
+      "title": "冷链运输单 #4471",
+      "security_level": 2,
+      "chapter": 1,
+      "level": 2,
+      "source": "锈帮码头 · 三号仓库",
+      "timestamp": "2019-09-12",
+      "content_text": "CONSIGNMENT: 12 UNITS, LIVE SPECIMEN, TEMP -4C.\nORIGIN: HORIZON SUBLEVEL 3.\nDESTINATION: QUARANTINE STATION 9.\nHANDLING: DO NOT SEDATE. SUBJECT RESPONDS TO 1.7GHz CARRIER.\n\n签收人一栏被撕掉了，只剩半个印章。",
+      "translation": "货物：12 单位，活体样本，恒温 -4℃。\n起点：地平线地下三层。终点：第九检疫站。\n处置要求：禁止镇静。对象对 1.7GHz 载波有反应。"
+    },
+    {
+      "fragment_id": "rumor_quarantine_seal",
+      "title": "第九检疫站封条",
+      "security_level": 1,
+      "chapter": 1,
+      "level": 3,
+      "source": "废弃检疫站 · 正门",
+      "timestamp": "2019-09-19",
+      "content_text": "封条是双层的。外层是市卫生局，日期 9 月 14 日；内层是地平线安保，日期 9 月 11 日。\n\n内层封条比外层早了三天。也就是说，他们在政府封城之前，就已经把这里封了。"
+    },
+    {
+      "fragment_id": "evidence_trade_ledger",
+      "title": "地平线—锈帮交易记录",
+      "security_level": 2,
+      "chapter": 1,
+      "level": 3,
+      "source": "检疫站办公室 · 保险柜",
+      "timestamp": "2019-09-20",
+      "content_text": "三页账目，全部用货运编号代替货物名称。第一页是“饲料”，第二页是“样本”，第三页只有一行：\n\n“适配体运输：待定。买方：信号局。数量：9。”\n\n页脚有一枚指纹，属于一个已经不在名册上的人。"
+    },
+    {
+      "fragment_id": "rumor_precinct_holdout",
+      "title": "第十三分局的六周",
+      "security_level": 1,
+      "chapter": 2,
+      "level": 4,
+      "source": "旧城区 · 涂鸦",
+      "timestamp": "2019-10-11",
+      "content_text": "墙上用喷漆写着：“第十三分局，守了 42 天。”下面被人补了一句：“然后上面断了我们的补给。”\n\n再下面，是锈帮的记号：一个被划掉的盾。"
+    },
+    {
+      "fragment_id": "evidence_chip_log",
+      "title": "生物记录芯片 · 传输日志",
+      "security_level": 2,
+      "chapter": 2,
+      "level": 4,
+      "source": "旧城区 · 阵亡警员",
+      "timestamp": "2019-10-12",
+      "content_text": "日志只有 11 秒有效数据。一个女声在重复同一句话，间隔 1.7 秒：\n\n“这里是第七适配体。下层还有电。请不要停止发射。”\n\n之后是长达四小时的白噪声，频率恰好是 1.7GHz。",
+      "translation": "LOG 00:11 — \"THIS IS ADAPTER SEVEN. THE LOWER LEVEL STILL HAS POWER. DO NOT STOP TRANSMITTING.\""
+    },
+    {
+      "fragment_id": "evidence_nest_tissue",
+      "title": "巢穴母体组织切片",
+      "security_level": 2,
+      "chapter": 2,
+      "level": 5,
+      "required_character": "victor",
+      "source": "地铁隧道 · 母体巢穴",
+      "timestamp": "2019-10-14",
+      "content_text": "切片在显微镜下不是组织，是天线。细胞排列成螺旋，间距精确到毫米，正好是 1.7GHz 的四分之一波长。\n\n维克多的批注：“这不是变异。这是被设计出来的接收器。设计者懂无线电，也懂人。”"
+    },
+    {
+      "fragment_id": "evidence_biolog_chip",
+      "title": "生物记录芯片（完整）",
+      "security_level": 2,
+      "chapter": 2,
+      "level": 5,
+      "source": "地铁隧道 · 母体核心",
+      "timestamp": "2019-10-14",
+      "content_text": "芯片里存着 214 份采样记录，编号从 A-01 到 A-09。每一份的“采集方式”一栏都写着同一个词：\n\n“自愿。”\n\nA-07 的签名栏是空的，只有一个手写的名字：林小满。"
+    },
+    {
+      "fragment_id": "evidence_reyes_roster",
+      "title": "第十三分局在册名单",
+      "security_level": 2,
+      "chapter": 2,
+      "level": 6,
+      "source": "残警警局 · 雷耶斯的抽屉",
+      "timestamp": "2019-10-15",
+      "content_text": "名单上有 63 个名字，41 个被划掉。雷耶斯的名字在最上面，没有被划掉，旁边写着“在职”。\n\n名单最后一页贴着一张便签：“如果芯片落到信号局手里，划掉的名字就白划了。”"
+    },
+    {
+      "fragment_id": "complicity_bureau_memo",
+      "title": "信号局内部备忘 2018-114",
+      "security_level": 3,
+      "chapter": 2,
+      "level": 6,
+      "required_character": "victor",
+      "source": "信号局 · 外派生物学家终端",
+      "timestamp": "2018-11-04",
+      "content_text": "“关于适配体计划的伦理复核：本项目不属于医疗研究，不受临床伦理条款约束。研究对象为自愿参与之未成年人，监护人同意书由地方分局代签。”\n\n落款是维克多的直属上级。附件里有一份被驳回的反对意见，署名 V. 霍尔。",
+      "translation": "MEMO 2018-114 — \"ADAPTER PROGRAM IS NOT MEDICAL RESEARCH. GUARDIAN CONSENT TO BE SIGNED BY LOCAL BUREAU.\""
+    },
+    {
+      "fragment_id": "complicity_horizon_contract",
+      "title": "地平线安保 · 城市接管合同",
+      "security_level": 3,
+      "chapter": 3,
+      "level": 7,
+      "required_character": "marcus",
+      "source": "净化区 · 指挥车残骸",
+      "timestamp": "2019-09-08",
+      "content_text": "合同第七款：“在紧急状态下，乙方（地平线安保）有权对划定区域实施完全封锁，包括但不限于：断水、断电、断网、以及必要之人员处置。”\n\n签约日期是 9 月 8 日。锈蚀热的第一例确诊在 9 月 10 日。"
+    },
+    {
+      "fragment_id": "complicity_failed_batch",
+      "title": "失败品批次报告",
+      "security_level": 3,
+      "chapter": 3,
+      "level": 7,
+      "required_character": "victor",
+      "source": "排水系统 · 实验区",
+      "timestamp": "2019-10-02",
+      "content_text": "“批次 F 共 26 例，全部出现不可逆的听觉过载。建议处置方式：下沉至排水层，不占用冷藏资源。”\n\n报告末尾有一行手写批注，字迹很急：“它们还在回应信号。它们不是失败品，它们是天线。”"
+    },
+    {
+      "fragment_id": "complicity_signal_permit",
+      "title": "1.7GHz 发射许可",
+      "security_level": 3,
+      "chapter": 3,
+      "level": 8,
+      "source": "净化区外围 · 中继站",
+      "timestamp": "2019-08-30",
+      "content_text": "许可编号 SIG-1700-09。发射功率 40kW，覆盖半径 11 公里，正好覆盖整座裂城。\n\n用途一栏写着：“公共卫生应急广播。”\n\n批准人签名处，是信号局和地平线安保的双签。"
+    },
+    {
+      "fragment_id": "complicity_ironface_order",
+      "title": "“铁面”的作战命令",
+      "security_level": 3,
+      "chapter": 3,
+      "level": 9,
+      "source": "地平线大厦底层 · 安保指挥官",
+      "timestamp": "2019-10-20",
+      "content_text": "“目标：四名入侵者。其中一人为亚裔男性，代号山猫。优先级：活捉。”\n\n“理由：该目标与适配体 07 存在生物学关联，可作为频率校准的备用锚点。”\n\n命令下方盖着地平线的章，还有一行小字：“本条不得上传至信号局。”"
+    },
+    {
+      "fragment_id": "evidence_adapter_list",
+      "title": "适配体名单（九人）",
+      "security_level": 3,
+      "chapter": 3,
+      "level": 9,
+      "source": "地平线大厦底层 · 指挥官终端",
+      "timestamp": "2019-10-21",
+      "content_text": "A-01 至 A-06：状态“终止”。\nA-08、A-09：状态“失联”。\nA-07：状态“活跃”，位置“核心室下层”。\n\n在 A-07 的姓名栏，有人用铅笔写了三个字：林小满。字迹很轻，像是怕被人看见。"
+    },
+    {
+      "fragment_id": "evidence_sample_release",
+      "title": "实验体释放授权",
+      "security_level": 2,
+      "chapter": 4,
+      "level": 10,
+      "source": "地下样本库 · 终端",
+      "timestamp": "2019-10-24",
+      "content_text": "终端弹出一行提示：“检测到 214 个生命体征。是否解除隔离？”\n\n下面有两个按钮：RELEASE / PURGE。\n\n维克多的手指停在半空。他说：“从生物学上讲，它们已经不算活着了。但从伦理上讲，我说了不算。”"
+    },
+    {
+      "fragment_id": "the_deep_core_recording",
+      "title": "信号核心 · 对话录音",
+      "security_level": 4,
+      "chapter": 4,
+      "level": 10,
+      "source": "样本库 · 隔离终端",
+      "timestamp": "2019-10-25",
+      "content_text": "录音里有两个声音。一个是合成音，另一个是孩子。\n\n合成音：“适配体 07，报告你的状态。”\n孩子：“我还在。”\n合成音：“你父亲正在接近核心。”\n孩子：“……别让他进来。这里很黑。”\n\n录音在第 47 秒中断。之后是 1.7GHz 的脉冲，节奏像心跳。",
+      "translation": "CORE LOG — \"ADAPTER 07, REPORT STATUS.\" / \"I'M STILL HERE.\" / \"YOUR FATHER IS APPROACHING THE CORE.\" / \"...DON'T LET HIM IN. IT'S DARK IN HERE.\""
+    },
+    {
+      "fragment_id": "the_deep_adapter_07",
+      "title": "适配体 07 · 病历",
+      "security_level": 4,
+      "chapter": 4,
+      "level": 10,
+      "required_character": "victor",
+      "source": "样本库 · 生物档案柜",
+      "timestamp": "2019-09-11",
+      "content_text": "入院日期：2019-09-11。年龄：14。监护人：林远（签字栏为空）。\n\n“对象对 1.7GHz 窄带信号表现出异常稳定的相位锁定。植入第 3 天起，可在无设备辅助下维持载波。”\n\n“备注：对象反复要求开灯。已按规程拒绝。”"
+    },
+    {
+      "fragment_id": "the_deep_xiaoman_message",
+      "title": "林小满的留言",
+      "security_level": 4,
+      "chapter": 4,
+      "level": 11,
+      "source": "信号核心室 · 下层通道",
+      "timestamp": "2019-10-27",
+      "content_text": "“爸爸，如果你听到这个……我没有害怕。”\n\n“他们说要有人一直发信号，外面的人才能找到我们。我发了好久。我的手有点冷。”\n\n“你要是来了，别把机器关掉。关了，就没人知道我们在这里了。”"
+    }
+  ]
+}

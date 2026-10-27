@@ -28,6 +28,8 @@ const ACHIEVEMENTS: Array[Dictionary] = [
 	{"id": "hunter_interrupter", "name": "老练猎手", "desc": "近战推开打断 Hunter 扑击 25 次", "icon": "ach_hunter"},
 	{"id": "mr_perfect", "name": "满分先生", "desc": "任意关取得 S 评价", "icon": "ach_s_rank"},
 	{"id": "last_bastion", "name": "最后防线", "desc": "通关 L11 最后防线", "icon": "ach_last_stand"},
+	{"id": "silent_price", "name": "沉默的代价", "desc": "摧毁信号核心，让真相随核心一起埋掉", "icon": "ach_last_stand"},
+	{"id": "answer", "name": "回应", "desc": "解码信号，并在 90 秒防守中守住设备", "icon": "ach_codex"},
 ]
 
 const CODEX_SPECIALS := ["hunter", "smoker", "boomer", "charger", "spitter", "jockey", "tank", "witch"]
@@ -74,6 +76,8 @@ func _default_data() -> Dictionary:
 		"expert_levels": [],
 		"command_wins": [],
 		"flags": [],
+		"archives": [],
+		"final_choice": "",
 		"playtime": 0.0,
 	}
 

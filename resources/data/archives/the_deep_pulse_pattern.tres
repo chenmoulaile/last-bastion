@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="ArchiveFragment" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/archive/archive_fragment.gd" id="1_frag"]
+
+[resource]
+script = ExtResource("1_frag")
+fragment_id = "the_deep_pulse_pattern"
+title = "脉冲节奏分析"
+content_type = "audio"
+content_text = "把核心室的环境噪声降速 32 倍之后，脉冲变成了节奏。
+三短、三长、三短。国际求救信号。
+它重复了十一个月，没有人回应。"
+security_level = 4
+required_character = ""
+required_passive = ""
+chapter = 4
+level = 11
+archive_type = "the_deep"
+source = "信号核心室 · 环境采样"
+timestamp = "2019-10-27"
+translation = "SOS. REPEATED FOR ELEVEN MONTHS. NO RESPONSE."

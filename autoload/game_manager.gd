@@ -38,6 +38,11 @@ var current_difficulty: StringName = &"NORMAL"
 var selected_character: StringName = &"assault"
 var selected_squad: Array[StringName] = []
 var selected_soldiers: Array[StringName] = []
+## Co-op roster locks: player_index -> character_id. Local co-op and any future
+## network session both go through claim_character() so "must pick different
+## survivors" is enforced in exactly one place.
+var coop_slots: Dictionary = {}
+var coop_active: bool = false
 var last_result: Dictionary = {}
 var run_seed: int = 0
 
@@ -125,11 +130,77 @@ func get_levels() -> Array[LevelData]:
 func get_playable_characters() -> Array[CharacterData]:
 	var out: Array[CharacterData] = []
 	for character in characters.values():
-		if character.soldier_role == &"":
+		if character.soldier_role == &"" and not character.is_archive_survivor():
 			out.append(character)
 	out.sort_custom(func(a: CharacterData, b: CharacterData) -> bool:
 		return a.unlock_score < b.unlock_score)
 	return out
+
+
+## The four named survivors of the 2019 RUST FREQUENCY campaign.
+func get_archive_survivors() -> Array[CharacterData]:
+	var order := ["lin_yuan", "marcus", "lucia", "victor"]
+	var out: Array[CharacterData] = []
+	for id in order:
+		var character: CharacterData = characters.get(StringName(id), null)
+		if character != null:
+			out.append(character)
+	return out
+
+
+## Archive survivors and legacy archetypes live in the same data directory; this
+## keeps squad/command lookups from accidentally pulling narrative characters in.
+func get_survivor(id: StringName) -> CharacterData:
+	var character: CharacterData = get_character(id)
+	if character == null or not character.is_archive_survivor():
+		return null
+	return character
+
+
+# --------------------------------------------------------------- co-op ------
+func reset_coop() -> void:
+	coop_slots.clear()
+	coop_active = false
+
+
+## Reserve a survivor for a local player slot. Returns false when another slot
+## already holds that survivor (co-op requires four different characters).
+func claim_character(slot: int, character_id: StringName) -> bool:
+	var key := String(character_id)
+	for other_slot in coop_slots.keys():
+		if int(other_slot) != slot and String(coop_slots[other_slot]) == key:
+			return false
+	coop_slots[slot] = key
+	if slot == 0:
+		selected_character = character_id
+	return true
+
+
+func character_taken_by_other(slot: int, character_id: StringName) -> bool:
+	var key := String(character_id)
+	for other_slot in coop_slots.keys():
+		if int(other_slot) != slot and String(coop_slots[other_slot]) == key:
+			return true
+	return false
+
+
+# --------------------------------------------------------------- story ------
+func story_flag(flag: StringName) -> bool:
+	return SaveSystem.has_flag(flag)
+
+
+func set_story_flag(flag: StringName) -> void:
+	SaveSystem.set_flag(flag)
+
+
+## Chapter 3 has two routes through the same level slot (3-1A sewer / 3-1B
+## front gate). The chapter 2 chip decision decides which one loads.
+func route_variant() -> StringName:
+	return &"sewer" if story_flag(&"route_sewer") else &"gate"
+
+
+func has_deep_archive() -> bool:
+	return ArchiveManager != null and ArchiveManager.highest_security_level_collected() >= 4
 
 
 func get_soldier_roles() -> Array[CharacterData]:
@@ -336,6 +407,8 @@ func is_character_unlocked(id: StringName) -> bool:
 	if id in [&"assault", &"medic", &"heavy", &"scout"]:
 		return true
 	if id in [&"rifleman", &"gunner", &"medic_soldier", &"demolisher"]:
+		return true
+	if id in [&"lin_yuan", &"marcus", &"lucia", &"victor"]:
 		return true
 	return SaveSystem.is_character_unlocked(id)
 

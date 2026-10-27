@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/character_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"marcus"
+display_name = "马库斯"
+callsign = "SERGEANT"
+character_id = "marcus"
+codename = "老兵"
+roster = &"archive"
+max_hp = 130
+speed = 200
+stealth_speed_multiplier = 0.6
+melee_damage = 48.0
+passive_ability_id = &"passive_marcus"
+passive_name = "老兵直觉"
+passive_desc = "背后 120° 扇形内受到的伤害被完全格挡，冷却 30 秒。"
+passive_cooldown = 30.0
+skill_id = &"shield_wall"
+skill_name = "盾墙"
+skill_desc = "5 秒内正面伤害降低 70%。"
+skill_cd = 26.0
+primary_weapon = &"shotgun"
+secondary_weapon = &"m9"
+melee_weapon = &"axe"
+unlock_score = 0
+portrait = "heavy"
+visual_base = "heavy"
+palette_tint = Color(0.72, 0.80, 0.66, 1.000)
+accent = Color(0.86, 0.56, 0.24, 1.000)
+dialogue_color = Color(0.90, 0.64, 0.32, 1.000)
+description = "退役军士。他记得每一条他没能守住的街。"
+unlock_archive_types = Array[String](["evidence", "complicity"])
+monologue = "命令是命令。可这城里已经没有人在下命令了。"
+language = "en"
+voice_pitch = 0.78

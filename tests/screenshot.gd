@@ -10,6 +10,8 @@ func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT))
 	await get_tree().process_frame
 	await _capture_screens()
+	await _capture_narrative_ui()
+	await _capture_archive()
 	await _capture_level("res://scenes/levels/l01.tscn", &"SQUAD", "gameplay_l01")
 	await _capture_level("res://scenes/levels/l07.tscn", &"COMMAND", "gameplay_l07")
 	await _capture_result()
@@ -29,6 +31,8 @@ func _capture_screens() -> void:
 		["res://scenes/ui/main_menu.tscn", {}, "main_menu"],
 		["res://scenes/ui/level_select.tscn", {"level_id": "l01"}, "level_select"],
 		["res://scenes/ui/character_select.tscn", {"from": "levels"}, "character_select"],
+		["res://scenes/ui/survivors/CharacterSelect.tscn", {"from": "menu"}, "survivor_select"],
+		["res://scenes/ui/archive/ArchiveMenu.tscn", {}, "archive_menu"],
 		["res://scenes/ui/settings.tscn", {}, "settings"],
 		["res://scenes/ui/achievements.tscn", {}, "achievements"],
 		["res://scenes/ui/codex.tscn", {}, "codex"],
@@ -109,3 +113,55 @@ func _capture_result() -> void:
 	await get_tree().create_timer(0.12, true, false, true).timeout
 	await _snap("result")
 	result.queue_free()
+
+
+## Narrative UI screens (v2.0): final choice, mid-campaign choice, archive reader.
+func _capture_narrative_ui() -> void:
+	var final_ui = load("res://scenes/ui/narrative/FinalChoiceUI.tscn").instantiate()
+	add_child(final_ui)
+	await get_tree().process_frame
+	await get_tree().create_timer(0.12, true, false, true).timeout
+	await _snap("final_choice")
+	final_ui.queue_free()
+	await get_tree().process_frame
+
+	var story = load("res://scenes/ui/narrative/StoryChoiceUI.tscn").instantiate()
+	story.set("choice_id", "c2_side")
+	add_child(story)
+	await get_tree().process_frame
+	await get_tree().create_timer(0.12, true, false, true).timeout
+	await _snap("story_choice")
+	story.queue_free()
+	await get_tree().process_frame
+	get_tree().paused = false
+
+	var viewer = load("res://scenes/ui/archive/ArchiveViewer.tscn").instantiate()
+	viewer.setup({"fragment_id": "the_deep_core_recording"})
+	add_child(viewer)
+	await get_tree().process_frame
+	await get_tree().create_timer(0.12, true, false, true).timeout
+	await _snap("archive_viewer")
+	viewer.call("_close")
+	await get_tree().process_frame
+	get_tree().paused = false
+
+
+## Walk the player next to the first archive pickup to verify its in-world look.
+func _capture_archive() -> void:
+	GameManager.selected_character = &"lin_yuan"
+	GameManager.selected_squad = []
+	GameManager.start_level(&"l01", &"SQUAD", &"NORMAL")
+	var scene: Node = load("res://scenes/levels/l01.tscn").instantiate()
+	add_child(scene)
+	await get_tree().create_timer(0.9, true, false, true).timeout
+	var player: Node2D = scene.get_player()
+	var pickups: Array = scene.get("archive_pickups")
+	if player != null and not pickups.is_empty():
+		player.global_position = pickups[0].global_position + Vector2(-30, 0)
+	await get_tree().create_timer(0.5, true, false, true).timeout
+	await _snap("gameplay_archive")
+	DialogueManager.play_conversation("c1_meet")
+	await get_tree().create_timer(1.0, true, false, true).timeout
+	await _snap("gameplay_dialogue")
+	scene.queue_free()
+	await get_tree().process_frame

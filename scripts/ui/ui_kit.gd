@@ -292,16 +292,30 @@ static func chapter_color(chapter: int) -> Color:
 			return INK
 
 
+static func chapter_title(chapter: int) -> String:
+	match chapter:
+		1:
+			return "裂城港口"
+		2:
+			return "旧城区"
+		3:
+			return "净化区"
+		4:
+			return "信号核心"
+		_:
+			return ""
+
+
 static func chapter_subtitle(chapter: int) -> String:
 	match chapter:
 		1:
-			return "郊区突围 · OUTSKIRTS"
+			return "裂城港口 · RIFT HARBOR"
 		2:
-			return "城市坠落 · THE FALL"
+			return "旧城区 · OLD QUARTER"
 		3:
-			return "军事残部 · LAST UNITS"
+			return "净化区 · PURGE ZONE"
 		4:
-			return "最后防线 · LAST BASTION"
+			return "信号核心 · SIGNAL CORE"
 		_:
 			return ""
 

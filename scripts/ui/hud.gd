@@ -706,8 +706,8 @@ func _build_pause() -> void:
 	_pause_root.add_child(dim)
 
 	var panel := UIKit.panel(Color(0.045, 0.055, 0.07, 0.98), UIKit.AMBER)
-	panel.position = Vector2(190, 68)
-	panel.size = Vector2(260, 224)
+	panel.position = Vector2(190, 58)
+	panel.size = Vector2(260, 250)
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	_pause_root.add_child(panel)
 
@@ -740,20 +740,45 @@ func _build_pause() -> void:
 	menu.pressed.connect(_pause_menu)
 	panel.add_child(menu)
 
+	var archive := UIKit.button("档案库  " + _archive_progress_text(), 210, 24)
+	archive.position = Vector2(25, 152)
+	archive.pressed.connect(_open_archive_menu)
+	panel.add_child(archive)
+
 	var hint := UIKit.label("ESC 继续 · 进度会在检查点保存", 8, UIKit.MUTED)
-	hint.position = Vector2(0, 158)
+	hint.position = Vector2(0, 184)
 	hint.size = Vector2(260, 10)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	panel.add_child(hint)
 
-	var keys := UIKit.label("WASD 移动   鼠标瞄准   J 开火   F 近战\nE 互动/救助   R 换弹   H 医疗包   T 药丸", 8, UIKit.DIM)
-	keys.position = Vector2(12, 178)
+	var keys := UIKit.label("WASD 移动   鼠标瞄准   J 开火   F 近战/处决\nE 互动/救助   R 换弹   H 医疗包   T 药丸", 8, UIKit.DIM)
+	keys.position = Vector2(12, 202)
 	keys.size = Vector2(236, 34)
 	keys.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	keys.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	panel.add_child(keys)
 
 	_pause_root.set_meta("resume", resume)
+
+
+func _archive_progress_text() -> String:
+	if ArchiveManager == null:
+		return ""
+	return "%d/%d" % [ArchiveManager.unlocked_count(), ArchiveManager.total_count()]
+
+
+## Opens the archive browser on top of the pause menu (tree stays paused, the
+## screen runs in ALWAYS mode and closes itself through its navigate signal).
+func _open_archive_menu() -> void:
+	var packed: PackedScene = load("res://scenes/ui/archive/ArchiveMenu.tscn")
+	if packed == null:
+		return
+	var menu := packed.instantiate()
+	menu.process_mode = Node.PROCESS_MODE_ALWAYS
+	menu.navigate.connect(func(_target: StringName, _payload: Dictionary) -> void:
+		menu.queue_free())
+	_root.add_child(menu)
+	AudioManager.play_sfx(&"ui_click")
 
 
 func _build_debug_panel() -> void:

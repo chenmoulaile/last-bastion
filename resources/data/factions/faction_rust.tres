@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="FactionData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/faction/faction_data.gd" id="1_faction"]
+
+[resource]
+script = ExtResource("1_faction")
+faction_id = "rust"
+display_name = "锈帮"
+short_name = "RUST"
+knowledge_level = 1
+base_hostility_to_player = 0.5
+hostility_to_zombies = 0.9
+hostility_to_other_factions = {"horizon": 0.3, "signal_bureau": 0.5, "remnants": 0.8}
+patrol_density = 1.1
+special_units = Array[String](["rust_enforcer", "rust_trader"])
+accent = Color(0.74, 0.40, 0.26, 1.000)
+description = "码头的拾荒者与走私者。他们做生意，也做别的。"

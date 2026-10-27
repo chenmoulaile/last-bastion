@@ -41,6 +41,8 @@ var sprite: AnimatedSprite2D
 var collision: CollisionShape2D
 var _base_tint: Color = Color.WHITE
 var _visual_prefix: String = ""
+var _outline: Sprite2D = null
+var _reveal_timer: float = 0.0
 
 
 func _ready() -> void:
@@ -73,6 +75,7 @@ func _ready() -> void:
 	sprite.play("idle")
 	if data.is_special:
 		collision_layer = 16
+		add_to_group("special_infected")
 	else:
 		collision_layer = 8
 	collision_mask = 1 | 2 | 4 | 64
@@ -139,6 +142,54 @@ func _physics_process(delta: float) -> void:
 		voice_timer = randf_range(5.0, 11.0)
 		if randf() < 0.35:
 			AudioManager.play_sfx_2d(data.voice_id, global_position, 800.0, -12.0)
+	_tick_outline(delta)
+
+
+# ------------------------------------------------------------- perception ----
+## 穿墙轮廓：露西亚的「街头直觉」把感染者标记 3 秒，轮廓画在所有墙体之上。
+func reveal_through_walls(duration: float) -> void:
+	_reveal_timer = maxf(_reveal_timer, duration)
+	if _outline == null:
+		_build_outline()
+
+
+func _build_outline() -> void:
+	_outline = Sprite2D.new()
+	_outline.name = "Outline"
+	_outline.z_index = 60
+	_outline.centered = true
+	_outline.modulate = Color(1.0, 0.36, 0.30, 0.55)
+	_outline.scale = Vector2(1.14, 1.14)
+	add_child(_outline)
+
+
+func _tick_outline(delta: float) -> void:
+	if _reveal_timer <= 0.0:
+		if _outline != null and _outline.visible:
+			_outline.visible = false
+		return
+	_reveal_timer -= delta
+	if _outline == null:
+		return
+	_outline.visible = true
+	if sprite != null and sprite.sprite_frames != null \
+			and sprite.sprite_frames.has_animation(sprite.animation):
+		_outline.texture = sprite.sprite_frames.get_frame_texture(sprite.animation, sprite.frame)
+	_outline.flip_h = sprite.flip_h if sprite != null else false
+	_outline.position = sprite.position if sprite != null else Vector2.ZERO
+	_outline.modulate.a = 0.40 + 0.18 * sin(Time.get_ticks_msec() * 0.012)
+
+
+## Player visibility for this infected: 0 = cannot be perceived at all.
+func _target_visibility(target_node: Node2D) -> float:
+	if target_node == null or not is_instance_valid(target_node):
+		return 0.0
+	if EnemyPerception.is_ignored(target_node):
+		return 0.0
+	var value: Variant = target_node.get("visibility")
+	if value == null:
+		return 1.0
+	return clampf(float(value), 0.0, 1.0)
 
 
 func _ai_tick(delta: float) -> void:
@@ -150,7 +201,8 @@ func _ai_tick(delta: float) -> void:
 	var dist_x := absf(to_target.x)
 	var dist_y := absf(to_target.y)
 	if not alerted:
-		if dist_x < data.sight_range and dist_y < 120.0:
+		var sight := data.sight_range * maxf(0.15, _target_visibility(target))
+		if dist_x < sight and dist_y < 120.0:
 			if _can_see_target():
 				_alert()
 	if not alerted:
@@ -236,6 +288,8 @@ func _attack_target() -> void:
 func _can_see_target() -> bool:
 	if target == null:
 		return false
+	if _target_visibility(target) <= 0.02:
+		return false
 	var from := global_position + Vector2(0, -20)
 	var to := target.global_position + Vector2(0, -18)
 	var query := PhysicsRayQueryParameters2D.create(from, to, 1, [get_rid()])
@@ -246,7 +300,7 @@ func _can_see_target() -> bool:
 func _alert() -> void:
 	alerted = true
 	_scream()
-	if level:
+	if level and not EnemyPerception.is_noise_suppressed(global_position):
 		level.alert_commons_near(global_position, 80.0)
 
 
@@ -295,7 +349,7 @@ func apply_damage(amount: int, from_dir: Vector2, is_head: bool, source: StringN
 			apply_stagger(0.25)
 	if not dead:
 		alerted = true
-		if source == &"player" and level:
+		if source == &"player" and level and not EnemyPerception.is_noise_suppressed(global_position):
 			level.alert_commons_near(global_position, 80.0)
 
 
@@ -411,11 +465,13 @@ func _acquire_target() -> void:
 	var best: Node2D = null
 	var best_score := INF
 	if player != null and is_instance_valid(player):
-		if not bool(player.get("is_dead")):
+		if not bool(player.get("is_dead")) and _target_visibility(player) > 0.05:
 			best = player
 			# The player is the protagonist: allies must be clearly closer to
 			# pull aggro away, which keeps squads from feeling invisible.
-			best_score = global_position.distance_to(player.global_position) * 0.72
+			# Low visibility also makes the player a less attractive target.
+			var vis := maxf(0.25, _target_visibility(player))
+			best_score = global_position.distance_to(player.global_position) * 0.72 / vis
 	var allies: Array = level.get_allies()
 	for ally in allies:
 		if ally == null or not is_instance_valid(ally):

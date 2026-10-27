@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/character_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"lucia"
+display_name = "露西亚"
+callsign = "SAINT"
+character_id = "lucia"
+codename = "街头"
+roster = &"archive"
+max_hp = 95
+speed = 245
+stealth_speed_multiplier = 0.6
+melee_damage = 42.0
+passive_ability_id = &"passive_lucia"
+passive_name = "街头直觉"
+passive_desc = "靠近掩体时，自动让半径内的敌人穿墙显形 3 秒。"
+passive_cooldown = 6.0
+skill_id = &"tactical_roll"
+skill_name = "战术翻滚"
+skill_desc = "0.25 秒无伤翻滚。"
+skill_cd = 8.0
+primary_weapon = &"ar15"
+secondary_weapon = &"m9"
+melee_weapon = &"katana"
+unlock_score = 0
+portrait = "scout"
+visual_base = "scout"
+palette_tint = Color(0.80, 0.70, 0.92, 1.000)
+accent = Color(0.62, 0.52, 0.86, 1.000)
+dialogue_color = Color(0.68, 0.56, 0.90, 1.000)
+description = "在裂城长大的信使。她认识每一条不该被认识的路。"
+unlock_archive_types = Array[String](["rumor", "evidence"])
+monologue = "你们管这叫末日？我从小就在这条街上跑。"
+language = "en"
+voice_pitch = 1.16

@@ -36,3 +36,14 @@ extends Resource
 @export var unlocks_weapon: String = ""
 @export var music_theme: StringName = &"suburb"
 @export var escort_vehicle: bool = false
+
+# ---------------------------------------------------- narrative layer (2019) ----
+## Story beats placed at level_width * at. Each entry:
+##   {at: 0.35, type: "conversation"|"memory"|"archive"|"hostility"|"faction_event"|
+##                "flag"|"final_choice"|"tip", ...}
+@export var narrative: Array = []
+@export var archive_slots: int = 2
+@export var faction_pressure: float = 0.4
+@export var faction_units: Array[String] = []
+@export var final_choice: bool = false
+@export var route_label: String = ""

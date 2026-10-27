@@ -37,6 +37,13 @@ var ground_segments: Array = []
 var platforms: Array = []
 var hud: CanvasLayer
 var formation: StringName = &"wedge"
+var archive_pickups: Array[Node] = []
+var ai_director: Node = null
+var comic_layer: CanvasLayer = null
+var decode_active: bool = false
+var _decode_left: float = 0.0
+var _decode_waves: int = 0
+var _final_choice_open: bool = false
 
 var _rng := RandomNumberGenerator.new()
 var _elapsed: float = 0.0
@@ -107,6 +114,10 @@ func _ready() -> void:
 		push_error("LevelRunner started without LevelData.")
 		return
 	GameManager.current_level = data
+	# Chapter 3 has two routes through one level slot; the chip decision in 2-3
+	# decides which one loads. Deep-copy so the shared .tres stays untouched.
+	data = data.duplicate(true)
+	_apply_route_variant()
 	level_width = data.length
 	dark = data.dark
 	_rng.seed = GameManager.run_seed ^ hash(String(data.id))
@@ -124,9 +135,14 @@ func _ready() -> void:
 	_build_hidden_room()
 	_build_extraction()
 	_build_zones()
+	_build_archives()
+	_build_cover_zones()
+	_build_narrative()
 	_spawn_player()
 	_spawn_allies()
 	_build_hud()
+	_build_faction_layer()
+	_build_comic_layer()
 	_connect_events()
 	_started_at = Time.get_ticks_msec() / 1000.0
 	_respawn_pos = player.global_position
@@ -628,6 +644,12 @@ func _fire_event(ev: Dictionary) -> void:
 		"elevator":
 			EventBus.level_event.emit("电梯警报响起——守住这层楼！")
 			start_horde(14, true)
+		"faction":
+			spawn_faction_event(String(ev.get("event", "")), player)
+		"narrative":
+			DialogueManager.play_conversation(String(ev.get("conversation", "")))
+		"final_choice":
+			open_final_choice()
 		_:
 			EventBus.level_event.emit(String(ev.get("text", "")))
 
@@ -659,6 +681,283 @@ func _report_party() -> void:
 	var avg_hp := total_hp / float(maxi(1, count))
 	DirectorSystem.report_party(avg_hp, 0.8, player.global_position.x)
 	DirectorSystem.set_boss_active(_boss_node != null and is_instance_valid(_boss_node))
+
+
+# ---------------------------------------------------- narrative / factions ----
+func _level_number() -> int:
+	var digits := ""
+	for i in String(data.id).length():
+		var ch := String(data.id)[i]
+		if ch >= "0" and ch <= "9":
+			digits += ch
+	return int(digits) if digits != "" else 1
+
+
+## 3-1A / 3-1B share level slot l07; the route is chosen by the chapter 2 chip.
+func _apply_route_variant() -> void:
+	if String(data.id) != "l07":
+		return
+	if GameManager.route_variant() == &"sewer":
+		data.title = "排水系统"
+		data.subtitle = "绕后路线。下面全是失败品。"
+		data.theme = &"subway"
+		data.music_theme = &"subway"
+		data.dark = true
+		data.rain = false
+		data.route_label = "3-1A · 绕后"
+	else:
+		data.title = "净化区正门"
+		data.subtitle = "硬闯路线。防御塔已经上电。"
+		data.theme = &"military"
+		data.music_theme = &"military"
+		data.dark = false
+		data.rain = false
+		data.route_label = "3-1B · 正门"
+
+
+## Terrain is procedural, so a fixed ratio can land in a pit. Probe outwards for
+## the nearest walkable column before placing story props.
+func _ground_point_near(x: float) -> Vector2:
+	for offset in [0.0, 40.0, -40.0, 80.0, -80.0, 140.0, -140.0, 220.0, -220.0, 320.0, -320.0]:
+		var probe := clampf(x + offset, 80.0, level_width - 80.0)
+		var gy := get_ground_y(probe)
+		if gy > 0.0:
+			return Vector2(probe, gy)
+	return Vector2.ZERO
+
+
+## Places archive fragments. When the previous chapter's quota is unmet, extra
+## spawn points are added so the player can catch up (design 2.3).
+func _build_archives() -> void:
+	if data.archive_slots <= 0:
+		return
+	var chapter := data.chapter
+	var slots := data.archive_slots + ArchiveManager.extra_spawn_slots(chapter - 1)
+	var ids := ArchiveManager.plan_for_level(chapter, _level_number(), slots)
+	var ratios := [0.22, 0.38, 0.52, 0.66, 0.78, 0.88]
+	for i in ids.size():
+		var ratio: float = ratios[i % ratios.size()]
+		var point := _ground_point_near(level_width * ratio)
+		if point == Vector2.ZERO:
+			continue
+		var pickup := ArchivePickup.new()
+		pickup.fragment_id = ids[i]
+		pickup.level = self
+		pickup.position = point - Vector2(0, 24.0)
+		pickups.add_child(pickup)
+		archive_pickups.append(pickup)
+	if not ids.is_empty():
+		EventBus.level_event.emit("检测到 %d 份档案信号" % ids.size())
+
+
+## Cover volumes feed Lucia's passive. They are gameplay areas, not colliders.
+func _build_cover_zones() -> void:
+	for ratio in [0.28, 0.44, 0.61, 0.75, 0.9]:
+		var point := _ground_point_near(level_width * float(ratio))
+		if point == Vector2.ZERO:
+			continue
+		var area := Area2D.new()
+		area.name = "Cover"
+		area.add_to_group("cover")
+		area.collision_layer = 64
+		area.collision_mask = 0
+		area.monitoring = false
+		area.monitorable = true
+		var shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = Vector2(56, 34)
+		shape.shape = rect
+		shape.position = Vector2(0, -17)
+		area.add_child(shape)
+		var sprite := Sprite2D.new()
+		sprite.texture = SpriteLibrary.prop_texture("sandbags")
+		if sprite.texture != null:
+			sprite.centered = false
+			sprite.position = Vector2(-28, -32)
+			sprite.z_index = 1
+			area.add_child(sprite)
+		area.position = point
+		props.add_child(area)
+
+
+## Story beats are Area2D triggers built from LevelData.narrative.
+func _build_narrative() -> void:
+	for row in data.narrative:
+		if not (row is Dictionary):
+			continue
+		var config: Dictionary = row
+		var trigger := NarrativeTrigger.new()
+		trigger.level = self
+		trigger.configure(config)
+		var at := float(config.get("at", 0.5))
+		var point := _ground_point_near(level_width * at)
+		if point == Vector2.ZERO:
+			continue
+		trigger.position = point - Vector2(0, 24.0)
+		add_child(trigger)
+
+
+func _build_faction_layer() -> void:
+	ai_director = AIDirector.new()
+	ai_director.name = "AIDirector"
+	ai_director.level = self
+	add_child(ai_director)
+
+
+func _build_comic_layer() -> void:
+	comic_layer = CanvasLayer.new()
+	comic_layer.name = "ComicPostProcess"
+	comic_layer.set_script(load("res://scripts/fx/comic_post_process.gd"))
+	add_child(comic_layer)
+
+
+# ------------------------------------------------------------- spawn hooks ----
+func spawn_faction_unit(faction_id: String, unit_kind: String, pos: Vector2) -> Node:
+	var unit := FactionUnit.new()
+	unit.faction_id = faction_id
+	unit.unit_kind = unit_kind
+	unit.level = self
+	var gy := get_ground_y(pos.x)
+	unit.position = Vector2(pos.x, gy if gy > 0.0 else pos.y)
+	actors.add_child(unit)
+	return unit
+
+
+func spawn_faction_event(event_id: String, player_node: Node = null) -> void:
+	var origin: Vector2 = player_node.global_position if player_node != null else Vector2.ZERO
+	match event_id:
+		"rust_ambush":
+			for i in 3:
+				spawn_faction_unit("rust", "rust_enforcer", origin + Vector2(-260.0 - i * 40.0, 0))
+			EventBus.level_event.emit("锈帮伏击！")
+		"remnant_support":
+			for i in 2:
+				spawn_faction_unit("remnants", "remnant_patrol", origin + Vector2(-120.0 + i * 50.0, 0))
+			EventBus.level_event.emit("残警火力支援抵达")
+		"horizon_sweep":
+			for i in 3:
+				spawn_faction_unit("horizon", "horizon_enforcer", origin + Vector2(300.0 + i * 40.0, 0))
+			EventBus.level_event.emit("地平线清扫队正在接近")
+		"signal_jam":
+			spawn_faction_unit("signal_bureau", "signal_jammer", origin + Vector2(260.0, 0))
+			EventBus.level_event.emit("信号局部署干扰器")
+		_:
+			EventBus.level_event.emit("派系活动：" + event_id)
+
+
+## Victor's passive drops these; they convert into supplies at the next crate.
+func spawn_sample(pos: Vector2) -> void:
+	var sample := Pickup.new()
+	sample.kind = "ammo"
+	sample.amount = 30
+	sample.level = self
+	sample.position = Vector2(pos.x, pos.y - 10.0)
+	pickups.add_child(sample)
+	add_score(150)
+
+
+func on_archive_collected(fragment_id: String) -> void:
+	add_score(5000)
+	var fragment := ArchiveManager.get_fragment(fragment_id)
+	var title := fragment.title if fragment != null else fragment_id
+	EventBus.level_event.emit("档案收录：" + title)
+	EventBus.objective_changed.emit("档案 %d/%d" % [ArchiveManager.unlocked_count(), ArchiveManager.total_count()])
+	if ArchiveManager.chapter_quota_met(data.chapter):
+		EventBus.notify.emit("本章档案进度已达标")
+
+
+func get_archive_pickups() -> Array[Node]:
+	var out: Array[Node] = []
+	for pickup in archive_pickups:
+		if pickup != null and is_instance_valid(pickup) and not bool(pickup.get("taken")):
+			out.append(pickup)
+	return out
+
+
+func nearest_archive_position(from: Vector2) -> Vector2:
+	var best := Vector2.ZERO
+	var best_dist := INF
+	for pickup in get_archive_pickups():
+		var dist := from.distance_to(pickup.global_position)
+		if dist < best_dist:
+			best_dist = dist
+			best = pickup.global_position
+	return best
+
+
+func burn_archive_pickup(pickup: Node) -> void:
+	if pickup == null or not is_instance_valid(pickup):
+		return
+	var fragment_id := String(pickup.get("fragment_id"))
+	archive_pickups.erase(pickup)
+	Fx.explosion(fx_layer, pickup.global_position, 1.4)
+	AudioManager.play_sfx(&"barrel_explode")
+	EventBus.notify.emit("档案被销毁：" + fragment_id)
+	EventBus.level_event.emit("证据销毁小队烧毁了一份档案")
+	pickup.queue_free()
+
+
+func clamp_spawn_x(x: float) -> float:
+	return clampf(x, 80.0, level_width - 80.0)
+
+
+# ------------------------------------------------------------- final choice ----
+func open_final_choice() -> void:
+	var packed: PackedScene = load("res://scenes/ui/narrative/FinalChoiceUI.tscn")
+	if packed == null:
+		return
+	var ui := packed.instantiate()
+	ui.set("level", self)
+	add_child(ui)
+
+
+func open_story_choice(choice_id: String) -> void:
+	if not StoryChoices.has(choice_id):
+		return
+	var packed: PackedScene = load("res://scenes/ui/narrative/StoryChoiceUI.tscn")
+	if packed == null:
+		return
+	var ui := packed.instantiate()
+	ui.set("level", self)
+	ui.set("choice_id", choice_id)
+	add_child(ui)
+
+
+func play_destroy_ending() -> void:
+	EventBus.level_event.emit("信号已终止")
+	EventBus.objective_changed.emit("信号已终止")
+	AudioManager.play_sfx(&"explosion")
+	Fx.explosion(fx_layer, player.global_position + Vector2(0, -20), 4.0)
+	EventBus.shake(6.0)
+	EventBus.gore_event.emit(1.4)
+	await get_tree().create_timer(1.0, true, false, true).timeout
+	DialogueManager.play_conversation("ending_destroy")
+	await get_tree().create_timer(7.5, true, false, true).timeout
+	if is_instance_valid(self):
+		_finish_level()
+
+
+func start_decode_defense(seconds: float, waves: int) -> void:
+	decode_active = true
+	_decode_left = seconds
+	_decode_waves = waves
+	EventBus.level_event.emit("解码开始——守住设备 90 秒")
+	EventBus.objective_changed.emit("解码防守 %ds" % int(seconds))
+	start_defense(seconds, waves, 22)
+	if ArchiveManager.highest_security_level_collected() >= 4:
+		# 信号核心防御协议：额外两波敌人
+		_decode_waves += 2
+		EventBus.level_event.emit("信号核心防御协议启动")
+
+
+func _finish_decode() -> void:
+	decode_active = false
+	SaveSystem.set_flag(&"lin_yuan_epilogue")
+	EventBus.level_event.emit("解码完成 · 坐标与名单已解析")
+	DialogueManager.play_conversation("ending_decode")
+	await get_tree().create_timer(8.0, true, false, true).timeout
+	if is_instance_valid(self):
+		_finish_level()
 
 
 # ------------------------------------------------------------------ events ----
@@ -727,6 +1026,8 @@ func _alive_common_count() -> int:
 			continue
 		if node.get("level") != self:
 			continue
+		if node.is_in_group("faction_units"):
+			continue
 		var zd: ZombieData = node.get("data")
 		if zd != null and not zd.is_special:
 			count += 1
@@ -739,6 +1040,8 @@ func _alive_special_count() -> int:
 		if node == null or not is_instance_valid(node) or bool(node.get("dead")):
 			continue
 		if node.get("level") != self:
+			continue
+		if node.is_in_group("faction_units"):
 			continue
 		var zd: ZombieData = node.get("data")
 		if zd != null and zd.is_special and zd.id != &"witch":
@@ -821,6 +1124,9 @@ func _tick_defense(delta: float) -> void:
 	if _defense_left <= 0.0:
 		_defense_active = false
 		add_score(3000)
+		if decode_active:
+			_finish_decode()
+			return
 		EventBus.objective_changed.emit("推进至撤离点")
 		EventBus.level_event.emit("防线守住了")
 		EventBus.notify.emit("防守成功 +3000")
@@ -1078,6 +1384,12 @@ func on_zombie_died(zombie: Node, source: StringName, is_head: bool) -> void:
 						_boss_node = candidate
 						EventBus.boss_health_changed.emit(int(candidate.get("health")), int(candidate.get("max_health")))
 						break
+			# Final chapter: the signal core's death opens the binary ending.
+			if data.final_choice and _boss_nodes.is_empty() and not _final_choice_open:
+				_final_choice_open = true
+				await get_tree().create_timer(2.2, true, false, true).timeout
+				if is_instance_valid(self) and not _finishing and not ArchiveManager.has_final_choice():
+					open_final_choice()
 	if zd.id == &"witch" and zombie.alerted == false:
 		pass
 

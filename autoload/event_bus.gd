@@ -77,6 +77,27 @@ signal debug_vision_toggled
 signal toast(title: String, detail: String)
 
 
+# --- Narrative / archive / factions (2019 RUST FREQUENCY) -------------------
+signal archive_unlocked(fragment_id: String, security_level: int)
+signal archive_progress_changed(collected: int, highest_security: int)
+signal archive_quota_changed(chapter: int, met: bool)
+signal faction_hostility_changed(faction_id: String, value: float)
+signal faction_skirmish_started(pos: Vector2, faction_a: String, faction_b: String)
+signal faction_skirmish_ended(pos: Vector2, winner: String)
+signal faction_unit_spawned(faction_id: String, unit_kind: String)
+signal dialogue_bark(character_id: String, text: String, color: Color)
+signal dialogue_line(speaker_id: String, text: String, translation: String, duration: float)
+signal dialogue_sequence_started(sequence_id: String)
+signal dialogue_sequence_finished(sequence_id: String)
+signal narrative_triggered(trigger_id: String)
+signal final_choice_presented(can_decode: bool)
+signal final_choice_made(choice: String)
+signal gore_event(intensity: float)
+signal enemies_revealed(count: int, radius: float)
+signal signal_noise_changed(level: float)
+signal sample_collected(total: int)
+
+
 func announce(text: String) -> void:
 	notify.emit(text)
 

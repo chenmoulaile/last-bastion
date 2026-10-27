@@ -7,6 +7,8 @@ const SCREENS := {
 	&"levels": "res://scenes/ui/level_select.tscn",
 	&"briefing": "res://scenes/ui/briefing.tscn",
 	&"characters": "res://scenes/ui/character_select.tscn",
+	&"survivors": "res://scenes/ui/survivors/CharacterSelect.tscn",
+	&"archives": "res://scenes/ui/archive/ArchiveMenu.tscn",
 	&"settings": "res://scenes/ui/settings.tscn",
 	&"achievements": "res://scenes/ui/achievements.tscn",
 	&"codex": "res://scenes/ui/codex.tscn",
@@ -85,6 +87,10 @@ func _on_navigate(target: StringName, payload: Dictionary = {}) -> void:
 			_show_screen(&"briefing", payload)
 		&"characters":
 			_show_screen(&"characters", payload)
+		&"survivors":
+			_show_screen(&"survivors", payload)
+		&"archives":
+			_show_screen(&"archives", payload)
 		&"settings":
 			_show_screen(&"settings")
 		&"achievements":

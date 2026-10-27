@@ -25,6 +25,16 @@ var _intensity: float = 0.0
 var _tank_active: bool = false
 var _music_started: bool = false
 
+## 1.7 GHz narrow-band signal noise: generated at runtime so the "someone is
+## transmitting" layer can follow archive progression without new assets.
+const SIGNAL_FREQ := 1700.0
+const SIGNAL_MIX_RATE := 22050.0
+var _signal_player: AudioStreamPlayer
+var _signal_playback: AudioStreamGeneratorPlayback
+var _signal_phase: float = 0.0
+var _signal_level: float = 0.0
+var _signal_pulse: float = 0.0
+
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -269,3 +279,50 @@ func _pick(id: StringName) -> AudioStream:
 	if _streams.has(key):
 		return _streams[key]
 	return null
+
+
+# ------------------------------------------------------- signal noise layer ----
+## 0..1 archive pressure -> volume + pulse rate. Called by ArchiveManager.
+func set_signal_noise(level: float) -> void:
+	_signal_level = clampf(level, 0.0, 1.0)
+	if _signal_player == null:
+		_build_signal_player()
+	if _signal_player == null:
+		return
+	var target_db := -42.0 + _signal_level * 24.0
+	_signal_player.volume_db = target_db
+	if not _signal_player.playing and _signal_level > 0.01:
+		_signal_player.play()
+		_signal_playback = _signal_player.get_stream_playback() as AudioStreamGeneratorPlayback
+
+
+func _build_signal_player() -> void:
+	var generator := AudioStreamGenerator.new()
+	generator.mix_rate = SIGNAL_MIX_RATE
+	generator.buffer_length = 0.25
+	_signal_player = AudioStreamPlayer.new()
+	_signal_player.stream = generator
+	_signal_player.bus = "Ambience"
+	_signal_player.volume_db = -42.0
+	add_child(_signal_player)
+	_signal_playback = null
+
+
+func _process(delta: float) -> void:
+	if _signal_playback == null or _signal_player == null or not _signal_player.playing:
+		return
+	var frames := _signal_playback.get_frames_available()
+	if frames <= 0:
+		return
+	# Higher archive levels make the pulse audible as a rhythm, not just hiss.
+	var pulse_rate := 0.6 + _signal_level * 2.2
+	_signal_pulse += delta * pulse_rate
+	var pulse := 0.45 + 0.55 * maxf(0.0, sin(_signal_pulse * TAU))
+	var amp := 0.06 + _signal_level * 0.12
+	var step := TAU * SIGNAL_FREQ / SIGNAL_MIX_RATE
+	for i in frames:
+		_signal_phase = fmod(_signal_phase + step, TAU)
+		var tone := sin(_signal_phase) * 0.35
+		var noise := randf_range(-1.0, 1.0) * 0.65
+		var sample := (tone + noise) * amp * pulse
+		_signal_playback.push_frame(Vector2(sample, sample * 0.92))

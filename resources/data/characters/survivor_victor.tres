@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/character_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"victor"
+display_name = "维克多"
+callsign = "BIOLOGIST"
+character_id = "victor"
+codename = "标本"
+roster = &"archive"
+max_hp = 85
+speed = 210
+stealth_speed_multiplier = 0.6
+melee_damage = 34.0
+passive_ability_id = &"passive_victor"
+passive_name = "生物学家"
+passive_desc = "对特殊感染者伤害 ×1.2；击杀特感有 50% 概率留下可兑换补给的样本。"
+passive_cooldown = 0.0
+skill_id = &"field_medic"
+skill_name = "战地处理"
+skill_desc = "治疗自身 20 点，并治疗附近队友 35 点。"
+skill_cd = 24.0
+primary_weapon = &"m9"
+secondary_weapon = &"smg"
+melee_weapon = &"axe"
+unlock_score = 0
+portrait = "medic"
+visual_base = "medic"
+palette_tint = Color(0.80, 0.88, 0.96, 1.000)
+accent = Color(0.48, 0.66, 0.84, 1.000)
+dialogue_color = Color(0.56, 0.74, 0.92, 1.000)
+description = "信号局外派生物学家。他的记录本比他的枪更危险。"
+unlock_archive_types = Array[String](["evidence", "complicity", "the_deep"])
+monologue = "样本不会说谎。说谎的是写报告的人。"
+language = "en"
+voice_pitch = 1.02
