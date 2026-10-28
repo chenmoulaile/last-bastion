@@ -25,6 +25,19 @@ ArchiveManager="*res://scripts/archive/archive_manager.gd"
 FactionManager="*res://scripts/faction/faction_manager.gd"
 DialogueManager="*res://scripts/narrative/dialogue_manager.gd"
 EnemyPerception="*res://scripts/ai/enemy_perception_manager.gd"
+GameFeelConfig="*res://gamefeel/GameFeelConfig.gd"
+InputBuffer="*res://gamefeel/input/InputBuffer.gd"
+CameraPunch="*res://gamefeel/core/CameraPunch.gd"
+ScreenShake="*res://gamefeel/core/ScreenShake.gd"
+HitStop="*res://gamefeel/core/HitStop.gd"
+AudioLayerManager="*res://gamefeel/audio/AudioLayerManager.gd"
+RecoilController="*res://gamefeel/input/RecoilController.gd"
+GameFeelBridge="*res://gamefeel/integration/GameFeelBridge.gd"
+
+[gamefeel]
+
+enabled=true
+reduced_motion=false
 
 [debug]
 

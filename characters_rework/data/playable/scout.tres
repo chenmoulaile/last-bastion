@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="ReworkCharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://characters_rework/data/CharacterData.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"scout"
+narrative_id = &"lucia"
+display_name = "侦察兵"
+callsign = "SCOUT"
+description = "最快的双腿，滑铲与翻滚让 Hunter 摸不到。"
+max_hp = 85
+speed = 260.0
+unlock_score = 0
+passive_ability_id = &"tactical_roll"
+skill_name = "战术翻滚"
+skill_desc = "0.25s 无敌位移 200px"
+skill_cd = 12.0
+primary_weapon = &"shotgun"
+secondary_weapon = &"m9"
+melee_weapon = &"axe"
+palette = {"accent": Color(0.45, 0.82, 0.9, 1), "body_primary": Color(0.26, 0.33, 0.4, 1), "body_secondary": Color(0.19, 0.24, 0.3, 1), "gear": Color(0.3, 0.34, 0.38, 1), "skin": Color(0.78, 0.6, 0.46, 1), "visor": Color(0.55, 0.9, 1, 1), "weapon": Color(0.17, 0.18, 0.21, 1)}
+visual_profile = &"scout"
+body_width_scale = 0.92
+body_height_scale = 0.98

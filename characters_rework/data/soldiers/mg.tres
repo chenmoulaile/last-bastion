@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="ReworkSoldierData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://characters_rework/data/SoldierData.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"mg"
+display_name = "机枪手"
+description = "架枪 0.8s 后持续压制，开火时不可移动。"
+max_hp = 110
+speed = 150.0
+strategy_id = &"mg"
+primary_weapon = &"lmg"
+secondary_weapon = &"m9"
+grenade_capacity = 0
+grenade_cooldown = 0.0
+grenade_damage = 0
+grenade_radius = 0.0
+palette = {"accent": Color(0.85, 0.7, 0.3, 1), "body_primary": Color(0.24, 0.3, 0.22, 1), "body_secondary": Color(0.18, 0.22, 0.16, 1), "gear": Color(0.3, 0.31, 0.25, 1), "skin": Color(0.73, 0.55, 0.42, 1), "visor": Color(0.8, 0.7, 0.35, 1), "weapon": Color(0.15, 0.16, 0.19, 1)}
+visual_profile = &"mg"
+body_width_scale = 1.1
+body_height_scale = 1.04

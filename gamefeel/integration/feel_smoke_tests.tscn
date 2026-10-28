@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://gamefeel/integration/feel_smoke_tests.gd" id="1_feel"]
+
+[node name="FeelSmokeTests" type="Node"]
+script = ExtResource("1_feel")

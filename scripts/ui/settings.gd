@@ -9,6 +9,7 @@ var _listening_button: Button = null
 var _fullscreen_button: Button
 var _tips_button: Button
 var _shake_label: Label
+var _gamefeel_buttons: Dictionary = {}
 
 
 func _build() -> void:
@@ -17,8 +18,8 @@ func _build() -> void:
 	add_back_button(&"menu", "主菜单")
 	add_footer("所有设置自动保存 · 按键可重新绑定 · 手柄按键使用默认映射")
 
-	var names := ["音频", "画面", "操作"]
-	for i in 3:
+	var names := ["音频", "画面", "操作", "手感"]
+	for i in 4:
 		var btn := UIKit.button(names[i], 96, 26)
 		btn.position = Vector2(24, 66 + i * 32)
 		btn.pressed.connect(_show_tab.bind(i))
@@ -62,6 +63,8 @@ func _show_tab(index: int) -> void:
 			_build_video()
 		2:
 			_build_controls()
+		3:
+			_build_gamefeel()
 	AudioManager.play_sfx(&"ui_click")
 
 
@@ -218,6 +221,109 @@ func _build_controls() -> void:
 	hint.position = Vector2(12, 224)
 	hint.size = Vector2(452, 9)
 	panel.add_child(hint)
+
+
+func _build_gamefeel() -> void:
+	var panel := _panel()
+	_gamefeel_buttons.clear()
+	_gamefeel_toggle(panel, &"enabled", "手感特效总开关", 12, 10)
+	_gamefeel_toggle(panel, &"reduced_motion", "减少动态（晕动症）", 246, 10)
+	_gamefeel_toggle(panel, &"damage_numbers", "伤害数字", 12, 40)
+	_gamefeel_toggle(panel, &"hit_flash", "命中闪光", 246, 40)
+	_gamefeel_slider(panel, "命中停顿", 72, Callable(GameFeelConfig, "set_hitstop_scale"), GameFeelConfig.hitstop_scale)
+	_gamefeel_slider(panel, "屏幕震动", 98, Callable(GameFeelConfig, "set_screenshake_scale"), GameFeelConfig.screenshake_scale, 2.0)
+	_gamefeel_slider(panel, "闪光强度", 124, Callable(GameFeelConfig, "set_flash_intensity"), GameFeelConfig.flash_intensity)
+	_gamefeel_slider(panel, "粒子密度", 150, Callable(GameFeelConfig, "set_particle_density"), GameFeelConfig.particle_density)
+
+	var note := UIKit.label("关闭总开关会完整恢复旧版相机与命中停顿。减少动态会削弱震动与缩放，保留可读性反馈。", 8, UIKit.DIM)
+	note.position = Vector2(12, 178)
+	note.size = Vector2(452, 22)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	panel.add_child(note)
+
+	var reset := UIKit.button("手感默认值", 108, 22)
+	reset.position = Vector2(12, 204)
+	reset.pressed.connect(_reset_gamefeel)
+	panel.add_child(reset)
+	_refresh_gamefeel_buttons()
+
+
+func _gamefeel_toggle(panel: Panel, key: StringName, title: String, x: float, y: float) -> void:
+	var label := UIKit.label(title, 9, UIKit.INK)
+	label.position = Vector2(x, y + 4)
+	label.size = Vector2(150, 12)
+	panel.add_child(label)
+	var btn := UIKit.button("", 60, 22)
+	btn.position = Vector2(x + 156, y)
+	btn.pressed.connect(_toggle_gamefeel.bind(key))
+	panel.add_child(btn)
+	_gamefeel_buttons[key] = btn
+
+
+func _gamefeel_slider(panel: Panel, title: String, y: float, setter: Callable,
+		value_now: float, max_value: float = 1.0) -> void:
+	var label := UIKit.label(title, 9, UIKit.INK)
+	label.position = Vector2(12, y + 4)
+	label.size = Vector2(100, 12)
+	panel.add_child(label)
+	var slider := HSlider.new()
+	slider.position = Vector2(118, y + 2)
+	slider.size = Vector2(266, 14)
+	slider.min_value = 0.0
+	slider.max_value = max_value
+	slider.step = 0.05
+	slider.value = clampf(value_now, 0.0, max_value)
+	panel.add_child(slider)
+	var value := UIKit.label("%d%%" % int(slider.value * 100.0), 9, UIKit.AMBER, UIKit.font_latin())
+	value.position = Vector2(392, y + 1)
+	value.size = Vector2(60, 11)
+	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	panel.add_child(value)
+	slider.value_changed.connect(func(v: float) -> void:
+		setter.call(v)
+		value.text = "%d%%" % int(v * 100.0)
+	)
+
+
+func _refresh_gamefeel_buttons() -> void:
+	for raw_key in _gamefeel_buttons.keys():
+		var key := StringName(String(raw_key))
+		var btn: Button = _gamefeel_buttons[raw_key]
+		if btn == null or not is_instance_valid(btn):
+			continue
+		var on := false
+		match key:
+			&"enabled":
+				on = GameFeelConfig.enabled
+			&"reduced_motion":
+				on = GameFeelConfig.reduced_motion
+			&"damage_numbers":
+				on = GameFeelConfig.damage_number_enabled
+			_:
+				on = GameFeelConfig.is_module_on(key)
+		btn.text = "开" if on else "关"
+		btn.add_theme_color_override("font_color", UIKit.AMBER if on else UIKit.DIM)
+
+
+func _toggle_gamefeel(key: StringName) -> void:
+	AudioManager.play_sfx(&"ui_click")
+	match key:
+		&"enabled":
+			GameFeelConfig.set_enabled(not GameFeelConfig.enabled)
+		&"reduced_motion":
+			GameFeelConfig.set_reduced_motion(not GameFeelConfig.reduced_motion)
+		&"damage_numbers":
+			GameFeelConfig.set_damage_numbers_enabled(not GameFeelConfig.damage_number_enabled)
+		_:
+			GameFeelConfig.set_module_enabled(key, not GameFeelConfig.is_module_on(key))
+	_refresh_gamefeel_buttons()
+
+
+func _reset_gamefeel() -> void:
+	AudioManager.play_sfx(&"ui_click")
+	GameFeelConfig.reset_to_defaults()
+	_show_tab(_tab)
+	_refresh_gamefeel_buttons()
 
 
 func _begin_remap(action: String, button: Button) -> void:

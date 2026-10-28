@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="ReworkCharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://characters_rework/data/CharacterData.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"heavy"
+narrative_id = &"marcus"
+display_name = "重装兵"
+callsign = "HEAVY"
+description = "150 HP 的移动堡垒，慢但站得住。"
+max_hp = 150
+speed = 170.0
+unlock_score = 0
+passive_ability_id = &"shield_wall"
+skill_name = "盾墙"
+skill_desc = "正面减伤 70% 持续 5s，近战伤害 ×2"
+skill_cd = 28.0
+primary_weapon = &"lmg"
+secondary_weapon = &"m9"
+melee_weapon = &"axe"
+palette = {"accent": Color(0.95, 0.75, 0.38, 1), "body_primary": Color(0.27, 0.33, 0.23, 1), "body_secondary": Color(0.2, 0.24, 0.17, 1), "gear": Color(0.35, 0.36, 0.3, 1), "skin": Color(0.72, 0.55, 0.42, 1), "visor": Color(0.9, 0.68, 0.3, 1), "weapon": Color(0.16, 0.17, 0.2, 1)}
+visual_profile = &"heavy"
+body_width_scale = 1.12
+body_height_scale = 1.06

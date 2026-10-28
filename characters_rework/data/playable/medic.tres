@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="ReworkCharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://characters_rework/data/CharacterData.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"medic"
+narrative_id = &"victor"
+display_name = "医疗兵"
+callsign = "MEDIC"
+description = "团队续航核心，倒地救援速度更快。"
+max_hp = 90
+speed = 215.0
+unlock_score = 0
+passive_ability_id = &"field_medic"
+skill_name = "战地医疗"
+skill_desc = "半径 150px 内队友回 35HP、自己回 20"
+skill_cd = 30.0
+primary_weapon = &"smg"
+secondary_weapon = &"m9"
+melee_weapon = &"axe"
+palette = {"accent": Color(0.92, 0.3, 0.3, 1), "body_primary": Color(0.72, 0.73, 0.7, 1), "body_secondary": Color(0.52, 0.54, 0.52, 1), "gear": Color(0.85, 0.86, 0.84, 1), "skin": Color(0.8, 0.62, 0.48, 1), "visor": Color(0.7, 0.82, 0.9, 1), "weapon": Color(0.22, 0.23, 0.26, 1)}
+visual_profile = &"medic"
+body_width_scale = 0.98
+body_height_scale = 1.0
