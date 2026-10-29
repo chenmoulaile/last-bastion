@@ -78,6 +78,7 @@ signal debug_vision_toggled
 signal toast(title: String, detail: String)
 signal currency_changed(amount: int)
 signal meta_currency_changed(amount: int)
+signal camera_zoom_changed(zoom: float)
 signal talent_purchased(talent_id: StringName)
 
 
