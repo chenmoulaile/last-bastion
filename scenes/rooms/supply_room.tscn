@@ -1,0 +1,25 @@
+[gd_scene load_steps=2 format=3]
+
+[sub_resource id="1" type="RectangleShape2D"]
+size = Vector2(400, 300)
+
+[node name="SupplyRoom" type="Node2D"]
+
+[node name="RoomBounds" type="CollisionShape2D"]
+shape = SubResource("1")
+transform = Transform2D(1, 0, 0, 1, 200, 150)
+
+[node name="SpawnPoint" type="Position2D"]
+position = Vector2(200, 50)
+
+[node name="SupplyDrop1" type="Position2D"]
+position = Vector2(150, 150)
+
+[node name="SupplyDrop2" type="Position2D"]
+position = Vector2(250, 200)
+
+[node name="ExitRight" type="Position2D"]
+position = Vector2(380, 150)
+
+[node name="ExitLeft" type="Position2D"]
+position = Vector2(20, 150)

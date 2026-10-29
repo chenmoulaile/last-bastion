@@ -39,6 +39,9 @@ HitStop="*res://gamefeel/core/HitStop.gd"
 AudioLayerManager="*res://gamefeel/audio/AudioLayerManager.gd"
 RecoilController="*res://gamefeel/input/RecoilController.gd"
 GameFeelBridge="*res://gamefeel/integration/GameFeelBridge.gd"
+NetworkManager="*res://autoload/network_manager.gd"
+RogueliteMapGenerator="*res://scripts/levels/roguelite_map_generator.gd"
+EndlessModeManager="*res://autoload/endless_mode_manager.gd"
 
 [debug]
 

@@ -32,6 +32,7 @@ signal special_escaped(kind: StringName)
 # --- Director --------------------------------------------------------------
 signal director_request_horde(count: int)
 signal director_request_special(kind: StringName)
+signal director_request_boss(kind: StringName)
 signal director_request_supply(kind: StringName)
 signal director_intensity_changed(value: float)
 signal horde_started(count: int)
@@ -76,6 +77,8 @@ signal debug_panel_toggled
 signal debug_vision_toggled
 signal toast(title: String, detail: String)
 signal currency_changed(amount: int)
+signal meta_currency_changed(amount: int)
+signal talent_purchased(talent_id: StringName)
 
 
 # --- Narrative / archive / factions (2019 RUST FREQUENCY) -------------------

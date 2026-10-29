@@ -326,6 +326,9 @@ func complete_level(result: Dictionary) -> void:
 		if String(ach_id) not in achievements_before:
 			new_achievements.append(String(ach_id))
 	last_result["new_achievements"] = new_achievements
+	# 局外成长：奖励废料与天赋点
+	SaveSystem.award_meta_currency_for_run(score, rank)
+	SaveSystem.award_talent_point()
 	DirectorSystem.end_level()
 	AudioManager.play_result_sting(rank)
 	change_state(State.RESULT)

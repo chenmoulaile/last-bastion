@@ -79,6 +79,11 @@ func _default_data() -> Dictionary:
 		"archives": [],
 		"final_choice": "",
 		"playtime": 0.0,
+		# --- 局外成长 (Meta-Progression) ---
+		"meta_currency": 0,
+		"talent_points": 0,
+		"talents": {},
+		"meta_weapon_unlocks": [],
 	}
 
 
@@ -418,3 +423,131 @@ func _on_door_kicked(_pos: Vector2) -> void:
 
 func _on_player_rescued() -> void:
 	_add_counter("rescues", 1)
+
+
+# ------------------------------------------------------------------ meta ----
+
+func get_meta_currency() -> int:
+	return int(data.get("meta_currency", 0))
+
+
+func add_meta_currency(amount: int) -> void:
+	if amount <= 0:
+		return
+	data["meta_currency"] = int(data.get("meta_currency", 0)) + amount
+	save()
+
+
+func spend_meta_currency(amount: int) -> bool:
+	if amount <= 0:
+		return true
+	if int(data.get("meta_currency", 0)) >= amount:
+		data["meta_currency"] = int(data.get("meta_currency", 0)) - amount
+		save()
+		return true
+	return false
+
+
+func get_talent_points() -> int:
+	return int(data.get("talent_points", 0))
+
+
+func add_talent_point() -> void:
+	data["talent_points"] = int(data.get("talent_points", 0)) + 1
+	save()
+
+
+func spend_talent_point(talent_id: StringName) -> bool:
+	if int(data.get("talent_points", 0)) <= 0:
+		return false
+	if is_talent_purchased(talent_id):
+		return false
+	var talents: Dictionary = data.get("talents", {})
+	talents[String(talent_id)] = true
+	data["talents"] = talents
+	data["talent_points"] = int(data.get("talent_points", 0)) - 1
+	save()
+	EventBus.talent_purchased.emit(talent_id)
+	return true
+
+
+func is_talent_purchased(talent_id: StringName) -> bool:
+	var talents: Dictionary = data.get("talents", {})
+	return String(talent_id) in talents
+
+
+func get_talent_effect(talent_id: StringName, default: float = 1.0) -> float:
+	var talents: Dictionary = data.get("talents", {})
+	if String(talent_id) in talents:
+		var entry: Dictionary = talents[String(talent_id)]
+		return float(entry.get("effect", default))
+	return default
+
+
+func is_meta_weapon_unlocked(id: StringName) -> bool:
+	var list: Array = data.get("meta_weapon_unlocks", [])
+	return String(id) in list
+
+
+func unlock_meta_weapon(id: StringName) -> void:
+	var list: Array = data.get("meta_weapon_unlocks", [])
+	if String(id) not in list:
+		list.append(String(id))
+		data["meta_weapon_unlocks"] = list
+		save()
+
+
+# Talent tree definitions (data-driven)
+const TALENT_TREE: Dictionary = {
+	"survival": {
+		"name": "生存系",
+		"talents": {
+			"extra_health": {"name": "强化体质", "desc": "最大生命 +25%", "cost": 1, "effect": 1.25, "max_level": 1},
+			"fast_revive": {"name": "急救训练", "desc": "救助速度 +50%", "cost": 1, "effect": 1.5, "max_level": 1},
+			"adrenaline": {"name": "肾上腺素", "desc": "濒死时移速 +30%", "cost": 2, "effect": 1.3, "max_level": 1},
+		}
+	},
+	"combat": {
+		"name": "战斗系",
+		"talents": {
+			"headshot_mastery": {"name": "爆头专家", "desc": "爆头伤害 +25%", "cost": 1, "effect": 1.25, "max_level": 1},
+			"rapid_reload": {"name": "快速装弹", "desc": "换弹速度 +25%", "cost": 1, "effect": 0.75, "max_level": 1},
+			"ammo_scavenger": {"name": "拾荒射手", "desc": "备弹量 +20%", "cost": 2, "effect": 1.2, "max_level": 1},
+		}
+	},
+	"economic": {
+		"name": "经济系",
+		"talents": {
+			"scrap_collector": {"name": "废料收集者", "desc": "金币掉落 +25%", "cost": 1, "effect": 1.25, "max_level": 1},
+			"shop_discount": {"name": "商人议价", "desc": "商店价格 -15%", "cost": 2, "effect": 0.85, "max_level": 1},
+			"weapon_salvage": {"name": "武器拆解", "desc": "武器分解返还 50% 废料", "cost": 3, "effect": 0.5, "max_level": 1},
+		}
+	}
+}
+
+
+func get_talent_tree() -> Dictionary:
+	return TALENT_TREE.duplicate()
+
+
+func award_meta_currency_for_run(score: int, rank: String) -> void:
+	var base := score / 1000
+	var mult := 1.0
+	match rank:
+		"S": mult = 3.0
+		"A": mult = 2.0
+		"B": mult = 1.5
+		_: mult = 1.0
+	var earned := int(float(base) * mult)
+	if earned > 0:
+		add_meta_currency(earned)
+	EventBus.meta_currency_changed.emit(get_meta_currency())
+
+
+func award_talent_point() -> void:
+	var levels_completed := int(data.get("progress", {}).get("completed", []).size())
+	var points := levels_completed / 3
+	var current := int(data.get("talent_points", 0))
+	if points > current:
+		data["talent_points"] = points
+		save()

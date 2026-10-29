@@ -25,6 +25,7 @@ var _combo_label: Label
 var _streak_label: Label
 var _killstreak: int = 0
 var _streak_timer: float = 0.0
+var _streak_cam_timer: float = 0.0
 var _time_label: Label
 var _level_label: Label
 
@@ -1139,8 +1140,19 @@ func _process(delta: float) -> void:
 		if _streak_timer <= 0.0:
 			_killstreak = 0
 			_streak_label.visible = false
+			# 结束击杀特写慢动作
+			if Engine.time_scale < 1.0:
+				Engine.time_scale = 1.0
 	if _pause_open:
 		return
+	# 击杀特写：5连杀触发慢动作镜头
+	if _killstreak >= 5 and Engine.time_scale == 1.0:
+		Engine.time_scale = 0.2
+		_streak_cam_timer = 1.5
+	if _streak_cam_timer > 0.0:
+		_streak_cam_timer -= delta
+		if _streak_cam_timer <= 0.0 and Engine.time_scale < 1.0:
+			Engine.time_scale = 1.0
 	_refresh_accum += delta
 	_clock_accum += delta
 	if _refresh_accum >= 0.1:

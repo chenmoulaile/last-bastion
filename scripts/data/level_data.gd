@@ -36,6 +36,7 @@ extends Resource
 @export var unlocks_weapon: String = ""
 @export var music_theme: StringName = &"suburb"
 @export var escort_vehicle: bool = false
+@export var use_roguelite: bool = false
 
 # ---------------------------------------------------- narrative layer (2019) ----
 ## Story beats placed at level_width * at. Each entry:

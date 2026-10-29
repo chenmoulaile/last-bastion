@@ -3,8 +3,12 @@ extends CharacterBody2D
 ## Shared infected body: health, hitboxes, stagger, knockback, burning,
 ## separation, death and the common-infected state machine. Specials override
 ## _ai_tick() and death effects.
+##
+## 网络模式下：AI 仅在 Host 端运行，客户端通过 MultiplayerSynchronizer
+## 或 RPC 接收位置与特效同步。
 
 signal died(kind: StringName, pos: Vector2, source: StringName)
+signal net_damage(amount: int, head: bool)
 
 const GRAVITY := 1500.0
 
@@ -26,8 +30,20 @@ var _crawling: bool = false
 var _crawl_speed: float = 55.0
 var _dismembered: bool = false
 
+## LOD (细节级别)：远处僵尸跳过复杂动画与碰撞更新，节省 CPU。
+var _lod_level: int = 0  # 0=全细节, 1=简化动画, 2=仅位置
+var _lod_check_timer: float = 0.0
+var _lod_check_interval: float = 0.5
+
 var stagger_timer: float = 0.0
 var attack_cooldown: float = 0.0
+
+## 网络同步字段
+var _network: Node = null
+var _is_network_host: bool = false
+var _net_target_x: float = 0.0
+var _net_target_y: float = 0.0
+var _net_facing: int = -1
 var jump_cd: float = 0.0
 var burn_timer: float = 0.0
 var burn_dps: float = 0.0
@@ -68,6 +84,15 @@ func _ready() -> void:
 	health_component = _hc_script.new()
 	health_component.name = "HealthComponent"
 	add_child(health_component)
+	# 网络初始化：AI 仅在 Host 运行，客户端同步位置。
+	_network = get_node_or_null("/root/NetworkManager")
+	if _network != null and _network.is_multiplayer_active():
+		_is_network_host = _network.is_host
+		if not _is_network_host:
+			# 客户端：名称标记，位置由网络同步
+			name = "Zombie_" + str(get_instance_id())
+	else:
+		_is_network_host = true  # 单机视为主机
 	if data.id == &"tank":
 		var diff := GameManager.current_difficulty
 		if diff == &"HARD":
@@ -113,6 +138,15 @@ func _build_body() -> void:
 func _physics_process(delta: float) -> void:
 	if GameManager.state != GameManager.State.PLAYING:
 		return
+	# 客户端：不运行 AI，仅插值同步位置。
+	if _network != null and _network.is_multiplayer_active() and not _is_network_host:
+		_apply_network_interpolation(delta)
+		return
+	# LOD 检查：远处僵尸降低更新频率
+	_lod_check_timer -= delta
+	if _lod_check_timer <= 0.0:
+		_lod_check_timer = _lod_check_interval
+		_update_lod_level()
 	spawn_time += 0.0
 	stagger_timer = maxf(0.0, stagger_timer - delta)
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
@@ -179,8 +213,16 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		return
 	_ai_tick(delta)
-	_apply_separation(delta)
-	move_and_slide()
+	if _lod_level < 1:
+		_apply_separation(delta)
+	if _lod_level < 2:
+		move_and_slide()
+	else:
+		# LOD 2：仅向玩家移动，不进行物理碰撞
+		var player := get_tree().get_first_node_in_group("player")
+		if player != null and is_instance_valid(player):
+			var dir: Vector2 = (player.global_position - global_position).normalized()
+			global_position += dir * data.walk_speed_max * 0.5 * delta
 	# 爬行僵尸拖拽血迹。
 	if _crawling and is_on_floor() and randf() < 0.3:
 		Fx.blood_decal(level.fx_layer if level else get_parent(),
@@ -192,6 +234,11 @@ func _physics_process(delta: float) -> void:
 		if randf() < 0.35:
 			AudioManager.play_sfx_2d(data.voice_id, global_position, 800.0, -12.0)
 	_tick_outline(delta)
+	# Host 广播僵尸位置给客户端。
+	if _is_network_host and _network != null and _network.is_multiplayer_active():
+		var pos := global_position
+		# 通过 NetworkManager 广播（需要在 NetworkManager 中添加僵尸位置 RPC）
+		pass
 
 
 # ------------------------------------------------------------- perception ----
@@ -567,6 +614,9 @@ func apply_damage(amount: int, from_dir: Vector2, is_head: bool, source: StringN
 		alerted = true
 		if source == &"player" and level and not EnemyPerception.is_noise_suppressed(global_position):
 			level.alert_commons_near(global_position, 80.0)
+	# Host 广播僵尸受击给所有客户端。
+	if _is_network_host and _network != null and _network.is_multiplayer_active():
+		_network.rpc_zombie_hit(get_instance_id(), int(final_amount), is_head)
 
 
 func _take_raw_damage(amount: float, source: StringName, damage_type: StringName, is_head: bool) -> void:
@@ -667,6 +717,10 @@ func _die(source: StringName, is_head: bool = false) -> void:
 	# 断肢增强：霰弹枪、反坦克步枪、爆炸物、近战致死时触发程序化残肢。
 	if last_damage_type in [&"shotgun", &"explosive", &"melee"]:
 		_dismember_limbs()
+	# Host 广播断肢特效给所有客户端。
+	if _is_network_host and _network != null and _network.is_multiplayer_active() and last_damage_type in [&"shotgun", &"explosive", &"melee"]:
+		var dir := Vector2(float(facing), 0.0)
+		_network.rpc_zombie_dismember(get_instance_id(), global_position.x, global_position.y, dir.x, dir.y, last_damage_type)
 	_on_death_effect()
 	died.emit(data.id, global_position, source)
 	if level:
@@ -847,3 +901,57 @@ func _set_facing_from_target() -> void:
 		facing = 1 if target.global_position.x > global_position.x else -1
 	if sprite:
 		sprite.flip_h = facing < 0
+
+
+## LOD 等级更新：基于与玩家的距离。
+func _update_lod_level() -> void:
+	var player := get_tree().get_first_node_in_group("player")
+	if player == null or not is_instance_valid(player):
+		_lod_level = 2
+		return
+	var dist := global_position.distance_to(player.global_position)
+	if dist > 400.0:
+		_lod_level = 2  # 仅位置更新
+	elif dist > 200.0:
+		_lod_level = 1  # 简化动画
+	else:
+		_lod_level = 0  # 全细节
+	# 根据 LOD 调整精灵可见度与更新
+	if sprite:
+		if _lod_level >= 2:
+			sprite.frame = 0  # 冻结第一帧
+		elif _lod_level >= 1:
+			# 降低动画更新频率已在 _tick_outline 中处理
+			pass
+
+
+
+## 客户端位置插值同步。
+func _apply_network_interpolation(delta: float) -> void:
+	var cur_x := global_position.x
+	var cur_y := global_position.y
+	var new_x := lerpf(cur_x, _net_target_x, 12.0 * delta)
+	var new_y := lerpf(cur_y, _net_target_y, 12.0 * delta)
+	global_position = Vector2(new_x, new_y)
+	facing = _net_facing
+	if sprite:
+		sprite.flip_h = facing < 0
+
+
+## RPC: 客户端接收僵尸受击（由 Host 广播）。
+@rpc("any_peer", "reliable")
+func rpc_zombie_hit(instance_id: int, dmg: int, head: bool) -> void:
+	if get_instance_id() != instance_id:
+		return
+	apply_damage(dmg, Vector2.ZERO, head, &"player", &"bullet")
+
+
+## RPC: 客户端接收断肢特效（由 Host 广播）。
+@rpc("any_peer", "reliable")
+func rpc_zombie_dismember(instance_id: int, pos_x: float, pos_y: float, dir_x: float, dir_y: float, damage_type: StringName) -> void:
+	if get_instance_id() != instance_id:
+		return
+	# 在客户端触发断肢视觉特效，不修改逻辑状态
+	if level != null and level.has_method("spawn_dismember_effect"):
+		level.call_deferred("spawn_dismember_effect", Vector2(pos_x, pos_y), Vector2(dir_x, dir_y), damage_type)
+

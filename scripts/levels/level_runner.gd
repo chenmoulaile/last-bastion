@@ -6,6 +6,7 @@ extends Node2D
 
 const PLAYER_SCENE := preload("res://characters_rework/playable/PlayerControllerV2.gd")
 const PLAYER_SCENE_LEGACY := preload("res://scenes/actors/player.tscn")
+const ZOMBIE_BASE_SCRIPT := preload("res://scripts/zombies/zombie_base.gd")
 const REWORK_CHAR_DIR := "res://characters_rework/data/playable"
 const HUD_SCENE := preload("res://scenes/ui/hud.tscn")
 const WINDOW_RAPPEL := preload("res://scripts/interactables/window_rappel.gd")
@@ -68,6 +69,9 @@ var _boss_phase: int = 1
 var _boss_max_hp: int = 0
 var _ground_segments: Array = []
 var _platforms: Array = []
+var use_roguelite: bool = false
+var roguelite_map: Dictionary = {}
+var roguelite_generator: Node = null
 var _horde_active: bool = false
 var _horde_alive: Array = []
 var _horde_pending: int = 0
@@ -235,9 +239,86 @@ func _add_parallax(parent: ParallaxBackground, texture_name: String, scale_value
 
 
 func _build_terrain() -> void:
+	if use_roguelite:
+		_build_roguelite_rooms()
+		return
 	var built := TerrainBuilder.build(self, String(data.theme), level_width, _rng, dark)
 	ground_segments = built.get("segments", [])
 	platforms = built.get("platforms", [])
+
+
+func _build_roguelite_rooms() -> void:
+	var gen: RogueliteMapGenerator = RogueliteMapGenerator.instance()
+	roguelite_generator = gen
+	add_child(gen)
+	var seed_val := int(GameManager.run_seed)
+	var map_data: Dictionary = gen.generate(seed_val, 10, 10)
+	roguelite_map = map_data
+	var rooms_array: Array = map_data.get("rooms", [])
+	var room_size: float = float(map_data.get("room_size", 420.0))
+	# 实例化房间场景
+	for room_info in rooms_array:
+		var scene: PackedScene = room_info.get("scene", null)
+		if scene == null:
+			continue
+		var instance: Node2D = scene.instantiate()
+		instance.position = Vector2(
+			float(room_info.get("world_x", 0.0)),
+			float(room_info.get("world_y", 0.0))
+		)
+		instance.name = "Room_" + str(room_info.get("x", 0)) + "_" + str(room_info.get("y", 0))
+		add_child(instance)
+		# 根据房间类型设置内容
+		var rtype := int(room_info.get("type", 0))
+		if rtype == 0:  # START
+			_setup_start_room(instance)
+		elif rtype == 1:  # COMBAT
+			_setup_combat_room(instance)
+		elif rtype == 2:  # SUPPLY
+			_setup_supply_room(instance)
+		elif rtype == 4:  # BOSS
+			_setup_boss_room(instance)
+
+	# 设置关卡宽度
+	level_width = 10.0 * room_size
+
+
+func _setup_start_room(room: Node2D) -> void:
+	var spawn := room.get_node_or_null("SpawnPoint")
+	if spawn != null:
+		var player := get_node_or_null("Player")
+		if player == null:
+			# 玩家由 _spawn_player 创建，这里记录出生点
+			pass
+
+func _setup_combat_room(room: Node2D) -> void:
+	# 在战斗房间生成敌人
+	var spawn1 := room.get_node_or_null("EnemySpawn1")
+	var spawn2 := room.get_node_or_null("EnemySpawn2")
+	if spawn1 != null:
+		_spawn_zombie(&"common", spawn1.global_position, false)
+	if spawn2 != null:
+		_spawn_zombie(&"common", spawn2.global_position, false)
+
+func _setup_supply_room(room: Node2D) -> void:
+	var drop1 := room.get_node_or_null("SupplyDrop1")
+	var drop2 := room.get_node_or_null("SupplyDrop2")
+	# 补给物品由道具系统生成
+
+func _setup_boss_room(room: Node2D) -> void:
+	var boss_spawn := room.get_node_or_null("BossSpawn")
+	if boss_spawn != null:
+		spawn_boss(&"tank", 1)
+
+
+## 获取 roguelite 模式下的地图宽度。
+func get_roguelite_width() -> float:
+	return level_width
+
+
+## 获取 roguelite 地图数据。
+func get_roguelite_map() -> Dictionary:
+	return roguelite_map
 
 
 func _build_bounds() -> void:
@@ -594,6 +675,7 @@ func _connect_events() -> void:
 	EventBus.director_request_special.connect(_on_director_special)
 	EventBus.director_request_horde.connect(_on_director_horde)
 	EventBus.director_request_supply.connect(_on_director_supply)
+	EventBus.director_request_boss.connect(_on_director_boss)
 	EventBus.gunshot.connect(_on_gunshot)
 	EventBus.door_kicked.connect(_on_door_kicked)
 
@@ -1114,6 +1196,12 @@ func _on_director_horde(count: int) -> void:
 
 func _on_director_supply(kind: StringName) -> void:
 	_spawn_director_supply(kind)
+
+
+func _on_director_boss(kind: StringName) -> void:
+	if GameManager.state == GameManager.State.PLAYING and not _finishing:
+		spawn_boss(kind, 1)
+		EventBus.notify.emit("Boss 波次来袭！")
 
 
 func _spawn_director_supply(kind: StringName) -> void:

@@ -154,6 +154,7 @@ var _bus: Node = null
 var _audio: Node = null
 var _game: Node = null
 var _item_component: Node = null
+var _network = null
 
 ## 兼容别名: 现有 HUD 读取 player.get("character")(类型 CharacterData)。
 ## 返回 CharacterDataCompat，内部将 ReworkCharacterData 映射为旧结构。
@@ -183,6 +184,7 @@ func _ready() -> void:
 	_audio = _autoload(&"AudioManager")
 	_game = _autoload(&"GameManager")
 	_input_buffer = _autoload(&"InputBuffer")
+	_network = _autoload(&"NetworkManager")
 	_setup_renderer()
 	_setup_weapons()
 	_attach_passive(character_data.passive_ability_id)
@@ -192,6 +194,22 @@ func _ready() -> void:
 	EventBusBridge.attach_for(self)
 	_sync_weapon_visual(true)
 	_emit_state(&"spawn")
+	_setup_network_sync()
+
+
+func _setup_network_sync() -> void:
+	if _network == null:
+		return
+	if not bool(_network.call("is_multiplayer_active")):
+		return
+	var sync_script := load("res://scripts/player/PlayerNetworkSync.gd")
+	if sync_script == null:
+		return
+	var sync: Node2D = sync_script.new()
+	sync.name = "PlayerNetworkSync"
+	sync.peer_id = _network.call("get_peer_id")
+	sync.is_local = true
+	add_child(sync)
 
 
 func _exit_tree() -> void:
