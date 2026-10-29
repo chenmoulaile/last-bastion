@@ -511,7 +511,7 @@ func _build_zones() -> void:
 
 
 func _spawn_player() -> void:
-	var p := PLAYER_SCENE.instantiate()
+	var p: Node2D = PlayerControllerV2.new()
 	p.level = self
 	p.position = Vector2(220, get_ground_y(220))
 	# 解析选中的角色数据：优先用 GameManager.selected_character，回退到关卡默认武器对应的角色。

@@ -17,6 +17,7 @@ extends Node
 const POLL_INTERVAL_USEC := 12_000
 const TRACK_RETRY_USEC := 500_000
 const BOSS_FALLBACK_OFFSET := Vector2(0, -30)
+const _HC_SCRIPT := preload("res://components/HealthComponent.gd")
 
 var router: GameFeelFeedbackRouter = null
 var damage_numbers: GameFeelDamageNumbers = null
@@ -216,7 +217,7 @@ func _disconnect_bus() -> void:
 
 ## 注册 HealthComponent：订阅其 damaged 信号，实现信号驱动的伤害反馈。
 func register_health_component(component: Node) -> void:
-	if not (component is HealthComponent):
+	if component.get_script() != _HC_SCRIPT:
 		return
 	var id := component.get_instance_id()
 	if _health_components.has(id):
@@ -227,7 +228,7 @@ func register_health_component(component: Node) -> void:
 
 ## 注销 HealthComponent：取消订阅。
 func unregister_health_component(component: Node) -> void:
-	if not (component is HealthComponent):
+	if component.get_script() != _HC_SCRIPT:
 		return
 	var id := component.get_instance_id()
 	if _health_components.has(id):

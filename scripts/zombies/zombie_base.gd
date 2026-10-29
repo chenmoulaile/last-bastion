@@ -13,7 +13,8 @@ var level: Node = null
 var target: Node2D = null
 var health: int = 30
 var max_health: int = 30
-var health_component: HealthComponent = null
+var health_component = null
+var _hc_script: Script = null
 var facing: int = -1
 var dead: bool = false
 var alerted: bool = false
@@ -56,7 +57,9 @@ func _ready() -> void:
 	health = data.max_hp
 	max_health = data.max_hp
 	# 创建 HealthComponent 并挂载，用于信号驱动的伤害反馈。
-	health_component = HealthComponent.new()
+	if _hc_script == null:
+		_hc_script = preload("res://components/HealthComponent.gd")
+	health_component = _hc_script.new()
 	health_component.name = "HealthComponent"
 	add_child(health_component)
 	if data.id == &"tank":

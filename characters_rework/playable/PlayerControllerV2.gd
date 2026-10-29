@@ -57,6 +57,8 @@ const ENEMY_RAY_MASK: int = 1 | 8 | 16          # WORLD | COMMON | SPECIAL
 const SELF_EXCLUDE_MASK: int = 89               # 与现有 player.tscn 一致
 const MUZZLE_LOCAL: Vector2 = Vector2(20, -18)  # 与现有工程一致
 const PASSIVE_DIR := "res://characters_rework/playable/passives"
+const ITEM_COMPONENT_SCRIPT := preload("res://scripts/items/ItemComponent.gd")
+const CHARACTER_DATA_COMPAT_SCRIPT := preload("res://scripts/data/character_data_compat.gd")
 
 const WEAPON_VISUAL_TYPES: Dictionary = {
 	"m9": &"pistol", "smg": &"smg", "ar15": &"rifle", "shotgun": &"shotgun",
@@ -148,17 +150,17 @@ var _cached_gun_visual: StringName = &"rifle"
 var _bus: Node = null
 var _audio: Node = null
 var _game: Node = null
-var _item_component: ItemComponent = null
+var _item_component: Node = null
 
 ## 兼容别名: 现有 HUD 读取 player.get("character")(类型 CharacterData)。
 ## 返回 CharacterDataCompat，内部将 ReworkCharacterData 映射为旧结构。
-var character: CharacterData:
+var character: Resource:
 	get:
 		if _character_compat == null:
-			_character_compat = CharacterDataCompat.new(character_data)
+			_character_compat = CHARACTER_DATA_COMPAT_SCRIPT.new(character_data)
 		return _character_compat
 
-var _character_compat: CharacterData = null
+var _character_compat: Resource = null
 
 
 func _ready() -> void:
@@ -272,7 +274,7 @@ func _tick_timers(delta: float) -> void:
 	if reloading:
 		reload_timer -= delta * get_reload_speed_mult()
 		# InputBuffer 换弹取消: 进度 >= 70% 时按射击可取消换弹并立即开火。
-		if _input_buffer != null and _input_buffer.consume(&"fire") \
+		if _input_buffer != null and _input_buffer.consume(&"fire", 0.3) \
 				and _reload_total > 0.0 \
 				and reload_timer <= _reload_total * 0.3:
 			reloading = false
@@ -1001,13 +1003,14 @@ func add_ammo(amount: int = 9999) -> void:
 
 
 func _setup_item_component() -> void:
-	_item_component = ItemComponent.new()
+	_item_component = ITEM_COMPONENT_SCRIPT.new()
 	_item_component.name = "ItemComponent"
 	_item_component.owner = self
 	add_child(_item_component)
 
 
 func _setup_renderer() -> void:
+	var existing := get_node_or_null("Renderer")
 	if existing is PlayerRenderer:
 		_renderer = existing
 	else:
