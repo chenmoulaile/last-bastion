@@ -123,6 +123,40 @@ func _tick() -> void:
 			if intensity > 0.85:
 				_rest_timer = 8.0
 
+	# Director 2.0: 玩家状态驱动的动态事件。
+	# 血量过低时刷精英敌人施压，状态良好时刷尸潮考验输出。
+	var player := get_tree().get_first_node_in_group("player")
+	if player != null and is_instance_valid(player) and not horde_active and not boss_active:
+		var hp_val: Variant = player.get("hp")
+		var max_hp_val: Variant = player.get("max_hp")
+		var hp_pct: float = 1.0
+		if hp_val != null and max_hp_val != null:
+			hp_pct = float(hp_val) / maxf(1.0, float(max_hp_val))
+		var ammo_pct: float = 1.0
+		var weapon: Variant = player.get("current_weapon")
+		if weapon != null:
+			var ammo_state: Variant = player.get("ammo")
+			if ammo_state is Dictionary:
+				var wid_val: Variant = weapon.get("id")
+				var wid: StringName = StringName(wid_val) if wid_val != null else &""
+				var st: Variant = ammo_state.get(wid)
+				if st == null:
+					st = {}
+				var mag_val: Variant = st.get("mag")
+				var mag: int = int(mag_val) if mag_val != null else 0
+				var mag_size_val: Variant = weapon.get("mag_size")
+				var mag_size: int = int(mag_size_val) if mag_size_val != null else 30
+				ammo_pct = float(mag) / maxf(1.0, float(mag_size))
+		if hp_pct < 0.30 and _rest_timer <= 0.0 and randf() < 0.06:
+			# 濒死施压: 刷精英特感。
+			EventBus.director_request_special.emit([&"tank", &"charger", &"smoker"].pick_random())
+			_rest_timer = 10.0
+			intensity = clampf(intensity + 0.15, 0.0, 1.0)
+		elif hp_pct > 0.80 and ammo_pct > 0.50 and _rest_timer <= 0.0 and randf() < 0.04:
+			# 状态良好: 刷小型尸潮考验输出。
+			EventBus.director_request_horde.emit(randi_range(10, 16))
+			_rest_timer = 6.0
+
 	# Special infected timer.
 	if intensity >= 0.30:
 		_special_timer -= 1.0

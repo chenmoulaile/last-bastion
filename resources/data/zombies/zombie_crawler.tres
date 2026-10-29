@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="ZombieData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/zombie_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"crawler"
+display_name = "爬行者"
+max_hp = 15
+walk_speed_min = 40
+walk_speed_max = 60
+attack_damage = 8
+attack_interval = 1.2
+score_value = 300
+behavior_id = &"crawler"
+tint = Color(0.400, 0.300, 0.200, 1.000)
+size_scale = 0.7
+anim_map = {}
+is_special = true
+is_uncommon = false
+is_boss = false
+head_hittable = true
+head_immune = false
+fire_immune = false
+front_immune = false
+low_profile = true
+control_kind = &""
+special_weight = 0.4
+sprite_prefix = "common_a"
+sprite_size = Vector2i(20, 16)
+collision_size = Vector2(12, 10)
+death_animation = "die"
+codex_category = "special"
+description = "可垂直爬墙的畸形感染者，从高处伏击。低姿态难以被发现。"
+pounce_range = 300
+attack_range = 24
+sight_range = 300
+voice_id = &"zombie_growl"

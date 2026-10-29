@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"glock17"
+display_name = "Glock 17"
+category = &"secondary"
+damage = 25
+pellets = 1
+rpm = 400
+mag_size = 17
+reserve_ammo = -1
+reload_time = 1.5
+spread = 1.2
+effective_range = 350
+score_mult = 1.0
+automatic = false
+knockback = 20
+headshot_mult = 2.5
+sprite = "m9"
+description = "2019年标准警用副武器，后坐极小，爆头倍率 2.5×。"

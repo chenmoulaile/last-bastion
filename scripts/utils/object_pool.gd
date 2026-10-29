@@ -5,35 +5,33 @@ extends RefCounted
 ## effect pool instead.
 
 var _scene: PackedScene
-var _free: Array[Node] = []
+var _free: Array[Node2D] = []
 var _parent: Node
 var _max_size: int = 64
 
 
-func _init(scene: PackedScene, parent: Node, max_size: int = 64) -> void:
+func _init(scene: PackedScene = null, parent: Node = null, max_size: int = 64) -> void:
 	_scene = scene
 	_parent = parent
 	_max_size = max_size
 
 
-func acquire() -> Node:
-	var node: Node
+func acquire() -> Node2D:
+	var node: Node2D
 	if not _free.is_empty():
 		node = _free.pop_back()
 	else:
-		node = _scene.instantiate()
+		node = _scene.instantiate() as Node2D
 		_parent.add_child(node)
-	if node is Node2D:
-		(node as Node2D).visible = true
+	node.visible = true
 	node.process_mode = Node.PROCESS_MODE_INHERIT
 	return node
 
 
-func release(node: Node) -> void:
+func release(node: Node2D) -> void:
 	if node == null or not is_instance_valid(node):
 		return
-	if node is Node2D:
-		(node as Node2D).visible = false
+	node.visible = false
 	node.process_mode = Node.PROCESS_MODE_DISABLED
 	if _free.size() < _max_size:
 		_free.append(node)

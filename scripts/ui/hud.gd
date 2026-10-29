@@ -22,6 +22,9 @@ var _director_fill: ColorRect
 var _director_label: Label
 var _score_label: Label
 var _combo_label: Label
+var _streak_label: Label
+var _killstreak: int = 0
+var _streak_timer: float = 0.0
 var _time_label: Label
 var _level_label: Label
 
@@ -387,7 +390,15 @@ func _build_score_panel() -> void:
 	_combo_label = UIKit.label("", 7, UIKit.GREEN, UIKit.font_latin())
 	_combo_label.position = Vector2(6, 29)
 	_combo_label.size = Vector2(96, 9)
+	_combo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	panel.add_child(_combo_label)
+
+	_streak_label = UIKit.label("", 8, UIKit.RED, UIKit.font_latin_bold())
+	_streak_label.position = Vector2(104, 29)
+	_streak_label.size = Vector2(150, 9)
+	_streak_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_streak_label.visible = false
+	panel.add_child(_streak_label)
 
 	_time_label = UIKit.label("0:00", 8, UIKit.MUTED, UIKit.font_latin())
 	_time_label.position = Vector2(102, 29)
@@ -847,6 +858,7 @@ func _connect_events() -> void:
 	EventBus.checkpoint_reached.connect(_on_checkpoint)
 	EventBus.command_issued.connect(_on_command_issued)
 	EventBus.formation_changed.connect(_on_formation_changed)
+	EventBus.enemy_killed.connect(_on_enemy_killed_streak)
 	if _debug_panel != null:
 		EventBus.debug_panel_toggled.connect(_toggle_debug)
 		EventBus.debug_vision_toggled.connect(_on_debug_vision_toggled)
@@ -1102,7 +1114,31 @@ func _big_toast(title: String, detail: String, color: Color, icon_name: String) 
 
 
 # ------------------------------------------------------------------ refresh --
+func _on_enemy_killed_streak(kind: StringName, source: StringName, pos: Vector2) -> void:
+	if source != &"player":
+		return
+	_killstreak += 1
+	_streak_timer = 2.5
+	if _killstreak >= 3:
+		_streak_label.text = "%d KILL STREAK" % _killstreak
+		_streak_label.visible = true
+		_streak_label.modulate = Color(1, 1, 1, 1)
+		_streak_label.scale = Vector2(1.3, 1.3)
+		var tw := create_tween()
+		tw.tween_property(_streak_label, "scale", Vector2.ONE, 0.2)
+		if _killstreak >= 10:
+			_streak_label.text = "MONSTER KILL!"
+			_streak_label.add_theme_color_override("font_color", UIKit.RED)
+		elif _killstreak >= 5:
+			_streak_label.text = "RAMPAGE!"
+			_streak_label.add_theme_color_override("font_color", Color(1, 0.5, 0, 1))
+
 func _process(delta: float) -> void:
+	if _streak_timer > 0.0:
+		_streak_timer -= delta
+		if _streak_timer <= 0.0:
+			_killstreak = 0
+			_streak_label.visible = false
 	if _pause_open:
 		return
 	_refresh_accum += delta

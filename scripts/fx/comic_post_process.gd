@@ -23,6 +23,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_build()
 	EventBus.gore_event.connect(_on_gore_event)
+	EventBus.damage_flash.connect(_on_damage_flash)
 	EventBus.signal_noise_changed.connect(_on_signal_noise)
 
 
@@ -80,6 +81,17 @@ func _set_gore(value: float) -> void:
 	_gore = value
 	if material != null:
 		material.set_shader_parameter("gore_boost", value)
+
+
+func _on_damage_flash() -> void:
+	if not enabled or material == null:
+		return
+	_gore = clampf(maxf(_gore, 1.2), 0.0, 2.0)
+	material.set_shader_parameter("gore_boost", _gore)
+	if _gore_tween != null and _gore_tween.is_valid():
+		_gore_tween.kill()
+	_gore_tween = create_tween()
+	_gore_tween.tween_method(_set_gore, _gore, 0.0, 0.35)
 
 
 ## The signal noise raises contrast slightly as the archive deepens: a visual

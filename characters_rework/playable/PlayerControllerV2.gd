@@ -59,7 +59,8 @@ const MUZZLE_LOCAL: Vector2 = Vector2(20, -18)  # 与现有工程一致
 const PASSIVE_DIR := "res://characters_rework/playable/passives"
 
 const WEAPON_VISUAL_TYPES: Dictionary = {
-	"m9": &"pistol", "smg": &"smg", "ar15": &"rifle", "shotgun": &"shotgun",
+	"m9": &"pistol", "glock17": &"pistol", "smg": &"smg", "ar15": &"rifle",
+	"m4a1": &"rifle", "shotgun": &"shotgun", "remington870": &"shotgun",
 	"lmg": &"lmg", "sniper": &"sniper", "katana": &"katana", "axe": &"axe",
 	"chainsaw": &"axe",
 }
@@ -435,7 +436,7 @@ func _fire_weapon(weapon: Resource) -> void:
 	if not is_on_floor():
 		spread += 2.0
 	if _wbool(weapon, "automatic"):
-		spread_heat = minf(6.0, spread_heat + 0.3)
+		spread_heat = minf(_wfloat(weapon, "spread_max", 6.0), spread_heat + _wfloat(weapon, "spread_increase", 0.3))
 	else:
 		spread_heat = 0.0
 	spread += spread_heat
@@ -504,8 +505,9 @@ func _apply_hit(collider: Object, point: Vector2, dir: Vector2, damage: float,
 	if collider.has_method("apply_damage"):
 		if collider.has_method("is_headshot_point"):
 			is_head = bool(collider.is_headshot_point(point))
-		if is_head:
-			amount *= 2
+	if is_head:
+		var hsm := _wfloat(current, "headshot_mult", 2.0)
+		amount = int(round(amount * hsm))
 		collider.apply_damage(amount, -dir, is_head, &"player", damage_type)
 	elif collider.has_method("hit"):
 		collider.hit(amount, &"player")
@@ -534,7 +536,11 @@ func start_reload() -> void:
 	if int(state["reserve"]) == 0 and _wint(weapon, "reserve_ammo", -1) != -1:
 		return
 	reloading = true
-	reload_timer = _wfloat(weapon, "reload_time", 1.5)
+	# Incremental reload: each shell inserts one shell per reload_time cycle.
+	if _wbool(weapon, "incremental_reload"):
+		reload_timer = _wfloat(weapon, "reload_time", 0.45)
+	else:
+		reload_timer = _wfloat(weapon, "reload_time", 1.5)
 	_reload_total = reload_timer
 	_emit_state(&"reload_start")
 
@@ -549,16 +555,34 @@ func _finish_reload() -> void:
 	var mag_size := _wint(weapon, "mag_size", 10)
 	var need: int = mag_size - int(state["mag"])
 	var reserve: int = int(state["reserve"])
-	if reserve < 0:
-		state["mag"] = mag_size
+	if _wbool(weapon, "incremental_reload"):
+		# Insert one shell at a time; keep reloading if more needed.
+		var take: int = mini(_wint(weapon, "shells_per_insert", 1), mini(need, (reserve if reserve >= 0 else need)))
+		if take > 0:
+			state["mag"] = int(state["mag"]) + take
+			if reserve >= 0:
+				state["reserve"] = reserve - take
+			ammo[wid] = state
+			if _bus:
+				_bus.ammo_changed.emit(int(state["mag"]), int(state["reserve"]))
+			_emit_state(&"shell_inserted")
+		if int(state["mag"]) < mag_size and (reserve > 0 or reserve < 0):
+			reloading = true
+			reload_timer = _wfloat(weapon, "reload_time", 0.45)
+			_reload_total = reload_timer
+			_emit_state(&"reload_start")
+			return
 	else:
-		var take: int = mini(need, reserve)
-		state["mag"] = int(state["mag"]) + take
-		state["reserve"] = reserve - take
-	ammo[wid] = state
-	if _bus:
-		_bus.ammo_changed.emit(int(state["mag"]), int(state["reserve"]))
-	_emit_state(&"reload_end")
+		if reserve < 0:
+			state["mag"] = mag_size
+		else:
+			var take: int = mini(need, reserve)
+			state["mag"] = int(state["mag"]) + take
+			state["reserve"] = reserve - take
+		ammo[wid] = state
+		if _bus:
+			_bus.ammo_changed.emit(int(state["mag"]), int(state["reserve"]))
+		_emit_state(&"reload_end")
 
 
 func cycle_weapon(direction: int) -> void:

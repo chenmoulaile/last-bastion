@@ -181,6 +181,10 @@ func _physics_process(delta: float) -> void:
 	_ai_tick(delta)
 	_apply_separation(delta)
 	move_and_slide()
+	# 爬行僵尸拖拽血迹。
+	if _crawling and is_on_floor() and randf() < 0.3:
+		Fx.blood_decal(level.fx_layer if level else get_parent(),
+			global_position + Vector2(0, 8))
 	if global_position.y > 470.0:
 		_despawn_fall()
 	if voice_timer <= 0.0:
@@ -254,6 +258,10 @@ func _ai_tick(delta: float) -> void:
 	# 爆裂者：贴脸自爆，死亡释放毒气云。
 	if data.behavior_id == &"burster":
 		_burster_tick(delta, to_target)
+		return
+	# 爬行者：垂直爬墙，从高处伏击。
+	if data.behavior_id == &"crawler":
+		_crawler_tick(delta, to_target)
 		return
 	var dist_x := absf(to_target.x)
 	var dist_y := absf(to_target.y)
@@ -403,6 +411,36 @@ func _burster_tick(delta: float, to_target: Vector2) -> void:
 	if randf() < 0.15:
 		speed = 240.0
 	velocity.x = move_toward(velocity.x, speed * float(facing), 900.0 * delta)
+	_try_jump_for_target(to_target)
+	_play_anim("run")
+
+
+## 爬行者AI：低姿态，爬墙，从高处伏击。
+func _crawler_tick(delta: float, to_target: Vector2) -> void:
+	var dist_x := absf(to_target.x)
+	var dist_y := absf(to_target.y)
+	if dist_x < 26.0 and dist_y < 40.0:
+		state_name = "attack"
+		velocity.x = move_toward(velocity.x, 0.0, 900.0 * delta)
+		if attack_cooldown <= 0.0:
+			_attack_target()
+		_play_anim("attack")
+		return
+	state_name = "chase"
+	# 爬行者速度较慢，低姿态难以发现。
+	facing = 1 if to_target.x > 0.0 else -1
+	var speed := data.walk_speed_max * 0.8
+	velocity.x = move_toward(velocity.x, speed * float(facing), 500.0 * delta)
+	# 尝试爬墙: 如果前面有墙且目标在更高处，尝试爬上去。
+	var wall_ahead := global_position + Vector2(float(facing) * 24.0, 0)
+	var wall_check := get_world_2d().direct_space_state.intersect_ray(
+		PhysicsRayQueryParameters2D.create(global_position, wall_ahead, 64, [get_rid()]))
+	if not wall_check.is_empty() and to_target.y < global_position.y - 40.0:
+		# 墙前且目标在上方: 尝试跳跃爬墙。
+		if is_on_floor() and jump_cd <= 0.0:
+			velocity.y = -650.0
+			velocity.x = float(facing) * 120.0
+			jump_cd = 2.0
 	_try_jump_for_target(to_target)
 	_play_anim("run")
 
@@ -575,6 +613,41 @@ func is_headshot_point(point: Vector2) -> bool:
 	return point.y < global_position.y - data.collision_size.y * 0.62
 
 
+## 肢体判定: 返回 "head"/"torso"/"arm_left"/"arm_right"/"leg_left"/"leg_right"。
+func hit_zone(point: Vector2) -> StringName:
+	var local_pos := point - global_position
+	var half_h := data.collision_size.y * 0.5
+	var half_w := data.collision_size.x * 0.5
+	var dir := facing
+	if local_pos.y < -half_h * 0.35:
+		return &"head"
+	if local_pos.y > half_h * 0.35:
+		if absf(local_pos.x) < half_w * 0.4:
+			return &"torso"
+		return &"leg_" + ("left" if local_pos.x * float(dir) < 0 else "right")
+	if absf(local_pos.x) > half_w * 0.5:
+		return &"arm_" + ("left" if local_pos.x * float(dir) < 0 else "right")
+	return &"torso"
+
+
+## 断肢: 霰弹枪、反坦克步枪、爆炸物、近战致死时触发。
+func _dismember_limbs() -> void:
+	if _dismembered or not level:
+		return
+	_dismembered = true
+	var dir := Vector2(float(facing), 0.0)
+	var color := Color(0.5, 0.1, 0.1, 1.0)
+	var count := 3
+	if last_damage_type == &"explosive":
+		count = 5
+	elif last_damage_type == &"shotgun":
+		count = 4
+	var router := get_node_or_null("/root/FeedbackRouter")
+	if router != null and router.has_method("on_enemy_died"):
+		router.on_enemy_died(global_position, dir, color,
+			data.is_boss, data.is_special, true)
+
+
 func _die(source: StringName, is_head: bool = false) -> void:
 	if dead:
 		return
@@ -591,16 +664,9 @@ func _die(source: StringName, is_head: bool = false) -> void:
 	Fx.blood(level.fx_layer if level else get_parent(), global_position + Vector2(0, -14), Vector2.UP, 1.4)
 	Fx.blood_decal(level.fx_layer if level else get_parent(), global_position + Vector2(0, -2))
 	AudioManager.play_sfx_2d(&"zombie_die", global_position, 700.0)
-	# 断肢增强：霰弹枪、反坦克步枪、爆炸物致死时触发程序化残肢。
-	var dismember := false
+	# 断肢增强：霰弹枪、反坦克步枪、爆炸物、近战致死时触发程序化残肢。
 	if last_damage_type in [&"shotgun", &"explosive", &"melee"]:
-		dismember = true
-		_dismembered = true
-	if dismember and level:
-		var bridge := get_node_or_null("/root/GameFeelBridge")
-		var router := get_node_or_null("/root/FeedbackRouter")
-		if router != null and router.has_method("on_enemy_died"):
-			router.on_enemy_died(global_position, velocity.normalized() if velocity.length() > 0.0 else Vector2.RIGHT, Color(0.5, 0.1, 0.1, 1.0), false, false, dismember)
+		_dismember_limbs()
 	_on_death_effect()
 	died.emit(data.id, global_position, source)
 	if level:

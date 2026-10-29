@@ -64,6 +64,10 @@ var _tank_spawn_time: float = 0.0
 var _boss_node: Node = null
 var _boss_kind: StringName = &""
 var _boss_nodes: Array = []
+var _boss_phase: int = 1
+var _boss_max_hp: int = 0
+var _ground_segments: Array = []
+var _platforms: Array = []
 var _horde_active: bool = false
 var _horde_alive: Array = []
 var _horde_pending: int = 0
@@ -623,6 +627,7 @@ func _process(delta: float) -> void:
 	if _director_report_timer >= 0.5:
 		_director_report_timer = 0.0
 		_report_party()
+		_tick_boss_phases(delta)
 	_objective_timer += delta
 	if _objective_timer >= 1.0:
 		_objective_timer = 0.0
@@ -703,6 +708,9 @@ func _report_party() -> void:
 	var avg_hp := total_hp / float(maxi(1, count))
 	DirectorSystem.report_party(avg_hp, 0.8, player.global_position.x)
 	DirectorSystem.set_boss_active(_boss_node != null and is_instance_valid(_boss_node))
+
+
+# ---------------------------------------------------- narrative / factions ----
 
 
 # ---------------------------------------------------- narrative / factions ----
@@ -1347,6 +1355,8 @@ func _register_boss(z: Node, kind: StringName) -> void:
 	_boss_node = z
 	_boss_kind = kind
 	_tank_spawn_time = _elapsed
+	_boss_phase = 1
+	_boss_max_hp = int(z.get("max_health"))
 	EventBus.boss_spawned.emit(kind)
 	EventBus.boss_health_changed.emit(int(z.get("health")), int(z.get("max_health")))
 	DirectorSystem.set_boss_active(true)
@@ -1354,6 +1364,10 @@ func _register_boss(z: Node, kind: StringName) -> void:
 		AudioManager.set_tank_active(true)
 		EventBus.notify.emit("TANK！")
 		EventBus.level_event.emit("TANK 出现")
+	elif kind == &"hive_mother":
+		AudioManager.set_tank_active(true)
+		EventBus.notify.emit("巢穴母体！")
+		EventBus.level_event.emit("巢穴母体 出现")
 
 
 func on_zombie_died(zombie: Node, source: StringName, is_head: bool) -> void:
@@ -2003,3 +2017,64 @@ func get_defense_left() -> float:
 
 func get_boss_node() -> Node:
 	return _boss_node
+
+
+func _exit_tree() -> void:
+	## State reset: guarantee zero leaked nodes/resources between level
+	## transitions (start_level → _ready → _exit_tree → next _ready).
+	Fx.reset()
+	ScreenShake.reset()
+	_ground_segments.clear()
+	_platforms.clear()
+	_horde_alive.clear()
+	_horde_pending = 0
+	_boss_node = null
+	_boss_nodes.clear()
+	player = null
+	hud = null
+	fx_layer = null
+	props = null
+	interactables = null
+	pickups = null
+	archive_pickups.clear()
+	_codex.clear()
+
+
+func _tick_boss_phases(delta: float) -> void:
+	var boss := _boss_node
+	if boss == null or not is_instance_valid(boss):
+		return
+	var hp := int(boss.get("health"))
+	var max_hp := int(boss.get("max_health"))
+	var pct := float(hp) / maxf(1.0, float(max_hp))
+	# Tank phases: 100-60% MG sweep, 60-20% tear gas + shield soldiers, 20-0% rear fuel tank weak point.
+	if _boss_kind == &"tank" and _boss_phase < 3:
+		var new_phase := 3
+		if pct > 0.60:
+			new_phase = 1
+		elif pct > 0.20:
+			new_phase = 2
+		if new_phase != _boss_phase:
+			_boss_phase = new_phase
+			if _boss_phase == 2:
+				EventBus.notify.emit("装甲车第2阶段：催泪瓦斯 + 盾兵")
+				start_horde(8, true)
+			elif _boss_phase == 3:
+				EventBus.notify.emit("装甲车第3阶段：尾部油箱弱点暴露")
+				boss.set("damage_taken_mult", 2.0)
+	# Hive Mother phases: destroy 4 energy nodes across 3 phases.
+	elif _boss_kind == &"hive_mother" and _boss_phase < 3:
+		var new_phase := 3
+		if pct > 0.70:
+			new_phase = 1
+		elif pct > 0.35:
+			new_phase = 2
+		if new_phase != _boss_phase:
+			_boss_phase = new_phase
+			if _boss_phase == 2:
+				EventBus.notify.emit("巢穴母体第2阶段：触手激活")
+				start_horde(10, true)
+			elif _boss_phase == 3:
+				EventBus.notify.emit("巢穴母体第3阶段：毒气充满战场")
+				boss.set("burn_aura", true)
+

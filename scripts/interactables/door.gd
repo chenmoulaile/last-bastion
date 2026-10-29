@@ -56,12 +56,13 @@ func interact(player: Node) -> void:
 	kick_cd = 0.38
 	health -= 36
 	EventBus.door_kicked.emit(global_position)
-	EventBus.shake(2.2)
-	EventBus.hitstop.emit(0.03)
+	# 战术破门: 0.08秒极限慢动作，震晕门后敌人。
+	EventBus.hitstop.emit(0.08)
+	EventBus.shake(3.5)
 	AudioManager.play_sfx_2d(&"door_kick", global_position, 800.0)
 	if level:
 		Fx.spark(level.fx_layer, global_position + Vector2(0, -22))
-		level.stun_zombies_near(global_position, 78.0, 0.9)
+		level.stun_zombies_near(global_position, 78.0, 1.2)
 	if health <= 0:
 		_break()
 	else:

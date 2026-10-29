@@ -1,0 +1,6 @@
+[gd_scene load_steps=1 format=3]
+
+[ext_resource type="Script" path="res://scripts/fx/tracer.gd" id="1"]
+
+[node name="TracerEffect" type="TracerEffect"]
+script = ExtResource("1")
