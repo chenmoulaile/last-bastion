@@ -579,7 +579,7 @@ func get_data() -> ZombieData:
 ## 将 StringName 来源解析为实际 Node（用于 HealthComponent.damaged 信号）。
 func _resolve_source_node(source_id: StringName) -> Node:
 	if source_id == &"player":
-		var p := level.get_player() if level != null else null
+		var p: Node = level.get_player() if level != null else null
 		if p is Node:
 			return p
 	return null

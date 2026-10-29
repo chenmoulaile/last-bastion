@@ -252,7 +252,7 @@ func _on_health_damaged(amount: float, source: Node, hit_position: Vector2, is_c
 	var player := _get_player()
 	if player == null:
 		return
-	var damage_type := StringName(target.get("last_damage_type"))
+	var damage_type := StringName(str(target.get("last_damage_type")))
 	var crit := is_critical or damage_type == &"execution" or damage_type == &"headshot"
 	var human := target.is_in_group("faction_units")
 	var armored := _is_armored(target, human)

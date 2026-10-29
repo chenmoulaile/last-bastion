@@ -57,8 +57,6 @@ const ENEMY_RAY_MASK: int = 1 | 8 | 16          # WORLD | COMMON | SPECIAL
 const SELF_EXCLUDE_MASK: int = 89               # 与现有 player.tscn 一致
 const MUZZLE_LOCAL: Vector2 = Vector2(20, -18)  # 与现有工程一致
 const PASSIVE_DIR := "res://characters_rework/playable/passives"
-const ITEM_COMPONENT_SCRIPT := preload("res://scripts/items/ItemComponent.gd")
-const CHARACTER_DATA_COMPAT_SCRIPT := preload("res://scripts/data/character_data_compat.gd")
 
 const WEAPON_VISUAL_TYPES: Dictionary = {
 	"m9": &"pistol", "smg": &"smg", "ar15": &"rifle", "shotgun": &"shotgun",
@@ -126,6 +124,9 @@ var reload_timer: float = 0.0
 var reloading: bool = false
 var _reload_total: float = 0.0
 var spread_heat: float = 0.0
+var level: Node = null
+var stealth_speed_multiplier: float = 1.0
+var visibility: float = 1.0
 var melee_cooldown: float = 0.0
 var melee_anim_timer: float = 0.0
 var shove_cooldown: float = 0.0
@@ -157,7 +158,7 @@ var _item_component: Node = null
 var character: Resource:
 	get:
 		if _character_compat == null:
-			_character_compat = CHARACTER_DATA_COMPAT_SCRIPT.new(character_data)
+			_character_compat = (load("res://scripts/data/character_data_compat.gd") as GDScript).new(character_data)
 		return _character_compat
 
 var _character_compat: Resource = null
@@ -172,6 +173,7 @@ func _ready() -> void:
 	hp = max_hp
 	run_speed = character_data.speed
 	crouch_speed = run_speed * 0.5
+	stealth_speed_multiplier = 1.0
 	collision_layer = 2
 	collision_mask = 1 | 8 | 16 | 64
 	floor_snap_length = 8.0
@@ -854,6 +856,10 @@ func heal_full() -> void:
 	hp = max_hp
 	temp_hp = 0
 	black_white = false
+
+
+func set_stealth_invisible(duration: float) -> void:
+	visibility = 0.01
 	downs = 0
 	_emit_state(&"healed")
 
@@ -1003,9 +1009,9 @@ func add_ammo(amount: int = 9999) -> void:
 
 
 func _setup_item_component() -> void:
-	_item_component = ITEM_COMPONENT_SCRIPT.new()
+	_item_component = (load("res://scripts/items/ItemComponent.gd") as GDScript).new()
 	_item_component.name = "ItemComponent"
-	_item_component.owner = self
+	_item_component._owner_ref = self
 	add_child(_item_component)
 
 

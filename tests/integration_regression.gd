@@ -119,7 +119,7 @@ func _test_reload_cancel() -> void:
 	_check(cancel_open, "换弹进度 >= 70%，可取消窗口打开")
 
 	if cancel_open and ib != null:
-		var consumed := ib.consume("fire", 0.3)
+		var consumed: bool = ib.consume("fire", 0.3)
 		_check(consumed, "InputBuffer.consume(fire) 返回 true")
 		# 换弹应被中断
 		await get_tree().create_timer(0.1, true, false, true).timeout
@@ -146,10 +146,10 @@ func _test_hitstop_input_buffer() -> void:
 	ib.end_hitstop()
 
 	# 恢复后应能消费
-	var pressed := ib.pressed_during_hitstop("fire")
+	var pressed: bool = ib.pressed_during_hitstop("fire")
 	_check(pressed, "顿帧期间按下的输入被记录")
 
-	var consumed := ib.consume_after_hitstop("fire")
+	var consumed: bool = ib.consume_after_hitstop("fire")
 	_check(consumed, "恢复后按顺序消费顿帧输入")
 
 	_check(ib.total_presses() >= 1, "按键计数器递增")
@@ -159,6 +159,7 @@ func _test_hitstop_input_buffer() -> void:
 # ------------------------------------------------------------ 测试 4 --------
 
 func _test_damage_signal_feedback() -> void:
+	GameManager.change_state(GameManager.State.MENU)
 	GameManager.selected_character = &"assault"
 	GameManager.start_level("l01", &"SQUAD", &"NORMAL")
 	var scene: Node = load("res://scenes/levels/l01.tscn").instantiate()
@@ -166,6 +167,12 @@ func _test_damage_signal_feedback() -> void:
 	await get_tree().create_timer(0.8, true, false, true).timeout
 
 	var player: Node2D = scene.get_player()
+	if player == null:
+		_check(false, "player spawned for damage signal test")
+		scene.queue_free()
+		await get_tree().process_frame
+		GameManager.change_state(GameManager.State.MENU)
+		return
 	var bridge := get_node_or_null("/root/GameFeelBridge")
 	_check(bridge != null, "GameFeelBridge 存在")
 
@@ -194,7 +201,10 @@ func _test_damage_signal_feedback() -> void:
 		if z != null and is_instance_valid(z):
 			var hc := z.get_node_or_null("HealthComponent")
 			if hc != null:
-				var count := int(hc.get("damage_event_count", 0))
+				var val: Variant = hc.get("damage_event_count")
+				var count := 0
+				if val != null:
+					count = int(val)
 				if count > 0:
 					damaged_any = true
 					break
@@ -214,7 +224,7 @@ func _test_headshot_feedback() -> void:
 	var hc := HealthComponent.new()
 	var crit_emitted := false
 	var crit_amount := 0.0
-	hc.damaged.connect(func(amount, source, pos, critical): void:
+	hc.damaged.connect(func(amount, source, pos, critical):
 		crit_emitted = true
 		crit_amount = amount
 	)
@@ -340,10 +350,11 @@ func _test_no_leaks() -> void:
 	# GameFeelBridge 应该已清理其 health_components 注册表
 	var bridge := get_node_or_null("/root/GameFeelBridge")
 	if bridge != null:
-		var hc_count := bridge.get("_health_components", {}) as Dictionary
+		var hc_val: Variant = bridge.get("_health_components")
+		var hc_count: Dictionary = {}
+		if hc_val != null:
+			hc_count = hc_val as Dictionary
 		_check(hc_count.size() == 0, "GameFeelBridge HealthComponent 注册表已清空")
 
 	# 输出 ObjectDB 统计（headless 下可用）
-	var obj_count := Object.get_instance_count()
-	print("[REG] ObjectDB instance count: %d" % obj_count)
 	print("[REG] 测试 8 通过：无泄漏")

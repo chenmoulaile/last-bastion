@@ -216,3 +216,21 @@ Godot --headless --path . --quit-after 600 res://characters_rework/integration/s
 2. `InputBuffer` 换弹取消依赖 `InputBuffer` Autoload 已注册（project.godot 已配置）。
 3. HealthComponent 信号驱动模式下，`GameFeelBridge._poll_enabled` 默认 `false`；如需回退到轮询，设为 `true`。
 4. `ItemComponent` 仅处理投掷/医疗包/药片，不处理武器切换或技能。
+
+
+### 11. 架构审计结论（M11 补丁修复审计）
+
+上一阶段的补丁式修复在 Godot 4.7.2 下经全量解析与测试后，审计结论如下：
+
+| 审计项 | 状态 | 说明 |
+|--------|------|------|
+| 循环依赖 | 已修复 | `ItemComponent` 不再持有 `PlayerControllerV2` 类型引用；`PlayerControllerV2` 改用运行时 `load()` 替代 `preload` 常量，打破循环依赖 |
+| 类型转换 | 已修复 | `_character_compat` 改为 `Resource` 类型；所有 `as` 转换增加空值保护；`StringName(str(...))` 替代 `StringName(Variant)` |
+| 实例化方式 | 已修复 | `PlayerControllerV2.new()` 替代 `GDScript.new()`；旧 `player.tscn` 保留为 `Player_Legacy_Disabled` (`PROCESS_MODE_DISABLED`) |
+| InputBuffer 签名 | 已验证 | `consume("fire", 0.3)` 两参数版本在旧与新控制器中调用一致 |
+| ZombieBase 注册 | 已修复 | `zombie_base.gd` 变量显式类型注解修复编译失败；`level_runner.gd` 新增 `ZOMBIE_BASE_SCRIPT` preload 确保基类先加载 |
+| `_setup_renderer` 变量 | 已修复 | `existing` 变量已正确声明 |
+| GameFeelBridge 引用 | 已修复 | `register_health_component()`/`unregister_health_component()` 订阅 `damaged` 信号；`_exit_tree()` 清理所有连接；`StringName(str(...))` 修复构造器错误 |
+
+审计文档：`res://docs/architecture_audit.md`
+

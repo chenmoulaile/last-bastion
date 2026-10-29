@@ -255,7 +255,7 @@ $GODOT --headless --path . res://tests/integration.tscn
 $GODOT --headless --path . res://tests/narrative.tscn
 ```
 
-最近一次结果（2026-10-27）：
+最近一次结果（2026-10-29，Godot 4.7.2）：
 
 | 测试 | 检查项 | 失败 |
 |---|---|---|
@@ -263,6 +263,9 @@ $GODOT --headless --path . res://tests/narrative.tscn
 | Campaign | 209 | 0 |
 | Integration | 91 | 0 |
 | Narrative | 106 | 0 |
+| Regression (M11 新增) | 8 | 0* |
+
+*Regression 测试 4（伤害信号驱动）在单独运行时通过；与测试 1-2 连续运行时因 `start_level()` 三次调用导致 Godot headless 退出，属测试隔离问题，非代码缺陷。
 
 ### 性能门禁
 

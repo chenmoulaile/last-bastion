@@ -4,11 +4,11 @@ extends Node
 ## 由 PlayerControllerV2 持有并委托调用，避免在控制器中重写物品行为。
 ## 数值全部从 owner 的字段读取，不修改任何战斗数值。
 
-var owner: Node = null
+var _owner_ref: Node = null
 
 ## 投掷当前选中的投掷物类型。
 func throw(throw_index: int) -> void:
-	var _owner := owner
+	var _owner := _owner_ref
 	if _owner == null:
 		return
 	var keys := ["grenade", "molotov", "bile"]
@@ -16,20 +16,22 @@ func throw(throw_index: int) -> void:
 	var state: Dictionary = _owner.get("throwables")
 	if int(state.get(kind, 0)) <= 0:
 		# 没有该类型投掷物，循环到下一个有库存的
+		var found := false
 		for i in keys.size():
-			var k := keys[(int(throw_index) + i) % keys.size()]
+			var k: String = keys[(int(throw_index) + i) % keys.size()]
 			if int(state.get(k, 0)) > 0:
 				kind = k
+				found = true
 				break
-		else:
+		if not found:
 			var audio := _owner.get_node_or_null("/root/AudioManager")
 			if audio != null:
 				audio.play_sfx(&"notify_empty")
 			return
 	state[kind] = int(state.get(kind, 0)) - 1
 	_owner.set("throwables", state)
-	var pos := _owner.global_position + Vector2(_owner.get("facing") * 10.0, -22.0)
-	_owner.level.spawn_throwable(kind, pos, _owner.get("aim_dir"))
+	var pos: Vector2 = _owner.global_position + Vector2(_owner.get("facing") * 10.0, -22.0)
+	_owner.get("level").spawn_throwable(kind, pos, _owner.get("aim_dir"))
 	var audio := _owner.get_node_or_null("/root/AudioManager")
 	if audio != null:
 		audio.play_sfx(&"throw")
@@ -37,7 +39,7 @@ func throw(throw_index: int) -> void:
 
 ## 使用医疗包：治疗自身，消耗一个医疗包。
 func use_medkit() -> void:
-	var _owner := owner
+	var _owner := _owner_ref
 	if _owner == null:
 		return
 	if int(_owner.get("medkits")) <= 0 or bool(_owner.get("is_dead")):
@@ -47,13 +49,13 @@ func use_medkit() -> void:
 	var gm := _owner.get_node_or_null("/root/GameManager")
 	if gm != null and gm.has_method("medkit_mult"):
 		mult = float(gm.medkit_mult())
-	_owner.heal(int(ceil(70.0 * mult)))
+	_owner.call("heal", int(ceil(70.0 * mult)))
 	_owner.set("black_white", false)
 
 
 ## 使用药片：增加临时生命，消耗一片药丸。
 func use_pills() -> void:
-	var _owner := owner
+	var _owner := _owner_ref
 	if _owner == null:
 		return
 	if int(_owner.get("pills")) <= 0 or bool(_owner.get("is_dead")):
