@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="ZombieData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/zombie_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"burster"
+display_name = "爆裂者"
+max_hp = 25
+walk_speed_min = 140
+walk_speed_max = 190
+attack_damage = 10
+attack_interval = 0.7
+score_value = 400
+behavior_id = &"burster"
+tint = Color(0.600, 0.900, 0.600, 1.000)
+size_scale = 0.85
+anim_map = {}
+is_special = true
+is_uncommon = false
+is_boss = false
+head_hittable = true
+head_immune = false
+fire_immune = false
+front_immune = false
+low_profile = false
+control_kind = &""
+special_weight = 0.6
+sprite_prefix = "boomer"
+sprite_size = Vector2i(26, 32)
+collision_size = Vector2(12.0, 24.0)
+death_animation = "die"
+codex_category = "special"
+description = "死亡时释放毒气孢子云，强制玩家走位。近战击杀会被喷洒。"
+pounce_range = 380
+attack_range = 40
+sight_range = 260
+voice_id = &"zombie_growl"

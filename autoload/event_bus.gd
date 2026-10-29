@@ -75,6 +75,7 @@ signal teammate_status_changed
 signal debug_panel_toggled
 signal debug_vision_toggled
 signal toast(title: String, detail: String)
+signal currency_changed(amount: int)
 
 
 # --- Narrative / archive / factions (2019 RUST FREQUENCY) -------------------

@@ -118,8 +118,9 @@ var using_mouse: bool = false
 ## --- 武器 ---
 var weapon_slots: Array[StringName] = []
 var slot_index: int = 0
-var ammo: Dictionary = {}
+var _prev_slot: int = 0
 var weapon_cooldown: float = 0.0
+var ammo: Dictionary = {}
 var reload_timer: float = 0.0
 var reloading: bool = false
 var _reload_total: float = 0.0
@@ -390,6 +391,8 @@ func _tick_actions(delta: float) -> void:
 			_shove()
 	if _just_pressed(&"switch_weapon"):
 		cycle_weapon(1)
+	if _just_pressed(&"quick_swap"):
+		quick_swap_weapon()
 	if _just_pressed(&"skill"):
 		use_skill()
 	if _just_pressed(&"throw"):
@@ -561,9 +564,27 @@ func _finish_reload() -> void:
 func cycle_weapon(direction: int) -> void:
 	if weapon_slots.size() < 2:
 		return
+	_prev_slot = slot_index
 	slot_index = posmod(slot_index + direction, weapon_slots.size())
 	reloading = false
 	weapon_cooldown = maxf(weapon_cooldown, 0.25)
+	_sync_weapon_visual(true)
+	if _bus:
+		var w := _current_weapon()
+		if w != null:
+			_bus.weapon_changed.emit(_wname(w, "id"), String(_wstr(w, "display_name", "")))
+	_emit_state(&"weapon_switch")
+
+
+## Q 键极速切枪：瞬间切换到上一把武器，不打断射击节奏（取消前摇）。
+func quick_swap_weapon() -> void:
+	if weapon_slots.size() < 2:
+		return
+	var tmp := slot_index
+	slot_index = _prev_slot
+	_prev_slot = tmp
+	reloading = false
+	weapon_cooldown = maxf(weapon_cooldown, 0.15)
 	_sync_weapon_visual(true)
 	if _bus:
 		var w := _current_weapon()

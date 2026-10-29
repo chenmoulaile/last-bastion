@@ -1386,6 +1386,16 @@ func on_zombie_died(zombie: Node, source: StringName, is_head: bool) -> void:
 	_horde_alive.erase(zombie)
 	_score += points
 	EventBus.score_changed.emit(_score)
+	# 敌人掉落货币：普通感染者 1-3 废铁，特殊感染者 5-10，Boss 20-30。
+	var drop := 0
+	if zd.is_boss:
+		drop = randi_range(20, 30)
+	elif zd.is_special:
+		drop = randi_range(5, 10)
+	else:
+		drop = randi_range(1, 3)
+	if drop > 0:
+		GameManager.add_currency(drop)
 	EventBus.combo_changed.emit(_combo, mult)
 	EventBus.enemy_died.emit(zd.id, zombie.global_position, points)
 	EventBus.enemy_killed.emit(zd.id, source, zombie.global_position)

@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"at_rifle"
+display_name = "反坦克步枪"
+category = &"primary"
+damage = 120
+pellets = 1
+rpm = 60
+mag_size = 5
+reserve_ammo = 20
+reload_time = 4.0
+spread = 0.5
+effective_range = 1200
+score_mult = 1.6
+automatic = false
+knockback = 200
+pierce = 8
+sprite = "sniper"
+description = "贯穿一整条直线上所有敌人，极强后坐力与顿帧，打完需拉栓。"

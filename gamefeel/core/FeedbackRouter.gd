@@ -131,6 +131,20 @@ func on_enemy_death(target: Node, world_pos: Vector2, direction: Vector2,
 	AudioLayerManager.play_kill(kind, crit)
 
 
+## 增强断肢：霰弹枪、反坦克步枪、爆炸物致死时额外残肢。
+func on_enemy_died(world_pos: Vector2, direction: Vector2, color: Color,
+		is_boss: bool = false, is_special: bool = false, dismember: bool = false) -> void:
+	if not GameFeelConfig.enabled:
+		return
+	if dismember and GameFeelConfig.is_module_enabled(&"death_ragdoll") and death_ragdoll != null:
+		var dir := direction.normalized()
+		if dir.length_squared() < 0.01:
+			dir = Vector2.RIGHT
+		# 断肢时多产生 2-4 条残肢。
+		for i in 4:
+			death_ragdoll.spawn(world_pos, dir, color, is_boss, is_special, false)
+
+
 func on_boss_death(world_pos: Vector2) -> void:
 	if not GameFeelConfig.enabled:
 		return

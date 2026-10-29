@@ -51,6 +51,9 @@ var weapons: Dictionary = {}
 var characters: Dictionary = {}
 var zombies: Dictionary = {}
 
+## 战役内货币（废铁/废料）：敌人死亡掉落，关卡间保留。
+var currency: int = 0
+
 var _hitstop_token: int = 0
 
 
@@ -125,6 +128,32 @@ func get_levels() -> Array[LevelData]:
 		out.append(level)
 	out.sort_custom(func(a: LevelData, b: LevelData) -> bool: return String(a.id) < String(b.id))
 	return out
+
+
+## --- 货币系统 ---
+
+func get_currency() -> int:
+	return currency
+
+
+func add_currency(amount: int) -> void:
+	currency = maxi(0, currency + amount)
+	EventBus.currency_changed.emit(currency)
+
+
+func spend_currency(amount: int) -> bool:
+	if amount <= 0:
+		return true
+	if currency >= amount:
+		currency -= amount
+		EventBus.currency_changed.emit(currency)
+		return true
+	return false
+
+
+func reset_currency() -> void:
+	currency = 0
+	EventBus.currency_changed.emit(0)
 
 
 func get_playable_characters() -> Array[CharacterData]:

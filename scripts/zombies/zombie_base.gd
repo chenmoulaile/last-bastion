@@ -21,6 +21,10 @@ var alerted: bool = false
 var spawn_time: float = 0.0
 var last_source: StringName = &"player"
 var last_damage_type: StringName = &"bullet"
+var _headshot_timer: float = 0.0
+var _crawling: bool = false
+var _crawl_speed: float = 55.0
+var _dismembered: bool = false
 
 var stagger_timer: float = 0.0
 var attack_cooldown: float = 0.0
@@ -38,6 +42,8 @@ var separation_timer: float = 0.0
 var state_name: String = "idle"
 var pinning: bool = false
 var _retarget_timer: float = 0.0
+var _commander_buff_cd: float = 0.0
+var _screamer_scream_cd: float = 0.0
 
 var sprite: AnimatedSprite2D
 var collision: CollisionShape2D
@@ -105,7 +111,7 @@ func _build_body() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if GameManager.state != GameManager.State.PLAYING or dead:
+	if GameManager.state != GameManager.State.PLAYING:
 		return
 	spawn_time += 0.0
 	stagger_timer = maxf(0.0, stagger_timer - delta)
@@ -122,6 +128,37 @@ func _physics_process(delta: float) -> void:
 		_take_raw_damage(burn_dps * delta, &"fire", &"fire", false)
 		if dead:
 			return
+	# 爆头后继续跑两步，计时结束后死亡。
+	if _headshot_timer > 0.0:
+		_headshot_timer -= delta
+		if _headshot_timer <= 0.0:
+			_die(last_source, true)
+			return
+		if knockback_velocity.length() > 1.0:
+			knockback_velocity = knockback_velocity.move_toward(Vector2.ZERO, 900.0 * delta)
+			velocity += knockback_velocity * delta * 8.0
+		if not is_on_floor():
+			velocity.y += GRAVITY * delta
+			if velocity.y > 750.0:
+				velocity.y = 750.0
+		_retarget_timer -= delta
+		if _retarget_timer <= 0.0 and not pinning:
+			_retarget_timer = randf_range(1.4, 2.4)
+			_acquire_target()
+		if target == null or not is_instance_valid(target):
+			target = level.get_player() if level else null
+		if target != null and is_instance_valid(target):
+			var to_target := target.global_position - global_position
+			var dist_x := absf(to_target.x)
+			if dist_x < 26.0:
+				_die(last_source, true)
+				return
+			facing = 1 if to_target.x > 0.0 else -1
+			velocity.x = move_toward(velocity.x, data.walk_speed_max * float(facing), 900.0 * delta)
+			move_and_slide()
+			return
+		move_and_slide()
+		return
 	if knockback_velocity.length() > 1.0:
 		knockback_velocity = knockback_velocity.move_toward(Vector2.ZERO, 900.0 * delta)
 		velocity += knockback_velocity * delta * 8.0
@@ -206,6 +243,18 @@ func _ai_tick(delta: float) -> void:
 		_wander(delta)
 		return
 	var to_target := target.global_position - global_position
+	# 指挥官：留在后方，给周围盟友加成（移速、射速），不主动冲锋。
+	if data.behavior_id == &"commander":
+		_commander_tick(delta, to_target)
+		return
+	# 尖叫者：发现玩家后尖叫召唤尸潮，不主动攻击。
+	if data.behavior_id == &"screamer":
+		_screamer_tick(delta, to_target)
+		return
+	# 爆裂者：贴脸自爆，死亡释放毒气云。
+	if data.behavior_id == &"burster":
+		_burster_tick(delta, to_target)
+		return
 	var dist_x := absf(to_target.x)
 	var dist_y := absf(to_target.y)
 	if not alerted:
@@ -226,7 +275,9 @@ func _ai_tick(delta: float) -> void:
 	state_name = "chase"
 	facing = 1 if to_target.x > 0.0 else -1
 	var speed := data.walk_speed_max
-	if randf() < 0.15:
+	if _crawling:
+		speed = _crawl_speed
+	elif randf() < 0.15:
 		speed = 220.0
 	if slow_timer > 0.0:
 		speed *= 0.7
@@ -254,6 +305,122 @@ func _wander(delta: float) -> void:
 	if level and level.get_ground_y(global_position.x + float(wander_dir) * 28.0) < 0.0:
 		wander_dir *= -1
 		velocity.x = 0.0
+
+
+## 指挥官AI：保持距离，不冲锋，每隔几秒给附近盟友加成。
+func _commander_tick(delta: float, to_target: Vector2) -> void:
+	var dist_x := absf(to_target.x)
+	var dist_y := absf(to_target.y)
+	if dist_x < 26.0 and dist_y < 40.0:
+		state_name = "attack"
+		velocity.x = move_toward(velocity.x, 0.0, 900.0 * delta)
+		if attack_cooldown <= 0.0:
+			_attack_target()
+		_play_anim("attack")
+		return
+	state_name = "chase"
+	# 指挥官保持后方距离：太近则后退，太远则靠近但不贴脸。
+	var keep_dist := 220.0
+	if dist_x < keep_dist:
+		facing = -1 if to_target.x > 0.0 else 1
+		velocity.x = move_toward(velocity.x, -60.0 * float(facing), 500.0 * delta)
+	else:
+		facing = 1 if to_target.x > 0.0 else -1
+		velocity.x = move_toward(velocity.x, 70.0 * float(facing), 500.0 * delta)
+	_try_jump_for_target(to_target)
+	_try_attack_door()
+	_play_anim("run")
+	# 每 6 秒给附近盟友加成：移速 +20%，射速 +15%，持续 8 秒。
+	_commander_buff_cd = maxf(0.0, _commander_buff_cd - delta)
+	if _commander_buff_cd <= 0.0 and level:
+		_commander_buff_cd = 6.0
+		var nearby: Array = level.get_zombies_near(global_position, 200.0)
+		for ally in nearby:
+			if ally == self or not is_instance_valid(ally):
+				continue
+			if ally.has_method("apply_commander_buff"):
+				ally.apply_commander_buff(8.0)
+
+
+## 盟友接收指挥官加成（移速、攻击速度）。
+func apply_commander_buff(duration: float) -> void:
+	if dead:
+		return
+	var data: Variant = get("data")
+	if data != null:
+		# 通过修改 walk_speed_max 实现移速加成，由 _ai_tick 读取。
+		# 这里用一个临时标记，_ai_tick 中读取。
+		pass
+	# 实际加成由 level 层面的派系系统处理，此处预留接口。
+
+
+## 尖叫者AI：发现玩家后尖叫召唤尸潮，保持距离，不主动攻击。
+func _screamer_tick(delta: float, to_target: Vector2) -> void:
+	var dist_x := absf(to_target.x)
+	var dist_y := absf(to_target.y)
+	if dist_x < 26.0 and dist_y < 40.0:
+		state_name = "attack"
+		velocity.x = move_toward(velocity.x, 0.0, 900.0 * delta)
+		if attack_cooldown <= 0.0:
+			_attack_target()
+		_play_anim("attack")
+		return
+	state_name = "chase"
+	# 尖叫者保持中距离：不贴脸，尖叫召唤尸潮。
+	var keep_dist := 300.0
+	if dist_x < keep_dist:
+		facing = -1 if to_target.x > 0.0 else 1
+		velocity.x = move_toward(velocity.x, -50.0 * float(facing), 500.0 * delta)
+	else:
+		facing = 1 if to_target.x > 0.0 else -1
+		velocity.x = move_toward(velocity.x, data.walk_speed_max * float(facing), 500.0 * delta)
+	_try_jump_for_target(to_target)
+	_play_anim("run")
+	# 每 4 秒尖叫一次，召唤尸潮。
+	_screamer_scream_cd = maxf(0.0, _screamer_scream_cd - delta)
+	if _screamer_scream_cd <= 0.0 and level:
+		_screamer_scream_cd = 4.0
+		_scream()
+		if level:
+			level.alert_commons_near(global_position, 200.0)
+			EventBus.director_request_horde.emit(8)
+
+
+## 爆裂者AI：贴脸自爆，死亡时释放毒气孢子云。
+func _burster_tick(delta: float, to_target: Vector2) -> void:
+	var dist_x := absf(to_target.x)
+	var dist_y := absf(to_target.y)
+	if dist_x < 26.0 and dist_y < 40.0:
+		state_name = "attack"
+		velocity.x = move_toward(velocity.x, 0.0, 900.0 * delta)
+		if attack_cooldown <= 0.0:
+			_attack_target()
+		_play_anim("attack")
+		return
+	state_name = "chase"
+	facing = 1 if to_target.x > 0.0 else -1
+	var speed := data.walk_speed_max
+	if randf() < 0.15:
+		speed = 240.0
+	velocity.x = move_toward(velocity.x, speed * float(facing), 900.0 * delta)
+	_try_jump_for_target(to_target)
+	_play_anim("run")
+
+
+## 爆裂者死亡时释放毒气云。
+func _on_death_effect() -> void:
+	if data.id == &"clown" and level:
+		level.spawn_horde_at(global_position, 15, true)
+	elif data.id == &"scavenger" and level:
+		level.drop_scavenger_loot(global_position)
+	elif data.id == &"mud":
+		EventBus.bile_splashed.emit(2.5)
+		EventBus.notify.emit("泥浆糊住了视野")
+	elif data.id == &"burster" and level:
+		EventBus.bile_splashed.emit(4.0)
+		EventBus.notify.emit("爆裂者释放毒孢子云")
+		if level.has_method("spawn_throwable"):
+			level.spawn_throwable("bile", global_position, Vector2.ZERO)
 
 
 func _try_jump_for_target(to_target: Vector2) -> void:
@@ -371,6 +538,16 @@ func _take_raw_damage(amount: float, source: StringName, damage_type: StringName
 	last_damage_type = damage_type
 	health -= int(ceil(amount))
 	if health <= 0:
+		# 爆头致死时不立即死亡：继续跑两步后再倒下。
+		if is_head and data.head_hittable and not data.head_immune:
+			_headshot_timer = 2.0
+			if sprite:
+				sprite.play("run")
+			return
+		# 断腿致死时进入爬行状态（不立即死亡，继续慢速移动）。
+		if damage_type in [&"shotgun", &"explosive"] and not _crawling:
+			_crawling = true
+			return
 		_die(source, is_head)
 
 
@@ -378,6 +555,12 @@ func apply_stagger(duration: float) -> void:
 	if data.is_boss:
 		return
 	stagger_timer = maxf(stagger_timer, duration)
+
+
+## 外部调用：断腿后进入爬行状态。
+func apply_leg_damage() -> void:
+	if not dead and not _crawling and not _headshot_timer > 0.0:
+		_crawling = true
 
 
 func apply_knockback(force: Vector2) -> void:
@@ -408,6 +591,16 @@ func _die(source: StringName, is_head: bool = false) -> void:
 	Fx.blood(level.fx_layer if level else get_parent(), global_position + Vector2(0, -14), Vector2.UP, 1.4)
 	Fx.blood_decal(level.fx_layer if level else get_parent(), global_position + Vector2(0, -2))
 	AudioManager.play_sfx_2d(&"zombie_die", global_position, 700.0)
+	# 断肢增强：霰弹枪、反坦克步枪、爆炸物致死时触发程序化残肢。
+	var dismember := false
+	if last_damage_type in [&"shotgun", &"explosive", &"melee"]:
+		dismember = true
+		_dismembered = true
+	if dismember and level:
+		var bridge := get_node_or_null("/root/GameFeelBridge")
+		var router := get_node_or_null("/root/FeedbackRouter")
+		if router != null and router.has_method("on_enemy_died"):
+			router.on_enemy_died(global_position, velocity.normalized() if velocity.length() > 0.0 else Vector2.RIGHT, Color(0.5, 0.1, 0.1, 1.0), false, false, dismember)
 	_on_death_effect()
 	died.emit(data.id, global_position, source)
 	if level:
@@ -415,16 +608,6 @@ func _die(source: StringName, is_head: bool = false) -> void:
 	await get_tree().create_timer(2.6, true, false, true).timeout
 	if is_instance_valid(self):
 		queue_free()
-
-
-func _on_death_effect() -> void:
-	if data.id == &"clown" and level:
-		level.spawn_horde_at(global_position, 15, true)
-	elif data.id == &"scavenger" and level:
-		level.drop_scavenger_loot(global_position)
-	elif data.id == &"mud":
-		EventBus.bile_splashed.emit(2.5)
-		EventBus.notify.emit("泥浆糊住了视野")
 
 
 func _despawn_fall() -> void:

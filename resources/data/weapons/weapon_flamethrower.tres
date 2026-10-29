@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"flamethrower"
+display_name = "火焰喷射器"
+category = &"primary"
+damage = 4
+pellets = 1
+rpm = 20
+mag_size = 0
+reserve_ammo = 0
+reload_time = 0.0
+spread = 15.0
+effective_range = 180
+score_mult = 1.3
+automatic = true
+knockback = 20
+pierce = 1
+fire_mode = &"flamethrower"
+fuel = 60.0
+throw_radius = 0.0
+fuse_time = 0.0
+effect_duration = 6.0
+effect_dps = 8.0
+sprite = "lmg"
+description = "短距离扇形AOE，点燃敌人使其乱跑，融化特殊感染者。"

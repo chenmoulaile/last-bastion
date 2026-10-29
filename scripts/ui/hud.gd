@@ -56,6 +56,8 @@ var _throw_index: int = 0
 var _weapon_id: StringName = &""
 var _weapon_mag: int = 0
 var _weapon_reserve: int = 0
+var _currency_label: Label
+var _currency_icon: Control
 
 var _command_panel: Panel
 var _command_cells: Dictionary = {}
@@ -112,6 +114,7 @@ func _ready() -> void:
 	_build_timer_bar()
 	_build_player_panel()
 	_build_weapon_panel()
+	_currency_label.text = str(GameManager.get_currency())
 	_build_command_panel()
 	_build_prompt()
 	_build_event_banner()
@@ -576,6 +579,18 @@ func _build_weapon_panel() -> void:
 	throw_key.size = Vector2(52, 6)
 	panel.add_child(throw_key)
 
+	## 货币显示（右上角）：废铁/废料，敌人掉落，商人处消费。
+	_currency_icon = ColorRect.new()
+	_currency_icon.color = UIKit.AMBER
+	_currency_icon.size = Vector2(14, 14)
+	_currency_icon.position = Vector2(510, 302)
+	_currency_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_currency_icon)
+	_currency_label = UIKit.label("0", 12, UIKit.AMBER, UIKit.font_latin_bold())
+	_currency_label.position = Vector2(528, 304)
+	_currency_label.size = Vector2(100, 14)
+	_root.add_child(_currency_label)
+
 
 func _build_command_panel() -> void:
 	_command_panel = UIKit.panel()
@@ -840,6 +855,7 @@ func _connect_events() -> void:
 	EventBus.achievement_unlocked.connect(_on_achievement)
 	EventBus.unlock_earned.connect(_on_unlock)
 	EventBus.toast.connect(_on_toast)
+	EventBus.currency_changed.connect(_on_currency_changed)
 
 
 func _on_health_changed(hp: int, temp_hp: int, max_hp: int) -> void:
@@ -861,6 +877,10 @@ func _on_weapon_changed(id: StringName, display_name: String) -> void:
 	if data != null:
 		_weapon_state.text = String(data.category).to_upper()
 	_refresh_ammo()
+
+
+func _on_currency_changed(amount: int) -> void:
+	_currency_label.text = str(amount)
 
 
 func _on_skill_state(ratio: float, active: bool) -> void:

@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="ZombieData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/zombie_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"screamer"
+display_name = "尖叫者"
+max_hp = 35
+walk_speed_min = 100
+walk_speed_max = 140
+attack_damage = 2
+attack_interval = 1.0
+score_value = 500
+behavior_id = &"screamer"
+tint = Color(1.000, 0.800, 0.800, 1.000)
+size_scale = 0.9
+anim_map = {}
+is_special = true
+is_uncommon = false
+is_boss = false
+head_hittable = true
+head_immune = false
+fire_immune = false
+front_immune = false
+low_profile = false
+control_kind = &""
+special_weight = 0.8
+sprite_prefix = "witch"
+sprite_size = Vector2i(28, 36)
+collision_size = Vector2(14.0, 26.0)
+death_animation = "die"
+codex_category = "special"
+description = "发现玩家后不攻击，疯狂尖叫召唤尸潮。优先击杀。"
+pounce_range = 380
+attack_range = 40
+sight_range = 400
+voice_id = &"witch_scream"

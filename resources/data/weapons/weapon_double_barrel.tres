@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"double_barrel"
+display_name = "双管霰弹枪"
+category = &"primary"
+damage = 12
+pellets = 14
+rpm = 90
+mag_size = 2
+reserve_ammo = 24
+reload_time = 3.2
+spread = 10.0
+effective_range = 280
+score_mult = 1.4
+automatic = false
+knockback = 220
+pierce = 0
+sprite = "shotgun"
+description = "两发极高伤害与断肢率，近距离一枪清场，换弹极慢。"
