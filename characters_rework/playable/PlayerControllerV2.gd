@@ -36,6 +36,9 @@ signal died
 signal downed
 signal revived
 
+## InputBuffer 缓存按键，用于换弹取消等反馈链路。
+var _input_buffer: InputBuffer = null
+
 const FALLBACK_DATA := "res://characters_rework/data/playable/assault.tres"
 const FALLBACK_WEAPON_DIR := "res://resources/data/weapons"
 const GRAVITY: float = 1500.0
@@ -119,6 +122,7 @@ var ammo: Dictionary = {}
 var weapon_cooldown: float = 0.0
 var reload_timer: float = 0.0
 var reloading: bool = false
+var _reload_total: float = 0.0
 var spread_heat: float = 0.0
 var melee_cooldown: float = 0.0
 var melee_anim_timer: float = 0.0
@@ -144,11 +148,17 @@ var _cached_gun_visual: StringName = &"rifle"
 var _bus: Node = null
 var _audio: Node = null
 var _game: Node = null
+var _item_component: ItemComponent = null
 
 ## 兼容别名: 现有 HUD 读取 player.get("character")(类型 CharacterData)。
-var character: Variant:
+## 返回 CharacterDataCompat，内部将 ReworkCharacterData 映射为旧结构。
+var character: CharacterData:
 	get:
-		return character_data
+		if _character_compat == null:
+			_character_compat = CharacterDataCompat.new(character_data)
+		return _character_compat
+
+var _character_compat: CharacterData = null
 
 
 func _ready() -> void:
@@ -166,9 +176,11 @@ func _ready() -> void:
 	_bus = _autoload(&"EventBus")
 	_audio = _autoload(&"AudioManager")
 	_game = _autoload(&"GameManager")
+	_input_buffer = _autoload(&"InputBuffer")
 	_setup_renderer()
 	_setup_weapons()
 	_attach_passive(character_data.passive_ability_id)
+	_setup_item_component()
 	if auto_camera:
 		_build_camera()
 	EventBusBridge.attach_for(self)
@@ -176,7 +188,17 @@ func _ready() -> void:
 	_emit_state(&"spawn")
 
 
-## ------------------------------------------------------------ 主循环 ----
+func _exit_tree() -> void:
+	# 从 EventBusBridge 注册表中移除，避免 Autoload 持有失效引用。
+	var bridge := EventBusBridge.instance()
+	if bridge != null and bridge.has_method("_unregister_player"):
+		bridge.call("_unregister_player", self)
+	_renderer = null
+	_item_component = null
+	_passives.clear()
+
+
+## ------------------------------------------------------------ 主循器 ----
 
 func _physics_process(delta: float) -> void:
 	_tick_timers(delta)
@@ -249,7 +271,16 @@ func _tick_timers(delta: float) -> void:
 		skill_cd -= delta
 	if reloading:
 		reload_timer -= delta * get_reload_speed_mult()
-		if reload_timer <= 0.0:
+		# InputBuffer 换弹取消: 进度 >= 70% 时按射击可取消换弹并立即开火。
+		if _input_buffer != null and _input_buffer.consume(&"fire") \
+				and _reload_total > 0.0 \
+				and reload_timer <= _reload_total * 0.3:
+			reloading = false
+			reload_timer = 0.0
+			var weapon := _current_weapon()
+			if weapon != null:
+				_try_fire(weapon)
+		elif reload_timer <= 0.0:
 			_finish_reload()
 
 
@@ -497,6 +528,7 @@ func start_reload() -> void:
 		return
 	reloading = true
 	reload_timer = _wfloat(weapon, "reload_time", 1.5)
+	_reload_total = reload_timer
 	_emit_state(&"reload_start")
 
 
@@ -968,8 +1000,14 @@ func add_ammo(amount: int = 9999) -> void:
 		ammo[id] = state
 
 
+func _setup_item_component() -> void:
+	_item_component = ItemComponent.new()
+	_item_component.name = "ItemComponent"
+	_item_component.owner = self
+	add_child(_item_component)
+
+
 func _setup_renderer() -> void:
-	var existing := get_node_or_null("Renderer")
 	if existing is PlayerRenderer:
 		_renderer = existing
 	else:
@@ -1049,29 +1087,60 @@ func _tick_interaction() -> void:
 		_emit_state(&"interact")
 
 
-## ------------------------------------------------------- 占位接口 ----
+## ------------------------------------------------------- 物品代理 ----
 
 func _throw_stub() -> void:
-	## 投掷物系统不在本次重构范围(见 INTEGRATION_GUIDE 不兼容点清单)。
-	_emit_passive_event(&"throw_requested", {})
-	_emit_state(&"throw_stub")
+	if _item_component != null:
+		_item_component.throw(throw_index)
+	else:
+		_emit_passive_event(&"throw_requested", {})
+	_emit_state(&"throw")
 
 
 func _medkit_stub() -> void:
-	if medkits <= 0 or is_dead:
-		return
-	medkits -= 1
-	heal(int(70.0 * _medkit_mult()))
-	black_white = false
+	if _item_component != null:
+		_item_component.use_medkit()
+	else:
+		if medkits <= 0 or is_dead:
+			return
+		medkits -= 1
+		heal(int(70.0 * _medkit_mult()))
+		black_white = false
 	_emit_state(&"medkit")
 
 
 func _pills_stub() -> void:
-	if pills <= 0 or is_dead:
-		return
-	pills -= 1
-	temp_hp += 50
+	if _item_component != null:
+		_item_component.use_pills()
+	else:
+		if pills <= 0 or is_dead:
+			return
+		pills -= 1
+		temp_hp += 50
 	_emit_state(&"pills")
+
+
+func get_status_text() -> String:
+	var statuses: Array[String] = []
+	if bool(is_downed):
+		statuses.append("倒地")
+	elif bool(black_white):
+		statuses.append("黑血")
+	if bool(is_controlled):
+		statuses.append("受控")
+	if bile_timer > 0.0:
+		statuses.append("胆汁")
+	if burn_timer > 0.0:
+		statuses.append("燃烧")
+	if slow_timer > 0.0:
+		statuses.append("减速")
+	if inspire_timer > 0.0:
+		statuses.append("鼓舞")
+	if shield_wall_timer > 0.0:
+		statuses.append("盾墙")
+	if statuses.is_empty():
+		return "状态正常"
+	return " · ".join(statuses)
 
 
 func _medkit_mult() -> float:

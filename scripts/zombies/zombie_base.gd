@@ -13,6 +13,7 @@ var level: Node = null
 var target: Node2D = null
 var health: int = 30
 var max_health: int = 30
+var health_component: HealthComponent = null
 var facing: int = -1
 var dead: bool = false
 var alerted: bool = false
@@ -54,6 +55,10 @@ func _ready() -> void:
 	_build_body()
 	health = data.max_hp
 	max_health = data.max_hp
+	# 创建 HealthComponent 并挂载，用于信号驱动的伤害反馈。
+	health_component = HealthComponent.new()
+	health_component.name = "HealthComponent"
+	add_child(health_component)
 	if data.id == &"tank":
 		var diff := GameManager.current_difficulty
 		if diff == &"HARD":
@@ -330,6 +335,9 @@ func apply_damage(amount: int, from_dir: Vector2, is_head: bool, source: StringN
 	if is_head and data.head_hittable and not data.head_immune:
 		final_amount *= 2.0
 	_take_raw_damage(final_amount, source, damage_type, is_head)
+	# 信号驱动伤害反馈：每命中一次发射一次 damaged，同一帧多次命中各自独立。
+	if health_component != null:
+		health_component.take_damage(final_amount, _resolve_source_node(source), global_position, is_head)
 	flash_timer = 0.08
 	if sprite:
 		sprite.modulate = Color(2.2, 2.2, 2.2, 1.0)
@@ -563,6 +571,15 @@ func release_control() -> void:
 
 func get_data() -> ZombieData:
 	return data
+
+
+## 将 StringName 来源解析为实际 Node（用于 HealthComponent.damaged 信号）。
+func _resolve_source_node(source_id: StringName) -> Node:
+	if source_id == &"player":
+		var p := level.get_player() if level != null else null
+		if p is Node:
+			return p
+	return null
 
 
 func on_melee_interrupt() -> bool:

@@ -79,6 +79,7 @@ var ammo: Dictionary = {}
 var weapon_cooldown: float = 0.0
 var reload_timer: float = 0.0
 var reloading: bool = false
+var _reload_total: float = 0.0
 var spread_heat: float = 0.0
 var last_shot_time: float = -10.0
 var shoot_anim_timer: float = 0.0
@@ -283,7 +284,18 @@ func _tick_timers(delta: float) -> void:
 		var data := _current_weapon()
 		var reload_speed := 2.0 if assault_rush_timer > 0.0 else 1.0
 		reload_timer -= delta * reload_speed
-		if reload_timer <= 0.0:
+		# InputBuffer 换弹取消：进度 >= 70% 时按射击可取消换弹并立即开火。
+		var _ib := get_node_or_null("/root/InputBuffer")
+		if _ib != null and _ib.has_method("consume") \
+				and _ib.consume("fire", 0.3) \
+				and _reload_total > 0.0 \
+				and reload_timer <= _reload_total * 0.3:
+			reloading = false
+			reload_timer = 0.0
+			var weapon := _current_weapon()
+			if weapon != null:
+				_try_fire(weapon)
+		elif reload_timer <= 0.0:
 			_finish_reload()
 	if temp_hp > 0:
 		_temp_decay_accum += delta
@@ -674,6 +686,7 @@ func _start_reload() -> void:
 		return
 	reloading = true
 	reload_timer = weapon.reload_time
+	_reload_total = reload_timer
 	AudioManager.play_sfx(&"reload")
 	EventBus.ammo_changed.emit(int(state["mag"]), int(state["reserve"]))
 

@@ -21,6 +21,19 @@ extends Resource
 # ------------------------------------------------------------------ combat ----
 @export var max_hp: int = 100
 @export var speed: float = 220.0
+## Compatibility aliases used by the PlayerControllerV2 adapter contract.
+## Existing HUD code keeps reading max_hp / speed; new integration code may use
+## the clearer names without touching legacy call sites.
+var max_health: int:
+	get:
+		return max_hp
+	set(value):
+		max_hp = value
+var move_speed: float:
+	get:
+		return speed
+	set(value):
+		speed = value
 @export var stealth_speed_multiplier: float = 0.6 # 潜行移速倍率（林远 = 1.0）
 @export var melee_damage: float = 40.0
 @export var starting_weapon: PackedScene = null
@@ -31,6 +44,9 @@ extends Resource
 @export var passive_name: String = ""
 @export var passive_desc: String = ""
 @export var passive_cooldown: float = 30.0
+## Actual rework passive used by PlayerControllerV2. Kept separate so the
+## narrative-facing `passive_ability_id` can stay compatible with legacy UI.
+@export var rework_passive_id: StringName = &""
 
 # -------------------------------------------------------------------- gear ----
 @export var skill_id: StringName = &"assault_rush"
@@ -44,6 +60,9 @@ extends Resource
 # ---------------------------------------------------------------- metadata ----
 @export var unlock_score: int = 0
 @export var portrait: String = "assault"
+## Optional preview texture produced by the rework renderer/adapter. Legacy
+## screens ignore it; new integration code can show the code-drawn portrait.
+@export var portrait_texture: Texture2D = null
 @export var visual_base: String = "" # 复用哪套像素动画（不重画素材）
 @export var palette_tint: Color = Color.WHITE # 调色板偏移
 @export var accent: Color = Color(0.55, 0.78, 0.45)

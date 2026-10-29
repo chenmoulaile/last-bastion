@@ -47,6 +47,11 @@ var _boss_tracked: bool = false
 var _gm_hitstop: Callable = Callable()
 var _hitstop_taken: bool = false
 
+## 信号驱动注册的 HealthComponent 实例（instance_id -> component）。
+var _health_components: Dictionary = {}
+## 信号驱动启用后，轮询默认关闭；仅作为无信号场景的兜底。
+var _poll_enabled: bool = false
+
 var _perf_accum_usec: int = 0
 var _perf_frames: int = 0
 var _perf_max_usec: int = 0
@@ -63,6 +68,14 @@ func _ready() -> void:
 func _exit_tree() -> void:
 	_release_hitstop()
 	_disconnect_bus()
+	# 清理所有注册的 HealthComponent 信号连接。
+	for key in _health_components.keys():
+		var id := int(key)
+		var comp: Node = _health_components.get(key, null)
+		if comp != null and is_instance_valid(comp):
+			if comp.is_connected("damaged", _on_health_damaged):
+				comp.damaged.disconnect(_on_health_damaged)
+	_health_components.clear()
 
 
 func _process(_delta: float) -> void:
@@ -199,6 +212,59 @@ func _disconnect_bus() -> void:
 		EventBus.return_to_menu_requested.disconnect(_on_return_to_menu)
 	if GameFeelConfig.config_changed.is_connected(_on_config_changed):
 		GameFeelConfig.config_changed.disconnect(_on_config_changed)
+
+
+## 注册 HealthComponent：订阅其 damaged 信号，实现信号驱动的伤害反馈。
+func register_health_component(component: Node) -> void:
+	if not (component is HealthComponent):
+		return
+	var id := component.get_instance_id()
+	if _health_components.has(id):
+		return
+	_health_components[id] = component
+	component.damaged.connect(_on_health_damaged)
+
+
+## 注销 HealthComponent：取消订阅。
+func unregister_health_component(component: Node) -> void:
+	if not (component is HealthComponent):
+		return
+	var id := component.get_instance_id()
+	if _health_components.has(id):
+		if component.is_connected("damaged", _on_health_damaged):
+			component.damaged.disconnect(_on_health_damaged)
+		_health_components.erase(id)
+
+
+## HealthComponent.damaged 信号处理器：每命中一次触发一次独立反馈。
+func _on_health_damaged(amount: float, source: Node, hit_position: Vector2, is_critical: bool) -> void:
+	if not GameFeelConfig.enabled:
+		return
+	if source == null:
+		return
+	var target := source.get_parent() if source != null else null
+	if target == null or not is_instance_valid(target):
+		return
+	var body := target as Node2D
+	if body == null:
+		return
+	var player := _get_player()
+	if player == null:
+		return
+	var damage_type := StringName(target.get("last_damage_type"))
+	var crit := is_critical or damage_type == &"execution" or damage_type == &"headshot"
+	var human := target.is_in_group("faction_units")
+	var armored := _is_armored(target, human)
+	var kind := _particle_kind(target, human, armored)
+	var world_position := hit_position
+	if world_position == Vector2.ZERO:
+		world_position = body.global_position + Vector2(0, -15)
+	var direction := Vector2(signf(body.global_position.x - player.global_position.x), -0.12)
+	if absf(direction.x) < 0.01:
+		direction.x = 1.0
+	direction = direction.normalized()
+	router.on_enemy_hit(body, int(amount), world_position, direction,
+		_current_weapon, crit, kind, armored, true)
 
 
 # ---------------------------------------------------------- hitstop takeover --
@@ -381,6 +447,9 @@ func _on_config_changed(key: StringName, _value: Variant) -> void:
 # ------------------------------------------------------------ health polling --
 func _poll(now: int) -> void:
 	if not GameFeelConfig.enabled:
+		return
+	# 信号驱动模式下轮询默认关闭，仅作为无信号场景的兜底。
+	if not _poll_enabled:
 		return
 	var player := _get_player()
 	if player == null:
@@ -643,6 +712,7 @@ func _reset_runtime() -> void:
 		kill_streak.reset()
 	RecoilController.reset()
 	_tracked.clear()
+	_health_components.clear()
 	_was_reloading = false
 	_crit_window_usec = 0
 	_last_legacy_hitstop_usec = 0

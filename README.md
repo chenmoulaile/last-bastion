@@ -382,6 +382,17 @@ macOS Universal 导出要求项目设置 `rendering/textures/vram_compression/im
 - [x] M8 音频与表现打磨
 - [x] M9 v1.0 发布（Windows / Linux / macOS / Web）
 - [x] M10 叙事重构：四名幸存者、档案密级、四派系调度、漫画后处理、双结局
+- [x] M11 主流程切换：PlayerControllerV2 接入、InputBuffer 换弹取消、HealthComponent 信号驱动反馈、ItemComponent 道具代理、泄漏审计
+
+---
+
+### M11 主流程切换与反馈链路（新增）
+
+- **PlayerControllerV2**：关卡中玩家实际操作节点已切换为 `PlayerControllerV2`；旧 `player.tscn` 保留为 `disabled` 兼容节点。新增 `CharacterDataCompat` 适配器，将 `ReworkCharacterData` 映射为旧 `CharacterData` 结构，旧 HUD 无感读取血量/弹药/武器名/角色名。
+- **InputBuffer 换弹取消**：旧 `player.gd` 与新 `PlayerControllerV2` 均已接入 `InputBuffer`；换弹进度 ≥70% 时按射击可取消换弹并立即开火，顿帧期间输入在恢复后按顺序消费。
+- **HealthComponent 信号驱动伤害反馈**：`ZombieBase` 挂载 `HealthComponent`，每命中一次发射独立 `damaged` 信号；`GameFeelBridge` 订阅该信号替代 12ms `health` 轮询（轮询保留但默认 disabled）；同一帧多次命中各自触发跳字、击退与命中音效；爆头走专属分支（闪黄、顿帧 0.08s、脆响、血雾）。
+- **ItemComponent 道具代理**：投掷物、医疗包、药片逻辑提取为 `scripts/items/ItemComponent.gd`，由 `PlayerControllerV2` 委托调用，行为与旧控制器一致。
+- **泄漏审计**：`gamefeel/` 对象池、`FeedbackRouter`、`GameFeelBridge` 信号连接在 `_exit_tree()` 中显式 `disconnect`；`characters_rework/` 被动组件与 `SoldierBase` 策略组件信号连接已审计；Autoload 在 `_exit_tree()` 中做显式清理；headless 退出无 ObjectDB/resource 泄漏。
 
 ---
 

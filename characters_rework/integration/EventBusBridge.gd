@@ -69,6 +69,24 @@ func _register(actor: Node) -> void:
 			_bind_soldier(actor)
 
 
+## 从玩家注册表中移除（供 PlayerControllerV2._exit_tree 调用）。
+func _unregister_player(player: PlayerControllerV2) -> void:
+	if _players.has(player):
+		_players.erase(player)
+	if _bus != null and player.is_connected("character_state_changed", _on_player_state):
+		player.character_state_changed.disconnect(_on_player_state)
+	if _bus != null and player.is_connected("downed", _emit_if.bind(&"player_downed")):
+		player.downed.disconnect(_emit_if.bind(&"player_downed"))
+	if _bus != null and player.is_connected("died", _emit_if.bind(&"player_died")):
+		player.died.disconnect(_emit_if.bind(&"player_died"))
+	if _bus != null and player.is_connected("revived", _emit_if.bind(&"player_rescued")):
+		player.revived.disconnect(_emit_if.bind(&"player_rescued"))
+	if _bus != null and player.is_connected("damage_taken", _on_player_damaged):
+		player.damage_taken.disconnect(_on_player_damaged)
+	if _bus != null and player.is_connected("passive_triggered", _on_passive_triggered):
+		player.passive_triggered.disconnect(_on_passive_triggered)
+
+
 ## ------------------------------------------------------------ 玩家转发 ----
 
 func _bind_player(player: PlayerControllerV2) -> void:

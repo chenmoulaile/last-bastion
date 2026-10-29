@@ -175,3 +175,44 @@ Godot --headless --path . --quit-after 600 res://characters_rework/integration/s
 3. 士兵寻路为水平槽位跟随 + 跳跃脱困，不含导航网格，复杂地形需手工路径或外部导航。
 4. `CharacterSelectV2` 的离屏预览依赖真实渲染帧；headless 下回退为色块占位。
 5. 重构系统尚未接入关卡叙事触发器、档案解锁与联机同步，需在后续集成阶段完成。
+
+
+## 10. 主流程切换记录（M11）
+
+### 10.1 替换的节点
+
+| 位置 | 旧节点 | 新节点 | 处理方式 |
+|------|--------|--------|----------|
+| `res://scripts/levels/level_runner.gd` `_spawn_player()` | `res://scenes/actors/player.tscn` | `res://characters_rework/playable/PlayerControllerV2.gd` | 新节点实例化，旧场景文件保留不删除 |
+| 关卡运行时 | 旧 `player` 节点 | 新 `player` + `Player_Legacy_Disabled` (`PROCESS_MODE_DISABLED`) | 旧节点保留为 disabled，不参与逻辑 |
+
+### 10.2 适配器字段映射
+
+`PlayerControllerV2.character` 返回 `CharacterDataCompat extends CharacterData`，映射字段：
+
+| ReworkCharacterData 字段 | CharacterDataCompat 字段 | 说明 |
+|-------------------------|------------------------|------|
+| `id` | `id` | 角色 ID |
+| `display_name` | `display_name` | 显示名称 |
+| `max_hp` | `max_hp` / `max_health` | 最大生命 |
+| `speed` | `speed` / `move_speed` | 移动速度 |
+| `passive_ability_id` | `passive_ability_id` | 被动技能 ID |
+| `palette["accent"]` | `accent` | 职业强调色 |
+| `visual_profile` | `visual_base` | 绘制档案 |
+| `id` | `portrait` | 肖像键（回退为 id） |
+
+### 10.3 回滚步骤
+
+1. 将 `res://scripts/levels/level_runner.gd` 中 `PLAYER_SCENE` 改回 `preload("res://scenes/actors/player.tscn")`。
+2. 删除 `_spawn_player()` 中的 `Player_Legacy_Disabled` 生成逻辑。
+3. 删除 `res://scripts/data/character_data_compat.gd`。
+4. 删除 `res://scripts/items/ItemComponent.gd`。
+5. 恢复 `gamefeel/integration/GameFeelBridge.gd` 中的 `_poll_enabled` 为 `true`（或保留 `false`，仅影响反馈链路）。
+6. 不删除任何旧文件，仅恢复单行改动即可。
+
+### 10.4 已知限制
+
+1. `CharacterDataCompat` 是运行时生成的包装器，不从 `.tres` 加载；如需编辑器内编辑角色属性，仍使用旧 `resources/data/characters/*.tres`。
+2. `InputBuffer` 换弹取消依赖 `InputBuffer` Autoload 已注册（project.godot 已配置）。
+3. HealthComponent 信号驱动模式下，`GameFeelBridge._poll_enabled` 默认 `false`；如需回退到轮询，设为 `true`。
+4. `ItemComponent` 仅处理投掷/医疗包/药片，不处理武器切换或技能。

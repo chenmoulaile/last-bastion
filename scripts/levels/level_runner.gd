@@ -4,7 +4,9 @@ extends Node2D
 ## parallax, props, doors, supplies, triggers, AI director spawns, extraction,
 ## scoring and the result payload.
 
-const PLAYER_SCENE := preload("res://scenes/actors/player.tscn")
+const PLAYER_SCENE := preload("res://characters_rework/playable/PlayerControllerV2.gd")
+const PLAYER_SCENE_LEGACY := preload("res://scenes/actors/player.tscn")
+const REWORK_CHAR_DIR := "res://characters_rework/data/playable"
 const HUD_SCENE := preload("res://scenes/ui/hud.tscn")
 const WINDOW_RAPPEL := preload("res://scripts/interactables/window_rappel.gd")
 const MAX_COMMONS := 120
@@ -512,8 +514,27 @@ func _spawn_player() -> void:
 	var p := PLAYER_SCENE.instantiate()
 	p.level = self
 	p.position = Vector2(220, get_ground_y(220))
+	# 解析选中的角色数据：优先用 GameManager.selected_character，回退到关卡默认武器对应的角色。
+	var char_id := GameManager.selected_character
+	var rework_data: ReworkCharacterData = null
+	if char_id != &"":
+		var path := "%s/%s.tres" % [REWORK_CHAR_DIR, String(char_id)]
+		if ResourceLoader.exists(path):
+			rework_data = load(path) as ReworkCharacterData
+	if rework_data == null:
+		var fallback_id := &"assault"
+		var fb_path := "%s/%s.tres" % [REWORK_CHAR_DIR, String(fallback_id)]
+		if ResourceLoader.exists(fb_path):
+			rework_data = load(fb_path) as ReworkCharacterData
+	p.character_data = rework_data
 	actors.add_child(p)
 	player = p
+	# 旧玩家节点保留为 disabled（兼容回滚），不参与任何逻辑。
+	var legacy := PLAYER_SCENE_LEGACY.instantiate()
+	legacy.name = "Player_Legacy_Disabled"
+	legacy.process_mode = Node.PROCESS_MODE_DISABLED
+	legacy.visible = false
+	actors.add_child(legacy)
 	for wid in data.player_weapons:
 		var id := StringName(wid)
 		if id != &"":
