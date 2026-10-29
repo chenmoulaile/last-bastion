@@ -1,4 +1,4 @@
-extends Node
+﻿extends Node
 ## GameFeelBridge - the only integration point between the existing game and
 ## the presentation layer.
 ##
@@ -14,7 +14,6 @@ extends Node
 ##
 ## Autoload: GameFeelBridge (last gamefeel autoload).
 
-const POLL_INTERVAL_USEC := 12_000
 const TRACK_RETRY_USEC := 500_000
 const BOSS_FALLBACK_OFFSET := Vector2(0, -30)
 const _HC_SCRIPT := preload("res://components/HealthComponent.gd")
@@ -35,23 +34,19 @@ var _world: Node2D = null
 var _player: Node2D = null
 var _player_retry_usec: int = 0
 var _tracked: Dictionary = {}
-var _last_poll_usec: int = 0
 var _last_shot_usec: int = 0
 var _last_shot_dir: Vector2 = Vector2.RIGHT
 var _current_weapon: StringName = &"m9"
 var _crit_window_usec: int = 0
 var _last_legacy_hitstop_usec: int = 0
 var _suppress_legacy_shake_until: int = 0
-var _was_reloading: bool = false
 var _boss_pos: Vector2 = Vector2.ZERO
 var _boss_tracked: bool = false
 var _gm_hitstop: Callable = Callable()
 var _hitstop_taken: bool = false
 
-## 信号驱动注册的 HealthComponent 实例（instance_id -> component）。
+## 淇″彿椹卞姩娉ㄥ唽鐨?HealthComponent 瀹炰緥锛坕nstance_id -> component锛夈€?
 var _health_components: Dictionary = {}
-## 信号驱动启用后，轮询默认关闭；仅作为无信号场景的兜底。
-var _poll_enabled: bool = false
 
 var _perf_accum_usec: int = 0
 var _perf_frames: int = 0
@@ -69,7 +64,7 @@ func _ready() -> void:
 func _exit_tree() -> void:
 	_release_hitstop()
 	_disconnect_bus()
-	# 清理所有注册的 HealthComponent 信号连接。
+	# 娓呯悊鎵€鏈夋敞鍐岀殑 HealthComponent 淇″彿杩炴帴銆?
 	for key in _health_components.keys():
 		var id := int(key)
 		var comp: Node = _health_components.get(key, null)
@@ -82,16 +77,6 @@ func _exit_tree() -> void:
 func _process(_delta: float) -> void:
 	if not GameFeelConfig.enabled:
 		return
-	var now := Time.get_ticks_usec()
-	if now - _last_poll_usec < POLL_INTERVAL_USEC:
-		return
-	_last_poll_usec = now
-	var started := Time.get_ticks_usec()
-	_poll(now)
-	var elapsed := Time.get_ticks_usec() - started
-	_perf_accum_usec += elapsed
-	_perf_frames += 1
-	_perf_max_usec = maxi(_perf_max_usec, elapsed)
 
 
 # ------------------------------------------------------------------ setup ----
@@ -215,7 +200,7 @@ func _disconnect_bus() -> void:
 		GameFeelConfig.config_changed.disconnect(_on_config_changed)
 
 
-## 注册 HealthComponent：订阅其 damaged 信号，实现信号驱动的伤害反馈。
+## 娉ㄥ唽 HealthComponent锛氳闃呭叾 damaged 淇″彿锛屽疄鐜颁俊鍙烽┍鍔ㄧ殑浼ゅ鍙嶉銆?
 func register_health_component(component: Node) -> void:
 	if component.get_script() != _HC_SCRIPT:
 		return
@@ -226,7 +211,7 @@ func register_health_component(component: Node) -> void:
 	component.damaged.connect(_on_health_damaged)
 
 
-## 注销 HealthComponent：取消订阅。
+## 娉ㄩ攢 HealthComponent锛氬彇娑堣闃呫€?
 func unregister_health_component(component: Node) -> void:
 	if component.get_script() != _HC_SCRIPT:
 		return
@@ -237,7 +222,7 @@ func unregister_health_component(component: Node) -> void:
 		_health_components.erase(id)
 
 
-## HealthComponent.damaged 信号处理器：每命中一次触发一次独立反馈。
+## HealthComponent.damaged 淇″彿澶勭悊鍣細姣忓懡涓竴娆¤Е鍙戜竴娆＄嫭绔嬪弽棣堛€?
 func _on_health_damaged(amount: float, source: Node, hit_position: Vector2, is_critical: bool) -> void:
 	if not GameFeelConfig.enabled:
 		return
@@ -446,73 +431,6 @@ func _on_config_changed(key: StringName, _value: Variant) -> void:
 
 
 # ------------------------------------------------------------ health polling --
-func _poll(now: int) -> void:
-	if not GameFeelConfig.enabled:
-		return
-	# 信号驱动模式下轮询默认关闭，仅作为无信号场景的兜底。
-	if not _poll_enabled:
-		return
-	var player := _get_player()
-	if player == null:
-		return
-	_poll_reload(player)
-	var visible: Array = get_tree().get_nodes_in_group("zombies")
-	for raw_node in visible:
-		if raw_node == null or not is_instance_valid(raw_node) or not (raw_node is Node):
-			continue
-		var node: Node = raw_node as Node
-		var id: int = node.get_instance_id()
-		if not _tracked.has(id):
-			_tracked[id] = _new_entry(node)
-	var keys: Array = _tracked.keys()
-	for raw_key in keys:
-		var key := int(raw_key)
-		if not _tracked.has(key):
-			continue
-		var entry: Dictionary = _tracked[key]
-		var node: Node = entry.get("node", null)
-		if node == null or not is_instance_valid(node):
-			_tracked.erase(key)
-			continue
-		if bool(node.get("dead")):
-			if not bool(entry.get("death_fx", false)):
-				_handle_death(node, entry, player, now)
-				entry["death_fx"] = true
-			entry["health"] = int(node.get("health"))
-			continue
-		var health := int(node.get("health"))
-		var previous := int(entry.get("health", health))
-		if health < previous:
-			var damage := previous - health
-			var source := StringName(node.get("last_source"))
-			if source == &"player" or source == &"barrel":
-				var body := node as Node2D
-				if body == null:
-					continue
-				var damage_type := StringName(node.get("last_damage_type"))
-				var crit := damage_type == &"execution" or now <= _crit_window_usec
-				var apply_hitstop := not (crit and now - _last_legacy_hitstop_usec <= 220_000)
-				var human := node.is_in_group("faction_units")
-				var armored := _is_armored(node, human)
-				var kind := _particle_kind(node, human, armored)
-				var world_position: Vector2 = body.global_position + Vector2(0, -22 if crit else -15)
-				var direction := Vector2(signf(body.global_position.x - player.global_position.x), -0.12)
-				if absf(direction.x) < 0.01:
-					direction.x = 1.0
-				direction = direction.normalized()
-				router.on_enemy_hit(node, damage, world_position, direction,
-					_current_weapon, crit, kind, armored, apply_hitstop)
-				if health <= 0:
-					_handle_death(node, entry, player, now)
-					entry["death_fx"] = true
-			entry["health"] = health
-		elif health > previous:
-			entry["health"] = health
-		if health <= 0 and not bool(entry.get("death_fx", false)):
-			_handle_death(node, entry, player, now)
-			entry["death_fx"] = true
-
-
 func _new_entry(node: Node) -> Dictionary:
 	return {
 		"node": node,
@@ -546,27 +464,6 @@ func _handle_death(node: Node, entry: Dictionary, player: Node2D, now: int) -> v
 	entry["health"] = health
 
 
-func _poll_reload(player: Node) -> void:
-	var reloading := bool(player.get("reloading"))
-	if reloading and not _was_reloading:
-		_was_reloading = true
-		var weapon_id := _resolve_weapon(player)
-		var weapon: WeaponData = GameManager.get_weapon(weapon_id)
-		var reload_time := 1.0
-		if weapon != null:
-			reload_time = weapon.reload_time
-		var empty := false
-		var ammo_state: Variant = player.get("ammo")
-		if ammo_state is Dictionary:
-			var state: Dictionary = (ammo_state as Dictionary).get(weapon_id, {"mag": 1})
-			empty = int(state.get("mag", 1)) <= 0
-		router.on_reload_started(weapon_id, reload_time, empty)
-	elif not reloading and _was_reloading:
-		_was_reloading = false
-		router.on_reload_finished(_resolve_weapon(player))
-
-
-# --------------------------------------------------------------- helpers -----
 func _get_player() -> Node2D:
 	if _player != null and is_instance_valid(_player):
 		return _player
@@ -714,7 +611,6 @@ func _reset_runtime() -> void:
 	RecoilController.reset()
 	_tracked.clear()
 	_health_components.clear()
-	_was_reloading = false
 	_crit_window_usec = 0
 	_last_legacy_hitstop_usec = 0
 	_last_shot_usec = 0

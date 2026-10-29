@@ -31,7 +31,7 @@ const UNLOCK_GRENADE_4 := 800000
 const UNLOCK_TITLE := 1200000
 
 var state: State = State.BOOT
-var current_level: LevelData = null
+var current_level: Resource = null
 var current_level_id: StringName = &"l01"
 var current_mode: StringName = &"SQUAD"
 var current_difficulty: StringName = &"NORMAL"
@@ -106,27 +106,27 @@ func _load_resources(dir_path: String) -> Dictionary:
 	return result
 
 
-func get_level(id: StringName) -> LevelData:
+func get_level(id: StringName) -> Resource:
 	return levels.get(id, null)
 
 
-func get_weapon(id: StringName) -> WeaponData:
+func get_weapon(id: StringName) -> Resource:
 	return weapons.get(id, null)
 
 
-func get_character(id: StringName) -> CharacterData:
+func get_character(id: StringName) -> Resource:
 	return characters.get(id, null)
 
 
-func get_zombie(id: StringName) -> ZombieData:
+func get_zombie(id: StringName) -> Resource:
 	return zombies.get(id, null)
 
 
-func get_levels() -> Array[LevelData]:
-	var out: Array[LevelData] = []
+func get_levels() -> Array[Resource]:
+	var out: Array[Resource] = []
 	for level in levels.values():
 		out.append(level)
-	out.sort_custom(func(a: LevelData, b: LevelData) -> bool: return String(a.id) < String(b.id))
+	out.sort_custom(func(a: Resource, b: Resource) -> bool: return String(a.id) < String(b.id))
 	return out
 
 
@@ -156,22 +156,22 @@ func reset_currency() -> void:
 	EventBus.currency_changed.emit(0)
 
 
-func get_playable_characters() -> Array[CharacterData]:
-	var out: Array[CharacterData] = []
+func get_playable_characters() -> Array[Resource]:
+	var out: Array[Resource] = []
 	for character in characters.values():
 		if character.soldier_role == &"" and not character.is_archive_survivor():
 			out.append(character)
-	out.sort_custom(func(a: CharacterData, b: CharacterData) -> bool:
+	out.sort_custom(func(a: Resource, b: Resource) -> bool:
 		return a.unlock_score < b.unlock_score)
 	return out
 
 
 ## The four named survivors of the 2019 RUST FREQUENCY campaign.
-func get_archive_survivors() -> Array[CharacterData]:
+func get_archive_survivors() -> Array[Resource]:
 	var order := ["lin_yuan", "marcus", "lucia", "victor"]
-	var out: Array[CharacterData] = []
+	var out: Array[Resource] = []
 	for id in order:
-		var character: CharacterData = characters.get(StringName(id), null)
+		var character: Resource = characters.get(StringName(id), null)
 		if character != null:
 			out.append(character)
 	return out
@@ -179,8 +179,8 @@ func get_archive_survivors() -> Array[CharacterData]:
 
 ## Archive survivors and legacy archetypes live in the same data directory; this
 ## keeps squad/command lookups from accidentally pulling narrative characters in.
-func get_survivor(id: StringName) -> CharacterData:
-	var character: CharacterData = get_character(id)
+func get_survivor(id: StringName) -> Resource:
+	var character: Resource = get_character(id)
 	if character == null or not character.is_archive_survivor():
 		return null
 	return character
@@ -232,12 +232,12 @@ func has_deep_archive() -> bool:
 	return ArchiveManager != null and ArchiveManager.highest_security_level_collected() >= 4
 
 
-func get_soldier_roles() -> Array[CharacterData]:
-	var out: Array[CharacterData] = []
+func get_soldier_roles() -> Array[Resource]:
+	var out: Array[Resource] = []
 	for character in characters.values():
 		if character.soldier_role != &"":
 			out.append(character)
-	out.sort_custom(func(a: CharacterData, b: CharacterData) -> bool:
+	out.sort_custom(func(a: Resource, b: Resource) -> bool:
 		return String(a.id) < String(b.id))
 	return out
 
@@ -245,7 +245,7 @@ func get_soldier_roles() -> Array[CharacterData]:
 # ------------------------------------------------------------------ flow ----
 func start_level(level_id: StringName, mode: StringName = &"", difficulty: StringName = &"",
 		character_id: StringName = &"", squad_ids: Array[StringName] = []) -> void:
-	var level: LevelData = get_level(level_id)
+	var level: Resource = get_level(level_id)
 	if level == null:
 		push_error("Unknown level: " + String(level_id))
 		return
@@ -269,7 +269,7 @@ func start_level(level_id: StringName, mode: StringName = &"", difficulty: Strin
 	EventBus.start_level_requested.emit()
 
 
-func default_mode_for(level: LevelData) -> StringName:
+func default_mode_for(level: Resource) -> StringName:
 	if level.default_mode == &"COMMAND":
 		return &"COMMAND"
 	return &"SQUAD"
@@ -292,7 +292,7 @@ func _auto_squad() -> Array[StringName]:
 	return out
 
 
-func _auto_soldiers(level: LevelData) -> Array[StringName]:
+func _auto_soldiers(level: Resource) -> Array[StringName]:
 	var roles: Array[StringName] = []
 	for role in level.commander_squad:
 		roles.append(StringName(role))
@@ -458,7 +458,7 @@ func grenade_capacity() -> int:
 
 
 func is_level_unlocked(id: StringName) -> bool:
-	var level: LevelData = get_level(id)
+	var level: Resource = get_level(id)
 	if level == null:
 		return false
 	if level.chapter <= 1:

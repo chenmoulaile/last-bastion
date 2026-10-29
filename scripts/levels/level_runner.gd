@@ -5,7 +5,6 @@ extends Node2D
 ## scoring and the result payload.
 
 const PLAYER_SCENE := preload("res://characters_rework/playable/PlayerControllerV2.gd")
-const PLAYER_SCENE_LEGACY := preload("res://scenes/actors/player.tscn")
 const ZOMBIE_BASE_SCRIPT := preload("res://scripts/zombies/zombie_base.gd")
 const REWORK_CHAR_DIR := "res://characters_rework/data/playable"
 const HUD_SCENE := preload("res://scenes/ui/hud.tscn")
@@ -615,12 +614,6 @@ func _spawn_player() -> void:
 	p.character_data = rework_data
 	actors.add_child(p)
 	player = p
-	# 旧玩家节点保留为 disabled（兼容回滚），不参与任何逻辑。
-	var legacy := PLAYER_SCENE_LEGACY.instantiate()
-	legacy.name = "Player_Legacy_Disabled"
-	legacy.process_mode = Node.PROCESS_MODE_DISABLED
-	legacy.visible = false
-	actors.add_child(legacy)
 	for wid in data.player_weapons:
 		var id := StringName(wid)
 		if id != &"":
@@ -628,6 +621,33 @@ func _spawn_player() -> void:
 	# Tutorial loadout: one throwable of each type, as the design doc specifies.
 	if player.get("throwables") is Dictionary:
 		var th: Dictionary = player.get("throwables")
+		th["grenade"] = 1
+		th["molotov"] = 1
+		th["bile"] = 1
+
+
+func spawn_network_player(peer_id: int, character_id: StringName, x: float, y: float) -> void:
+	var p: Node2D = PlayerControllerV2.new()
+	p.level = self
+	p.auto_camera = true
+	p.position = Vector2(x, y)
+	var path := "%s/%s.tres" % [REWORK_CHAR_DIR, String(character_id)]
+	var rework_data: ReworkCharacterData = null
+	if ResourceLoader.exists(path):
+		rework_data = load(path) as ReworkCharacterData
+	if rework_data == null:
+		var fb_path := "%s/%s.tres" % [REWORK_CHAR_DIR, "assault"]
+		if ResourceLoader.exists(fb_path):
+			rework_data = load(fb_path) as ReworkCharacterData
+	p.character_data = rework_data
+	actors.add_child(p)
+	p.name = "Player_" + str(peer_id)
+	for wid in data.player_weapons:
+		var id := StringName(wid)
+		if id != &"":
+			p.give_weapon(id)
+	if p.get("throwables") is Dictionary:
+		var th: Dictionary = p.get("throwables")
 		th["grenade"] = 1
 		th["molotov"] = 1
 		th["bile"] = 1
@@ -1458,7 +1478,7 @@ func _register_boss(z: Node, kind: StringName) -> void:
 		EventBus.level_event.emit("巢穴母体 出现")
 
 
-func on_zombie_died(zombie: Node, source: StringName, is_head: bool) -> void:
+func on_zombie_died(zombie: Node, source: StringName, is_head: bool, killer_peer_id: int = 1) -> void:
 	if zombie == null or not is_instance_valid(zombie):
 		return
 	var zd: ZombieData = zombie.get_data()
@@ -1467,6 +1487,9 @@ func on_zombie_died(zombie: Node, source: StringName, is_head: bool) -> void:
 	_kills += 1
 	if is_head:
 		_headshots += 1
+	# 多人对局：记录击杀归属。
+	if killer_peer_id != 1:
+		GameManager.record_player_kill(killer_peer_id, is_head, zd.is_special)
 	_combo += 1
 	_combo_timer = 4.0
 	_max_combo = maxi(_max_combo, _combo)

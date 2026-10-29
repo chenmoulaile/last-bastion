@@ -142,6 +142,13 @@ func rpc_player_downed(peer_id: int) -> void:
 
 
 @rpc("any_peer", "reliable")
+func rpc_player_damage(peer_id: int, amount: int) -> void:
+	var player_node := _get_player_node(peer_id)
+	if player_node != null:
+		player_node.call_deferred("net_take_damage", amount)
+
+
+@rpc("any_peer", "reliable")
 func rpc_player_revived(peer_id: int) -> void:
 	var player_node := _get_player_node(peer_id)
 	if player_node != null:
@@ -206,7 +213,13 @@ func _get_zombie_node(zombie_id: int) -> Node:
 
 
 func _var_spawn_player(peer_id: int, character_id: StringName, x: float, y: float) -> void:
-	pass
+	var root := get_tree().get_current_scene()
+	if root == null:
+		return
+	var level := root.get_node_or_null("LevelRunner")
+	if level == null or not level.has_method("spawn_network_player"):
+		return
+	level.call_deferred("spawn_network_player", peer_id, character_id, x, y)
 
 
 func _var_spawn_dismember_effect(zombie_id: int, pos_x: float, pos_y: float, dir_x: float, dir_y: float, damage_type: StringName) -> void:

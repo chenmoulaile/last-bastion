@@ -17,9 +17,10 @@ func _build() -> void:
 	add_background("title_bg", 0.62)
 	var accent := UIKit.RED if _failed else UIKit.AMBER
 	var kicker := "MISSION FAILED" if _failed else "MISSION COMPLETE"
-	add_header(kicker, String(_result.get("level_title", "任务结算")), accent)
+	add_header(kicker, str(_result.get("level_title", "任务结算")), accent)
 	_build_rank_panel()
 	_build_stats_panel()
+	_build_multiplayer_stats_panel()
 	_build_bottom()
 	add_footer("检查点记录会保留 · 失败不会扣除总分 · 重新部署后 AI Director 会重新计算节奏")
 
@@ -33,14 +34,14 @@ func _build_rank_panel() -> void:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	panel.add_child(label)
 
-	var rank := String(_result.get("rank", "F"))
+	var rank := str(_result.get("rank", "F"))
 	if _failed:
 		var fail := UIKit.title("FAILED", 30, UIKit.RED)
 		fail.position = Vector2(0, 26)
 		fail.size = Vector2(200, 38)
 		fail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		panel.add_child(fail)
-		var reason := UIKit.label(String(_result.get("reason", "小队全灭")), 9, UIKit.MUTED)
+		var reason := UIKit.label(str(_result.get("reason", "小队全灭")), 9, UIKit.MUTED)
 		reason.position = Vector2(12, 68)
 		reason.size = Vector2(176, 24)
 		reason.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -88,7 +89,7 @@ func _build_rank_panel() -> void:
 	mode.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	panel.add_child(mode)
 
-	var id_label := UIKit.label(String(_result.get("level_id", "")).to_upper(), 7, UIKit.DIM, UIKit.font_latin())
+	var id_label := UIKit.label(str(_result.get("level_id", "")).to_upper(), 7, UIKit.DIM, UIKit.font_latin())
 	id_label.position = Vector2(0, 204)
 	id_label.size = Vector2(200, 8)
 	id_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -152,7 +153,7 @@ func _build_stats_panel() -> void:
 		panel.add_child(none)
 	else:
 		for i in mini(new_achievements.size(), 5):
-			var id := String(new_achievements[i])
+			var id := str(new_achievements[i])
 			var icon := UIKit.icon_rect(_achievement_icon(id), 16.0)
 			icon.position = Vector2(8 + i * 72, 207)
 			panel.add_child(icon)
@@ -193,6 +194,45 @@ func _build_bottom() -> void:
 	next.grab_focus()
 
 
+func _build_multiplayer_stats_panel() -> void:
+	var net := get_node_or_null("/root/NetworkManager")
+	if net == null or not bool(net.call("is_multiplayer_active")):
+		return
+	var stats := GameManager.get_all_player_stats()
+	if stats.is_empty():
+		return
+	var panel := add_panel(Vector2(24, 350), Vector2(592, 90), UIKit.PANEL, UIKit.LINE)
+	var head := UIKit.label("MULTIPLAYER  个人战绩", 7, UIKit.AMBER, UIKit.font_latin())
+	head.position = Vector2(8, 5)
+	head.size = Vector2(576, 8)
+	panel.add_child(head)
+	var cols := ["击杀", "爆头", "特感", "倒地", "救助"]
+	var col_w := 576.0 / float(cols.size())
+	for i in cols.size():
+		var c := UIKit.label(cols[i], 7, UIKit.DIM, UIKit.font_latin())
+		c.position = Vector2(8 + i * col_w, 18)
+		c.size = Vector2(col_w - 8, 8)
+		c.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		panel.add_child(c)
+	var y := 30
+	var max_rows := mini(stats.size(), 4)
+	for i in max_rows:
+		var s := stats[i]
+		var name_label := UIKit.label("P" + str(int(s.get("peer_id", 1))), 9, UIKit.INK)
+		name_label.position = Vector2(8, y)
+		name_label.size = Vector2(40, 10)
+		panel.add_child(name_label)
+		var values := [int(s.get("kills", 0)), int(s.get("headshots", 0)),
+			int(s.get("specials", 0)), int(s.get("downs", 0)), int(s.get("rescues", 0))]
+		for j in 5:
+			var v := UIKit.label(str(values[j]), 10, UIKit.INK, UIKit.font_latin_bold())
+			v.position = Vector2(48 + j * col_w, y)
+			v.size = Vector2(col_w - 8, 10)
+			v.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			panel.add_child(v)
+		y += 14
+
+
 func _next_pressed() -> void:
 	if _is_last_level():
 		go(&"menu")
@@ -204,18 +244,18 @@ func _is_last_level() -> bool:
 	var levels := GameManager.get_levels()
 	if levels.is_empty():
 		return true
-	return String(levels[levels.size() - 1].id) == String(_result.get("level_id", ""))
+	return str(levels[levels.size() - 1].id) == str(_result.get("level_id", ""))
 
 
 func _achievement_name(id: String) -> String:
 	for row in SaveSystem.ACHIEVEMENTS:
-		if String(row.get("id", "")) == id:
-			return String(row.get("name", id))
+		if str(row.get("id", "")) == id:
+			return str(row.get("name", id))
 	return id
 
 
 func _achievement_icon(id: String) -> String:
 	for row in SaveSystem.ACHIEVEMENTS:
-		if String(row.get("id", "")) == id:
-			return String(row.get("icon", "ach_" + id))
+		if str(row.get("id", "")) == id:
+			return str(row.get("icon", "ach_" + id))
 	return "ach_" + id

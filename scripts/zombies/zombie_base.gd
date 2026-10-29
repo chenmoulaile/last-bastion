@@ -29,6 +29,7 @@ var _headshot_timer: float = 0.0
 var _crawling: bool = false
 var _crawl_speed: float = 55.0
 var _dismembered: bool = false
+var killer_peer_id: int = 1
 
 ## LOD (细节级别)：远处僵尸跳过复杂动画与碰撞更新，节省 CPU。
 var _lod_level: int = 0  # 0=全细节, 1=简化动画, 2=仅位置
@@ -698,6 +699,10 @@ func _dismember_limbs() -> void:
 			data.is_boss, data.is_special, true)
 
 
+func set_killer_peer_id(peer_id: int) -> void:
+	killer_peer_id = peer_id
+
+
 func _die(source: StringName, is_head: bool = false) -> void:
 	if dead:
 		return
@@ -722,9 +727,9 @@ func _die(source: StringName, is_head: bool = false) -> void:
 		var dir := Vector2(float(facing), 0.0)
 		_network.rpc_zombie_dismember(get_instance_id(), global_position.x, global_position.y, dir.x, dir.y, last_damage_type)
 	_on_death_effect()
-	died.emit(data.id, global_position, source)
+	died.emit(data.id, global_position, source, killer_peer_id)
 	if level:
-		level.on_zombie_died(self, source, is_head)
+		level.on_zombie_died(self, source, is_head, killer_peer_id)
 	await get_tree().create_timer(2.6, true, false, true).timeout
 	if is_instance_valid(self):
 		queue_free()

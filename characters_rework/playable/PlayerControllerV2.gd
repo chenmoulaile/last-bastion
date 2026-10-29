@@ -523,10 +523,15 @@ func _apply_hit(collider: Object, point: Vector2, dir: Vector2, damage: float,
 	if collider.has_method("apply_damage"):
 		if collider.has_method("is_headshot_point"):
 			is_head = bool(collider.is_headshot_point(point))
-	if is_head:
-		var hsm := _wfloat(current, "headshot_mult", 2.0)
-		amount = int(round(amount * hsm))
+		if is_head:
+			var hsm := _wfloat(current, "headshot_mult", 2.0)
+			amount = int(round(amount * hsm))
 		collider.apply_damage(amount, -dir, is_head, &"player", damage_type)
+		# 记录击杀归属：如果敌人由此击死，记录 killer_peer_id 供多人结算面板使用。
+		var zd_health := collider.get("health") if collider.has_method("get") else null
+		if collider.has_method("set_killer_peer_id") and _network != null:
+			var pid := int(_network.call("get_peer_id"))
+			collider.set_killer_peer_id(pid)
 	elif collider.has_method("hit"):
 		collider.hit(amount, &"player")
 	if _bus and is_head:
@@ -829,6 +834,12 @@ func take_damage(amount: int, source_dir: Vector2 = Vector2.ZERO,
 	if _bus:
 		_bus.player_hit.emit(int(round(dmg)))
 		_bus.damage_flash.emit()
+	# 网络同步：主机广播玩家受伤给所有客户端。
+	if _network != null and bool(_network.call("is_multiplayer_active")) \
+			and bool(_network.call("is_host")):
+		var pid := int(_network.call("get_peer_id"))
+		if pid != 1:
+			_network.call("rpc_player_damage", pid, int(round(dmg)))
 	if hp <= 0:
 		_go_down()
 	else:
@@ -902,6 +913,11 @@ func revive(_healer: Node) -> void:
 	if _bus:
 		_bus.player_rescued.emit()
 	_emit_state(&"revived")
+
+
+## 网络同步：客户端接收伤害并扣血。
+func net_take_damage(amount: int) -> void:
+	take_damage(amount, Vector2.ZERO, &"player", &"bullet")
 
 
 func heal(amount: int) -> void:
