@@ -64,6 +64,7 @@ var _screamer_scream_cd: float = 0.0
 
 var sprite: AnimatedSprite2D
 var collision: CollisionShape2D
+var _notifier: VisibleOnScreenNotifier2D = null
 var _base_tint: Color = Color.WHITE
 var _visual_prefix: String = ""
 var _outline: Sprite2D = null
@@ -134,6 +135,9 @@ func _build_body() -> void:
 	collision.shape = shape
 	collision.position = Vector2(0, -data.collision_size.y * 0.5)
 	add_child(collision)
+	_notifier = VisibleOnScreenNotifier2D.new()
+	_notifier.rect = Rect2(-400, -400, 800, 800)
+	add_child(_notifier)
 
 
 func _physics_process(delta: float) -> void:
@@ -232,8 +236,10 @@ func _physics_process(delta: float) -> void:
 		_despawn_fall()
 	if voice_timer <= 0.0:
 		voice_timer = randf_range(5.0, 11.0)
+		if _notifier != null and not _notifier.is_on_screen():
+			return
 		if randf() < 0.35:
-			AudioManager.play_sfx_2d(data.voice_id, global_position, 800.0, -12.0)
+			AudioLayerManager.play_spatial_sfx(data.voice_id, global_position, 800.0, -12.0)
 	_tick_outline(delta)
 	# Host 广播僵尸位置给客户端。
 	if _is_network_host and _network != null and _network.is_multiplayer_active():
@@ -543,7 +549,7 @@ func _attack_target() -> void:
 	if target != null and target.has_method("take_damage"):
 		var dir := (target.global_position - global_position).normalized()
 		target.take_damage(data.attack_damage, dir, &"zombie", &"melee")
-	AudioManager.play_sfx_2d(&"zombie_attack", global_position, 500.0, -8.0)
+	AudioLayerManager.play_spatial_sfx(&"zombie_attack", global_position, 500.0, -8.0)
 
 
 func _can_see_target() -> bool:
@@ -569,7 +575,7 @@ func _scream() -> void:
 	if scream_cd > 0.0:
 		return
 	scream_cd = 4.0
-	AudioManager.play_sfx_2d(&"zombie_scream", global_position, 900.0, -4.0)
+	AudioLayerManager.play_spatial_sfx(&"zombie_scream", global_position, 900.0, -4.0)
 	EventBus.zombie_scream.emit(global_position, 80.0)
 	if level:
 		level.alert_commons_near(global_position, 80.0)
@@ -718,7 +724,7 @@ func _die(source: StringName, is_head: bool = false) -> void:
 	remove_from_group("zombies")
 	Fx.blood(level.fx_layer if level else get_parent(), global_position + Vector2(0, -14), Vector2.UP, 1.4)
 	Fx.blood_decal(level.fx_layer if level else get_parent(), global_position + Vector2(0, -2))
-	AudioManager.play_sfx_2d(&"zombie_die", global_position, 700.0)
+	AudioLayerManager.play_spatial_sfx(&"zombie_die", global_position, 700.0)
 	# 断肢增强：霰弹枪、反坦克步枪、爆炸物、近战致死时触发程序化残肢。
 	if last_damage_type in [&"shotgun", &"explosive", &"melee"]:
 		_dismember_limbs()

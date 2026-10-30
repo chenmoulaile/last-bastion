@@ -41,8 +41,10 @@ var _timer_fill: ColorRect
 var _timer_mode: String = ""
 
 var _hp_fill: ColorRect
+var _hp_trail: ColorRect
 var _temp_fill: ColorRect
 var _hp_text: Label
+var _last_hp_ratio: float = 1.0
 var _player_name: Label
 var _status_text: Label
 var _downs_text: Label
@@ -485,6 +487,14 @@ func _build_player_panel() -> void:
 	back.size = Vector2(186, 7)
 	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(back)
+	_hp_trail = ColorRect.new()
+	_hp_trail.color = Color(1.0, 1.0, 1.0, 0.55)
+	_hp_trail.position = Vector2(40, 15)
+	_hp_trail.size = Vector2(186, 7)
+	_hp_trail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hp_trail.material = CanvasItemMaterial.new()
+	_hp_trail.material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	panel.add_child(_hp_trail)
 	_hp_fill = ColorRect.new()
 	_hp_fill.color = UIKit.GREEN
 	_hp_fill.position = Vector2(40, 15)
@@ -1322,6 +1332,21 @@ func _refresh_health(hp: int, temp_hp: int, max_hp: int) -> void:
 	if _hp_fill == null:
 		return
 	var ratio := clampf(float(hp) / float(maxi(1, max_hp)), 0.0, 1.0)
+	if _hp_trail != null:
+		var trail_ratio := clampf(_last_hp_ratio, ratio, 1.0)
+		_hp_trail.size.x = 186.0 * trail_ratio
+		_hp_trail.visible = trail_ratio > ratio
+		# Animate trail shrinking with a slight delay
+		_hp_trail.size.x = lerpf(_hp_trail.size.x, 186.0 * trail_ratio, 0.18)
+	if ratio < _last_hp_ratio:
+		# Jitter on damage
+		var jitter_amount := (1.0 - ratio) * 1.5
+		if ScreenShake != null:
+			ScreenShake.add_trauma(2.0)
+		_hp_fill.position.x = 40.0 + randf_range(-jitter_amount, jitter_amount)
+		var tween := create_tween()
+		tween.tween_property(_hp_fill, "position:x", 40.0, 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_last_hp_ratio = ratio
 	_hp_fill.size.x = 186.0 * ratio
 	_hp_fill.color = _hp_color(ratio)
 	_temp_fill.size = Vector2(minf(186.0 * clampf(float(temp_hp) / float(maxi(1, max_hp)), 0.0, 1.0), 186.0 * (1.0 - ratio)), 3)

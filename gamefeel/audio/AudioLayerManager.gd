@@ -12,6 +12,7 @@ const RATE := 22050
 const COMBAT_VOICES := 12
 const UI_VOICES := 6
 const AMBIENT_VOICES := 6
+const SPATIAL_DIR := "res://assets/audio/sfx/"
 
 const BUS_COMBAT := "SFX_Combat"
 const BUS_UI := "SFX_UI"
@@ -20,10 +21,13 @@ const BUS_AMBIENT := "SFX_Ambient"
 var _combat: Array[AudioStreamPlayer] = []
 var _ui: Array[AudioStreamPlayer] = []
 var _ambient: Array[AudioStreamPlayer] = []
+var _spatial: Array[AudioStreamPlayer2D] = []
+var _spatial_index: int = 0
 var _combat_index: int = 0
 var _ui_index: int = 0
 var _ambient_index: int = 0
 var _streams: Dictionary = {}
+var _spatial_cache: Dictionary = {}
 var _rng := RandomNumberGenerator.new()
 
 
@@ -86,6 +90,27 @@ func play_explosion_layer() -> void:
 		return
 	if _streams.has(&"boom"):
 		_play(_combat, _streams[&"boom"], PitchRandomizer.vary(0.92, 0.04), _scaled_db(-6.0))
+
+
+func play_spatial_sfx(id: StringName, pos: Vector2, max_dist: float = 900.0, volume_db: float = 0.0) -> void:
+	var stream := _pick_spatial(id)
+	if stream == null:
+		AudioManager.play_sfx_2d(id, pos, max_dist, volume_db)
+		return
+	if not _can_play():
+		AudioManager.play_sfx_2d(id, pos, max_dist, volume_db)
+		return
+	if _spatial.is_empty():
+		AudioManager.play_sfx_2d(id, pos, max_dist, volume_db)
+		return
+	var player: AudioStreamPlayer2D = _spatial[_spatial_index]
+	_spatial_index = (_spatial_index + 1) % _spatial.size()
+	player.stream = stream
+	player.global_position = pos
+	player.max_distance = max_dist
+	player.pitch_scale = randf_range(0.94, 1.06)
+	player.volume_db = _scaled_db(volume_db)
+	player.play()
 
 
 func play_reload_sequence(weapon_id: StringName, reload_time: float, empty: bool) -> void:
@@ -213,6 +238,8 @@ func _build_pool() -> void:
 		_ui.append(_make_player(BUS_UI))
 	for i in AMBIENT_VOICES:
 		_ambient.append(_make_player(BUS_AMBIENT))
+	for i in 8:
+		_spatial.append(_make_spatial_player(BUS_COMBAT))
 
 
 func _make_player(bus_name: String) -> AudioStreamPlayer:
@@ -221,6 +248,27 @@ func _make_player(bus_name: String) -> AudioStreamPlayer:
 	player.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(player)
 	return player
+
+
+func _make_spatial_player(bus_name: String) -> AudioStreamPlayer2D:
+	var player := AudioStreamPlayer2D.new()
+	player.bus = bus_name
+	player.process_mode = Node.PROCESS_MODE_PAUSABLE
+	player.attenuation = 1.0
+	player.unit_size = 160.0
+	add_child(player)
+	return player
+
+
+func _pick_spatial(id: StringName) -> AudioStream:
+	if _spatial_cache.has(id):
+		return _spatial_cache[id] as AudioStream
+	var path := SPATIAL_DIR + String(id) + ".ogg"
+	if ResourceLoader.exists(path):
+		var stream: AudioStream = ResourceLoader.load(path)
+		_spatial_cache[id] = stream
+		return stream
+	return null
 
 
 # ----------------------------------------------------------- sound synthesis --

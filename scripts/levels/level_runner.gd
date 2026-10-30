@@ -160,6 +160,7 @@ func _ready() -> void:
 	EventBus.safe_room_entered.emit(true)
 	_safe_room_timer = 2.0
 	AudioManager.play_ambience(StringName("rain" if data.rain else String(data.theme)))
+	AudioManager.set_ambience_reverb_for_theme(String(data.theme))
 	if data.tutorial_tips.size() > 0:
 		EventBus.level_event.emit(data.tutorial_tips[0])
 		_tips_shown = 1
@@ -1060,6 +1061,10 @@ func play_destroy_ending() -> void:
 	EventBus.objective_changed.emit("信号已终止")
 	AudioManager.play_sfx(&"explosion")
 	Fx.explosion(fx_layer, player.global_position + Vector2(0, -20), 4.0)
+	AudioLayerManager.play_explosion_layer()
+	AudioManager.duck_music(30.0, 0.8)
+	if PostProcess != null:
+		PostProcess.pulse_blood_distortion(0.8, 0.4)
 	EventBus.shake(6.0)
 	EventBus.gore_event.emit(1.4)
 	await get_tree().create_timer(1.0, true, false, true).timeout
@@ -1534,6 +1539,8 @@ func on_zombie_died(zombie: Node, source: StringName, is_head: bool, killer_peer
 			EventBus.boss_health_changed.emit(0, int(zd.max_hp))
 			DirectorSystem.set_boss_active(false)
 			AudioManager.set_tank_active(false)
+			if CinematicCamera != null and CinematicCamera.has_method("trigger_killcam"):
+				CinematicCamera.trigger_killcam(zombie, 0.8, 0.5)
 			_boss_node = null
 			if not _boss_nodes.is_empty():
 				for candidate in _boss_nodes:
@@ -1564,6 +1571,12 @@ func barrel_exploded(_barrel: Node, pos: Vector2, radius: float, damage: int) ->
 	Fx.explosion(fx_layer, pos, 1.5)
 	Fx.smoke(fx_layer, pos + Vector2(0, -10), 1.2)
 	AudioManager.play_sfx_2d(&"explosion", pos, 1200.0)
+	AudioManager.duck_music(24.0, 0.5)
+	AudioLayerManager.play_explosion_layer()
+	if PostProcess != null:
+		PostProcess.pulse_damage_vignette(0.45, 0.3)
+	if CinematicCamera != null and CinematicCamera.has_method("add_trauma_directional"):
+		CinematicCamera.add_trauma_directional(0.6, Vector2.UP)
 	EventBus.barrel_exploded.emit(pos)
 	EventBus.shake(5.0)
 	for z in get_zombies_near(pos, radius):
@@ -1586,6 +1599,12 @@ func explode_at(pos: Vector2, radius: float, damage: int, source: StringName, pl
 	Fx.explosion(fx_layer, pos, 1.3)
 	Fx.smoke(fx_layer, pos + Vector2(0, -8), 1.0)
 	AudioManager.play_sfx_2d(&"explosion", pos, 1200.0)
+	AudioManager.duck_music(22.0, 0.45)
+	AudioLayerManager.play_explosion_layer()
+	if PostProcess != null:
+		PostProcess.pulse_damage_vignette(0.4, 0.3)
+	if CinematicCamera != null and CinematicCamera.has_method("add_trauma_directional"):
+		CinematicCamera.add_trauma_directional(0.5, Vector2.UP)
 	EventBus.explosion.emit(pos, radius)
 	EventBus.shake(4.5)
 	for z in get_zombies_near(pos, radius):

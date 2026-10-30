@@ -615,6 +615,8 @@ func _fire_weapon(weapon: WeaponData) -> void:
 	Fx.shell(level.fx_layer, global_position + Vector2(facing * 4.0, -16.0), -facing)
 	AudioManager.play_sfx(weapon.id)
 	AudioManager.play_sfx(&"gunshot", 1.0, -8.0)
+	AudioLayerManager.play_shot_layer(weapon.id, SfxManifest.weapon_weight(weapon.id) > 0.65)
+	AudioManager.duck_music(20.0, 0.35) if weapon.id != &"m9" else AudioManager.duck_music(12.0, 0.25)
 	EventBus.gunshot.emit(global_position, 900.0)
 	EventBus.shake(0.8 if weapon.id != &"shotgun" else 1.6)
 	shoot_anim_timer = 0.16
@@ -688,6 +690,7 @@ func _start_reload() -> void:
 	reload_timer = weapon.reload_time
 	_reload_total = reload_timer
 	AudioManager.play_sfx(&"reload")
+	AudioLayerManager.play_reload_sequence(weapon.id, weapon.reload_time, int(state["mag"]) == 0)
 	EventBus.ammo_changed.emit(int(state["mag"]), int(state["reserve"]))
 
 

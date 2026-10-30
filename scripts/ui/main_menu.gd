@@ -69,8 +69,23 @@ func _build() -> void:
 	quit_button.pressed.connect(func() -> void: go(&"quit"))
 	menu_panel.add_child(quit_button)
 
+	# Add neon hover animation to all menu buttons
+	for btn in [continue_button, level_button, survivor_button, archive_button, settings_button, credits_button, quit_button]:
+		_animate_button_hover(btn)
 	_build_archive()
 	continue_button.grab_focus()
+
+
+func _animate_button_hover(button: Button) -> void:
+	var original := Color(0.95, 0.72, 0.22, 1.0)
+	button.mouse_entered.connect(func() -> void:
+		button.add_theme_color_override("font_hover_color", Color(1.0, 0.92, 0.45, 1.0))
+		button.create_tween().tween_property(button, "scale", Vector2(1.08, 1.08), 0.08).set_trans(Tween.TRANS_BACK)
+	)
+	button.mouse_exited.connect(func() -> void:
+		button.add_theme_color_override("font_hover_color", original)
+		button.create_tween().tween_property(button, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_BACK)
+	)
 
 
 func _build_archive() -> void:
@@ -130,6 +145,8 @@ func _build_archive() -> void:
 	codex_button.position = Vector2(146, 154)
 	codex_button.pressed.connect(func() -> void: go(&"codex"))
 	panel.add_child(codex_button)
+	_animate_button_hover(ach_button)
+	_animate_button_hover(codex_button)
 
 	var version := UIKit.label("v1.0.0  ·  MIT  ·  ORIGINAL PIXEL ASSETS", 6, UIKit.DIM, UIKit.font_latin())
 	version.position = Vector2(332, 348)

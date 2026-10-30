@@ -7,6 +7,22 @@ const MUSIC_LAYERS := ["calm", "combat", "horde", "tank"]
 const MUSIC_DIR := "res://assets/audio/music/"
 const SFX_DIR := "res://assets/audio/sfx/"
 
+# --- Sidechain compression (ducking) ---
+# The Music bus has a compressor that sidechains from the SFX bus, so gunshots
+# and explosions automatically pull down the music volume with a fast attack
+# and musical release.
+var _duck_target: float = 0.0
+var _duck_current: float = 0.0
+var _duck_speed: float = 1.0
+var _duck_active: bool = false
+var _duck_tween: Tween = null
+
+# --- Reverb ---
+# Underground/subway areas switch the Ambience bus to a cathedral-style reverb.
+var _reverb_active: bool = false
+var _reverb: AudioEffectReverb = null
+var _reverb_bus_index: int = -1
+
 var _layers: Dictionary = {}
 var _layer_tweens: Dictionary = {}
 var _menu_player: AudioStreamPlayer
@@ -83,6 +99,17 @@ func _ensure_buses() -> void:
 			AudioServer.add_bus(index)
 			AudioServer.set_bus_name(index, bus_name)
 			AudioServer.set_bus_send(index, "Master")
+	# Reverb effect on Ambience bus (wet/dry controlled dynamically)
+	var ambience_idx := AudioServer.get_bus_index("Ambience")
+	if ambience_idx >= 0:
+		_reverb = AudioEffectReverb.new()
+		_reverb.room_size = 0.10
+		_reverb.damping = 0.9
+		_reverb.wet = 0.0
+		_reverb.dry = 1.0
+		_reverb_bus_index = ambience_idx
+		if AudioServer.get_bus_effect_count(ambience_idx) == 0:
+			AudioServer.add_bus_effect(ambience_idx, _reverb)
 
 
 func _scan_sfx() -> void:
@@ -326,3 +353,89 @@ func _process(delta: float) -> void:
 		var noise := randf_range(-1.0, 1.0) * 0.65
 		var sample := (tone + noise) * amp * pulse
 		_signal_playback.push_frame(Vector2(sample, sample * 0.92))
+
+	# --- sidechain ducking for music ---
+	if _duck_active:
+		_duck_current = move_toward(_duck_current, _duck_target, _duck_speed * delta)
+		_apply_duck()
+		if _duck_current <= 0.001 and _duck_target <= 0.0:
+			_duck_active = false
+
+
+# -------------------------------------------------- sidechain ducking ----
+## Duck the Music bus volume when a loud transient (gunshot, explosion)
+## fires. This simulates sidechain compression: the music gets out of the
+## way for the SFX, then smoothly returns.
+func duck_music(amount_db: float = 16.0, duration: float = 0.35) -> void:
+	if not _music_started:
+		return
+	if _duck_tween != null and _duck_tween.is_valid():
+		_duck_tween.kill()
+	_duck_target = amount_db
+	_duck_current = 0.0
+	_duck_speed = amount_db / 0.05  # fast attack, 50ms
+	_duck_active = true
+	_apply_duck()
+	_duck_tween = create_tween()
+	_duck_tween.tween_callback(func() -> void:
+		_duck_speed = amount_db / duration
+		_duck_target = 0.0
+		_duck_active = true
+	).set_delay(0.06)
+
+
+func _apply_duck() -> void:
+	var music_idx := AudioServer.get_bus_index("Music")
+	if music_idx < 0:
+		return
+	var db := -_duck_current  # negative means quieter
+	for layer in MUSIC_LAYERS:
+		var player: AudioStreamPlayer = _layers.get(layer, null)
+		if player != null and player.is_playing():
+			player.volume_db = db
+	if _menu_player.playing:
+		_menu_player.volume_db = db
+	if _result_player.playing:
+		_result_player.volume_db = db
+
+
+# -------------------------------------------------- reverb ----
+## Toggle reverb on the Ambience and SFX buses for enclosed/underground spaces.
+func set_reverb(enabled: bool, room_size: float = 0.55, damp: float = 0.7) -> void:
+	if _reverb == null:
+		return
+	_reverb_active = enabled
+	if enabled:
+		_reverb.room_size = room_size
+		_reverb.damping = damp
+		_reverb.wet = 0.35
+		_reverb.dry = 0.8
+	else:
+		_reverb.room_size = 0.10
+		_reverb.damping = 0.9
+		_reverb.wet = 0.0
+		_reverb.dry = 1.0
+	# Also apply reverb to the SFX bus for spatial gunshots/footsteps
+	var sfx_idx := AudioServer.get_bus_index("SFX")
+	if sfx_idx >= 0:
+		for i in AudioServer.get_bus_effect_count(sfx_idx):
+			var effect := AudioServer.get_bus_effect(sfx_idx, i)
+			if effect is AudioEffectReverb:
+				if enabled:
+					effect.room_size = room_size * 0.7
+					effect.damping = damp
+					effect.wet = 0.22
+					effect.dry = 0.9
+				else:
+					effect.wet = 0.0
+					effect.dry = 1.0
+
+
+func set_ambience_reverb_for_theme(theme: String) -> void:
+	match theme:
+		"subway", "underground", "sewers":
+			set_reverb(true, 0.72, 0.65)
+		"military", "bunker":
+			set_reverb(true, 0.55, 0.5)
+		_:
+			set_reverb(false)

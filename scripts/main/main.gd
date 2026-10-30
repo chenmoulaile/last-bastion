@@ -4,6 +4,7 @@ extends Node
 
 const SCREENS := {
 	&"menu": "res://scenes/ui/main_menu.tscn",
+	&"loading": "res://scenes/ui/loading_screen.tscn",
 	&"levels": "res://scenes/ui/level_select.tscn",
 	&"briefing": "res://scenes/ui/briefing.tscn",
 	&"characters": "res://scenes/ui/character_select.tscn",
@@ -124,14 +125,39 @@ func _on_start_level_requested() -> void:
 	if not ResourceLoader.exists(path):
 		push_error("Missing level scene: " + path)
 		return
-	var packed: PackedScene = load(path)
+	# Show loading screen and load asynchronously
+	_fade_rect.color.a = 1.0
+	var tw := create_tween()
+	tw.tween_property(_fade_rect, "color:a", 0.0, 0.22)
+	var level_packed: PackedScene = load(SCREENS[&"loading"])
+	var loader := level_packed.instantiate()
+	if loader.has_method("setup"):
+		loader.setup(level_id, path)
+	loader.loading_complete.connect(_on_loading_complete)
+	if current_view != null and is_instance_valid(current_view):
+		current_view.queue_free()
+	current_view = loader
+	add_child(loader)
+	AudioManager.play_ambience(&"wind")
+	Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
+
+
+var _loading_token: int = 0
+var _loaded_level: Node = null
+
+
+func _on_loading_complete(level_id: StringName) -> void:
+	var path := "res://scenes/levels/%s.tscn" % level_id
+	var packed: PackedScene = ResourceLoader.load(path)
 	if packed == null:
 		push_error("Failed to load level: " + path)
 		return
 	get_tree().paused = false
 	Engine.time_scale = 1.0
 	var level := packed.instantiate()
-	_swap_view(level)
+	current_view.queue_free()
+	current_view = level
+	add_child(level)
 	Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
 
 

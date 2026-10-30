@@ -71,7 +71,16 @@ static func _spawn(parent: Node, key: String, pos: Vector2, scale_value: float =
 
 
 static func blood(parent: Node, pos: Vector2, direction: Vector2 = Vector2.ZERO, scale_value: float = 1.0) -> void:
+	if parent == null or not is_instance_valid(parent):
+		return
 	_spawn(parent, "blood", pos, scale_value, 0.0, direction.x < 0.0, 21)
+	# 血雾粒子 (smoke-like mist)
+	var mist := _spawn(parent, "smoke", pos, scale_value * 0.6, 0.0, false, 20)
+	if mist != null:
+		mist.modulate = Color(0.52, 0.06, 0.07, 0.7)
+	# 地面残留血迹 (decal)
+	if scale_value > 1.0:
+		blood_decal(parent, pos + Vector2(0, 2.0))
 
 
 static func muzzle(parent: Node, pos: Vector2, angle: float) -> void:
@@ -112,7 +121,36 @@ static func shell(parent: Node, pos: Vector2, direction: float) -> void:
 
 
 static func explosion(parent: Node, pos: Vector2, scale_value: float = 1.0) -> void:
-	_spawn(parent, "explosion", pos, scale_value, 0.0, false, 25)
+	if parent == null or not is_instance_valid(parent):
+		return
+	var root := parent
+	if parent.has_method("add_child"):
+		root = parent
+	# Phase 1: Flash (bright white, very fast)
+	var flash := ColorRect.new()
+	flash.color = Color(1.0, 0.94, 0.62, 0.0)
+	flash.position = pos - Vector2(40, 40) * scale_value
+	flash.size = Vector2(80, 80) * scale_value
+	flash.z_index = 30
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if root is Node:
+		root.add_child(flash)
+	var flash_tween := flash.create_tween()
+	flash_tween.set_parallel(true)
+	flash_tween.tween_property(flash, "modulate:a", 1.2, 0.04)
+	flash_tween.tween_property(flash, "scale", Vector2(2.4, 2.4), 0.04)
+	flash_tween.chain().tween_callback(flash.queue_free)
+	# Phase 2: Fire ring (AnimatedSprite2D)
+	_spawn(parent, "explosion", pos, scale_value * 1.2, 0.0, false, 30)
+	# Phase 3: Smoke (delayed)
+	if root is Node:
+		root.create_tween().tween_callback(func() -> void:
+			var smoke := _spawn(parent, "smoke", pos, scale_value * 1.8, 0.0, false, 18)
+			if smoke != null:
+				smoke.modulate = Color(0.20, 0.20, 0.22, 0.9)
+			# Phase 4: Shockwave (ground dust ring)
+			var shock := _shockwave_ring(parent, pos + Vector2(0, 4.0), scale_value * 1.8)
+		).set_delay(0.18)
 
 
 static func smoke(parent: Node, pos: Vector2, scale_value: float = 1.0) -> void:
@@ -162,3 +200,29 @@ static func reset() -> void:
 		if is_instance_valid(decal):
 			decal.queue_free()
 	_decals.clear()
+
+
+# ------------------------------------------------------------- shockwave ----
+static func _shockwave_ring(parent: Node, pos: Vector2, scale_value: float) -> Node2D:
+	if parent == null or not is_instance_valid(parent):
+		return null
+	var ring := Node2D.new()
+	ring.position = pos
+	ring.z_index = 17
+	ring.modulate = Color(0.80, 0.76, 0.62, 0.8)
+	if parent is Node:
+		parent.add_child(ring)
+	var scale_tween := create_tween_for(ring, "scale", Vector2(0.4, 0.4), Vector2(scale_value * 2.8, scale_value * 2.8), 0.5)
+	var fade_tween := create_tween_for(ring, "modulate:a", 0.8, 0.0, 0.5)
+	scale_tween.chain().tween_callback(ring.queue_free)
+	return ring
+
+
+static func create_tween_for(target: Object, property: String, from: Variant, to: Variant, duration: float) -> Tween:
+	var t := (target as Node).create_tween()
+	match property:
+		"scale":
+			t.tween_property(target, "scale", to, duration)
+		"modulate:a":
+			t.tween_property(target, "modulate:a", to, duration)
+	return t
