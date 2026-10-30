@@ -632,6 +632,8 @@ func spawn_network_player(peer_id: int, character_id: StringName, x: float, y: f
 	p.level = self
 	p.auto_camera = true
 	p.position = Vector2(x, y)
+	p.name = "Player_" + str(peer_id)
+	p.set_multiplayer_authority(peer_id)
 	var path := "%s/%s.tres" % [REWORK_CHAR_DIR, String(character_id)]
 	var rework_data: ReworkCharacterData = null
 	if ResourceLoader.exists(path):
@@ -642,7 +644,6 @@ func spawn_network_player(peer_id: int, character_id: StringName, x: float, y: f
 			rework_data = load(fb_path) as ReworkCharacterData
 	p.character_data = rework_data
 	actors.add_child(p)
-	p.name = "Player_" + str(peer_id)
 	for wid in data.player_weapons:
 		var id := StringName(wid)
 		if id != &"":

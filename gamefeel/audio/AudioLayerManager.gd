@@ -254,8 +254,12 @@ func _make_spatial_player(bus_name: String) -> AudioStreamPlayer2D:
 	var player := AudioStreamPlayer2D.new()
 	player.bus = bus_name
 	player.process_mode = Node.PROCESS_MODE_PAUSABLE
+	# Godot 4 AudioStreamPlayer2D has no unit_size; distance falloff is driven by
+	# attenuation (dB per doubling) plus max_distance. 1600px keeps gunfire and
+	# explosions audible across a 640x360 screen while still falling off with range.
 	player.attenuation = 1.0
-	player.unit_size = 160.0
+	player.max_distance = 1600.0
+	player.max_polyphony = 4
 	add_child(player)
 	return player
 

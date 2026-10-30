@@ -102,6 +102,9 @@ var throw_index: int = 0
 
 ## --- 移动/瞄准 ---
 var facing: int = 1
+## Replicated movement state ("idle"/"walk"/"attack"/"downed"/"dead").
+var state: String = "idle"
+var camera: Camera2D = null
 var aim_dir: Vector2 = Vector2.RIGHT
 var aim_angle: float = 0.0
 var run_speed: float = 220.0
@@ -207,8 +210,6 @@ func _setup_network_sync() -> void:
 		return
 	var sync: Node2D = sync_script.new()
 	sync.name = "PlayerNetworkSync"
-	sync.peer_id = _network.call("get_peer_id")
-	sync.is_local = true
 	add_child(sync)
 
 
@@ -528,7 +529,8 @@ func _apply_hit(collider: Object, point: Vector2, dir: Vector2, damage: float,
 			amount = int(round(amount * hsm))
 		collider.apply_damage(amount, -dir, is_head, &"player", damage_type)
 		# 记录击杀归属：如果敌人由此击死，记录 killer_peer_id 供多人结算面板使用。
-		var zd_health := collider.get("health") if collider.has_method("get") else null
+		# 显式标注 Variant —— Object.get() 的返回值无法静态推断，
+		# 而本工程的 "Variant 推断" 警告被当作错误，会导致整个脚本编译失败。
 		if collider.has_method("set_killer_peer_id") and _network != null:
 			var pid := int(_network.call("get_peer_id"))
 			collider.set_killer_peer_id(pid)
@@ -834,12 +836,6 @@ func take_damage(amount: int, source_dir: Vector2 = Vector2.ZERO,
 	if _bus:
 		_bus.player_hit.emit(int(round(dmg)))
 		_bus.damage_flash.emit()
-	# 网络同步：主机广播玩家受伤给所有客户端。
-	if _network != null and bool(_network.call("is_multiplayer_active")) \
-			and bool(_network.call("is_host")):
-		var pid := int(_network.call("get_peer_id"))
-		if pid != 1:
-			_network.call("rpc_player_damage", pid, int(round(dmg)))
 	if hp <= 0:
 		_go_down()
 	else:
@@ -1137,14 +1133,15 @@ func _sync_weapon_visual(force: bool = false) -> void:
 func _build_camera() -> void:
 	if get_node_or_null("Camera") != null:
 		return
-	var camera := Camera2D.new()
-	camera.name = "Camera"
-	camera.position = Vector2(0, -80)
-	camera.limit_top = 0
-	camera.limit_bottom = 360
-	camera.position_smoothing_enabled = true
-	add_child(camera)
-	camera.make_current()
+	var cam := Camera2D.new()
+	cam.name = "Camera"
+	cam.position = Vector2(0, -80)
+	cam.limit_top = 0
+	cam.limit_bottom = 360
+	cam.position_smoothing_enabled = true
+	camera = cam
+	add_child(cam)
+	cam.make_current()
 
 
 ## ---------------------------------------------------------- 交互 ----
@@ -1242,14 +1239,24 @@ func _medkit_mult() -> float:
 func _sync_visuals() -> void:
 	if _renderer == null:
 		return
-	var state := CodeRenderer.STATE_IDLE
-	if is_downed or is_dead:
-		state = CodeRenderer.STATE_IDLE
+	var anim_state := CodeRenderer.STATE_IDLE
+	if is_dead:
+		state = "dead"
+	elif is_downed:
+		state = "downed"
 	elif _attack_anim_active():
-		state = CodeRenderer.STATE_ATTACK
+		state = "attack"
 	elif absf(velocity.x) > 24.0 and is_on_floor():
-		state = CodeRenderer.STATE_WALK
-	_renderer.set_anim_state(state)
+		state = "walk"
+	else:
+		state = "idle"
+	if is_downed or is_dead:
+		anim_state = CodeRenderer.STATE_IDLE
+	elif state == "attack":
+		anim_state = CodeRenderer.STATE_ATTACK
+	elif state == "walk":
+		anim_state = CodeRenderer.STATE_WALK
+	_renderer.set_anim_state(anim_state)
 	_renderer.set_facing(facing)
 	_renderer.set_aim_angle(aim_angle)
 	_renderer.set_health_ratio(float(hp) / float(maxi(1, max_hp)))
@@ -1263,8 +1270,9 @@ func _attack_anim_active() -> bool:
 
 ## ------------------------------------------------------- 事件/工具 ----
 
-func _emit_state(state: StringName, detail: Dictionary = {}) -> void:
-	character_state_changed.emit(state, detail)
+func _emit_state(state_name: StringName, detail: Dictionary = {}) -> void:
+	state = String(state_name)
+	character_state_changed.emit(state_name, detail)
 
 
 func _autoload(what: StringName) -> Node:

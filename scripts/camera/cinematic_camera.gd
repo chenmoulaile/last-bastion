@@ -19,6 +19,7 @@ var _zoom_lerp_speed: float = 8.0
 
 var camera_2d: Camera2D = null
 var _player_ref: Node2D = null
+var _follow_offset: Vector2 = Vector2(0, -80)
 
 var _killcam_active: bool = false
 var _killcam_target: Node2D = null
@@ -88,7 +89,11 @@ func _build_letterbox() -> void:
 	_letterbox_top.name = "LetterboxTop"
 	_letterbox_top.color = Color(0, 0, 0, 0)
 	_letterbox_top.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_letterbox_top.size = Vector2(0, LETTERBOX_HEIGHT)
+	# PRESET_TOP_WIDE pins top/bottom to the same edge, so a direct .size write
+	# is silently reverted by Control::_set_size ("opposite anchors"). Use
+	# set_deferred so the height survives layout, and grow downward from top.
+	_letterbox_top.offset_bottom = LETTERBOX_HEIGHT
+	_letterbox_top.custom_minimum_size = Vector2(0, LETTERBOX_HEIGHT)
 	_letterbox_top.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_letterbox_top)
 
@@ -96,7 +101,10 @@ func _build_letterbox() -> void:
 	_letterbox_bottom.name = "LetterboxBottom"
 	_letterbox_bottom.color = Color(0, 0, 0, 0)
 	_letterbox_bottom.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	_letterbox_bottom.size = Vector2(0, LETTERBOX_HEIGHT)
+	# Same anchor trap as the top bar: offset_top is negative because the
+	# bottom-wide preset anchors to offset_bottom == 0.
+	_letterbox_bottom.offset_top = -LETTERBOX_HEIGHT
+	_letterbox_bottom.custom_minimum_size = Vector2(0, LETTERBOX_HEIGHT)
 	_letterbox_bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_letterbox_bottom)
 
@@ -338,13 +346,19 @@ func _apply_camera(delta: float) -> void:
 		if camera_2d == null:
 			return
 
+	var target := _target_node
+	if target == null or not is_instance_valid(target):
+		target = _player_ref if _player_ref != null and is_instance_valid(_player_ref) else null
+	if target == null and not _cutscene_active:
+		# No owner yet (menus, or between levels): leave the camera alone
+		# instead of snapping it to the world origin.
+		return
+
 	var pos := Vector2.ZERO
-	if _target_node != null and is_instance_valid(_target_node) and not _cutscene_active:
-		pos = _target_node.global_position
-	elif _cutscene_active:
+	if _cutscene_active:
 		pos = _camera_offset
-	elif _dialogue_zoom_active and _target_node != null and is_instance_valid(_target_node):
-		pos = _target_node.global_position
+	elif target != null:
+		pos = target.global_position + _follow_offset
 
 	var shake_offset := Vector2.ZERO
 	if _shake != null:
@@ -352,8 +366,8 @@ func _apply_camera(delta: float) -> void:
 
 	var combined := pos + shake_offset
 
-	if _killcam_active and _target_node != null and is_instance_valid(_target_node):
-		var target_pos := _target_node.global_position
+	if _killcam_active and target != null:
+		var target_pos := target.global_position
 		combined = target_pos.lerp(combined, 0.5)
 
 	camera_2d.global_position = combined
@@ -372,8 +386,12 @@ func _bind_camera() -> void:
 	if camera_2d != null and is_instance_valid(camera_2d):
 		return
 	if _player_ref != null and is_instance_valid(_player_ref):
-		if _player_ref.has_method("get") and _player_ref.get("camera") is Camera2D:
-			camera_2d = _player_ref.get("camera") as Camera2D
+		var bound: Variant = _player_ref.get("camera")
+		if bound is Camera2D:
+			camera_2d = bound as Camera2D
+			_follow_offset = camera_2d.position
+			if _target_node == null:
+				_target_node = _player_ref
 			return
 	var players := get_tree().get_nodes_in_group("player")
 	for node in players:
@@ -383,8 +401,18 @@ func _bind_camera() -> void:
 				if cam is Camera2D:
 					camera_2d = cam as Camera2D
 					_player_ref = node
+					_follow_offset = camera_2d.position
+					if _target_node == null:
+						_target_node = node
 					return
 	camera_2d = get_viewport().get_camera_2d()
+	if camera_2d != null:
+		_follow_offset = camera_2d.position
+		var parent := camera_2d.get_parent()
+		if parent is Node2D and parent.is_in_group("player"):
+			_player_ref = parent
+			if _target_node == null:
+				_target_node = parent
 
 
 ## ------------------------------------------------------------- public API ---

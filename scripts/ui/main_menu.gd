@@ -148,7 +148,9 @@ func _build_archive() -> void:
 	_animate_button_hover(ach_button)
 	_animate_button_hover(codex_button)
 
-	var version := UIKit.label("v1.0.0  ·  MIT  ·  ORIGINAL PIXEL ASSETS", 6, UIKit.DIM, UIKit.font_latin())
+	var version := UIKit.label("v%s  ·  MIT  ·  ORIGINAL PIXEL ASSETS"
+		% str(ProjectSettings.get_setting("application/config/version", "3.1.1")),
+		6, UIKit.DIM, UIKit.font_latin())
 	version.position = Vector2(332, 348)
 	version.size = Vector2(284, 8)
 	version.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT

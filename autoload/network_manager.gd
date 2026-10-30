@@ -21,26 +21,19 @@ signal connection_failed(reason: String)
 signal session_ended
 
 func _ready() -> void:
-	var tree := get_tree()
-	var props := tree.get_property_list()
-	var has_mp := false
-	for p in props:
-		if p.name == "multiplayer":
-			has_mp = true
-			break
-	if has_mp:
-		_mp_api = tree.get("multiplayer")
-		if _mp_api != null:
-			_mp_api.peer_connected.connect(_on_peer_connected)
-			_mp_api.peer_disconnected.connect(_on_peer_disconnected)
-			_mp_api.connected_to_server.connect(_on_connected_to_server)
-			_mp_api.connection_failed.connect(_on_connection_failed)
+	var mp := _get_mp()
+	if mp != null:
+		mp.peer_connected.connect(_on_peer_connected)
+		mp.peer_disconnected.connect(_on_peer_disconnected)
+		mp.connected_to_server.connect(_on_connected_to_server)
+		mp.connection_failed.connect(_on_connection_failed)
+
 
 func _get_mp() -> Object:
 	if _mp_api == null:
 		var tree := get_tree()
-		if tree.has_property("multiplayer"):
-			_mp_api = tree.get("multiplayer")
+		if tree != null and tree.has_method("get_multiplayer"):
+			_mp_api = tree.call("get_multiplayer")
 	return _mp_api
 
 ## ---------- Host / Client lifecycle ----------
@@ -50,11 +43,12 @@ func host_session() -> void:
 	if mp == null:
 		connection_failed.emit("MultiplayerAPI 不可用")
 		return
-	var peer := ENetMultiplayerPeer.new()
-	var error := peer.create_server(PORT, MAX_PLAYERS)
+	var enet_peer := ENetMultiplayerPeer.new()
+	var error := enet_peer.create_server(PORT, MAX_PLAYERS)
 	if error != OK:
 		connection_failed.emit("主机创建失败: " + str(error))
 		return
+	peer = enet_peer
 	mp.multiplayer_peer = peer
 	is_host = true
 	is_client = false
@@ -69,11 +63,12 @@ func join_session(ip: String, port: int = PORT) -> void:
 	if mp == null:
 		connection_failed.emit("MultiplayerAPI 不可用")
 		return
-	var peer := ENetMultiplayerPeer.new()
-	var error := peer.create_client(ip, port)
+	var enet_peer := ENetMultiplayerPeer.new()
+	var error := enet_peer.create_client(ip, port)
 	if error != OK:
 		connection_failed.emit("连接失败: " + str(error))
 		return
+	peer = enet_peer
 	mp.multiplayer_peer = peer
 	is_host = false
 	is_client = true
@@ -100,59 +95,6 @@ func leave_session() -> void:
 func rpc_player_spawn(peer_id: int, character_id: StringName, spawn_x: float, spawn_y: float) -> void:
 	players[peer_id] = {"name": "P" + str(peer_id), "character_id": character_id, "peer_id": peer_id}
 	_var_spawn_player(peer_id, character_id, spawn_x, spawn_y)
-
-
-@rpc("any_peer", "reliable")
-func rpc_player_move(peer_id: int, x: float, y: float, facing: int, state: String) -> void:
-	var player_node := _get_player_node(peer_id)
-	if player_node == null:
-		return
-	player_node.set("net_target_x", x)
-	player_node.set("net_target_y", y)
-	player_node.set("net_facing", facing)
-	player_node.set("net_state", state)
-
-
-@rpc("any_peer", "reliable")
-func rpc_player_shoot(peer_id: int, weapon_id: StringName, x: float, y: float, dir_x: float, dir_y: float) -> void:
-	var player_node := _get_player_node(peer_id)
-	if player_node != null:
-		player_node.call_deferred("net_fire", weapon_id, x, y, dir_x, dir_y)
-
-
-@rpc("any_peer", "reliable")
-func rpc_player_reload(peer_id: int, weapon_id: StringName) -> void:
-	var player_node := _get_player_node(peer_id)
-	if player_node != null:
-		player_node.call_deferred("net_reload", weapon_id)
-
-
-@rpc("any_peer", "reliable")
-func rpc_player_swap(peer_id: int, weapon_id: StringName) -> void:
-	var player_node := _get_player_node(peer_id)
-	if player_node != null:
-		player_node.call_deferred("net_swap_weapon", weapon_id)
-
-
-@rpc("any_peer", "reliable")
-func rpc_player_downed(peer_id: int) -> void:
-	var player_node := _get_player_node(peer_id)
-	if player_node != null:
-		player_node.call_deferred("net_downed")
-
-
-@rpc("any_peer", "reliable")
-func rpc_player_damage(peer_id: int, amount: int) -> void:
-	var player_node := _get_player_node(peer_id)
-	if player_node != null:
-		player_node.call_deferred("net_take_damage", amount)
-
-
-@rpc("any_peer", "reliable")
-func rpc_player_revived(peer_id: int) -> void:
-	var player_node := _get_player_node(peer_id)
-	if player_node != null:
-		player_node.call_deferred("net_revived")
 
 
 @rpc("any_peer", "reliable")
@@ -197,14 +139,6 @@ func _on_connection_failed(reason: String) -> void:
 	leave_session()
 
 
-func _get_player_node(peer_id: int) -> Node:
-	var root := get_tree().get_current_scene()
-	if root == null:
-		return null
-	var found := root.find_child("Player_" + str(peer_id), true, false)
-	return found
-
-
 func _get_zombie_node(zombie_id: int) -> Node:
 	var root := get_tree().get_current_scene()
 	if root == null:
@@ -212,12 +146,21 @@ func _get_zombie_node(zombie_id: int) -> Node:
 	return root.find_child("Zombie_" + str(zombie_id), true, false)
 
 
+func _find_level(root: Node) -> Node:
+	if root.has_method("spawn_network_player"):
+		return root
+	for child in root.get_children():
+		if child.has_method("spawn_network_player"):
+			return child
+	return null
+
+
 func _var_spawn_player(peer_id: int, character_id: StringName, x: float, y: float) -> void:
 	var root := get_tree().get_current_scene()
 	if root == null:
 		return
-	var level := root.get_node_or_null("LevelRunner")
-	if level == null or not level.has_method("spawn_network_player"):
+	var level := _find_level(root)
+	if level == null:
 		return
 	level.call_deferred("spawn_network_player", peer_id, character_id, x, y)
 
@@ -226,43 +169,25 @@ func _var_spawn_dismember_effect(zombie_id: int, pos_x: float, pos_y: float, dir
 	var root := get_tree().get_current_scene()
 	if root == null:
 		return
-	var fx_layer := root.get_node_or_null("FXLayer")
+	var fx_layer := root.find_child("FXLayer", true, false)
 	if fx_layer != null and fx_layer.has_method("spawn_dismember"):
 		fx_layer.call_deferred("spawn_dismember", Vector2(pos_x, pos_y), Vector2(dir_x, dir_y), damage_type)
 
 
-func _sync_loop(delta: float) -> void:
-	if not is_host and not is_client:
+func _process(delta: float) -> void:
+	if not is_host:
 		return
 	_sync_tick += delta
 	if _sync_tick < SYNC_RATE:
 		return
 	_sync_tick = 0.0
-	if is_host:
-		for pid in players.keys():
-			var node := _get_player_node(pid)
-			if node != null:
-				var pos: Vector2 = node.global_position
-				var facing := int(node.get("facing"))
-				var state := String(node.get("state"))
-				rpc_id(pid, "rpc_player_move", pid, pos.x, pos.y, facing, state)
-		broadcast_zombie_positions()
+	broadcast_zombie_positions()
 
 
 ## ---------- Public API ----------
 
 func spawn_local_player(peer_id: int, character_id: StringName, x: float, y: float) -> void:
-	if is_host:
-		rpc_player_spawn(peer_id, character_id, x, y)
-	else:
-		rpc_player_spawn(peer_id, character_id, x, y)
-
-
-func sync_player_move(peer_id: int, x: float, y: float, facing: int, state: String) -> void:
-	if is_host:
-		rpc_player_move(peer_id, x, y, facing, state)
-	else:
-		rpc_player_move(peer_id, x, y, facing, state)
+	rpc_player_spawn(peer_id, character_id, x, y)
 
 
 func get_peer_id() -> int:

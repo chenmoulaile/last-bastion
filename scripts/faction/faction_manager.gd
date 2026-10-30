@@ -47,8 +47,9 @@ func _load_factions() -> void:
 	factions.clear()
 	var dir := DirAccess.open(DATA_DIR)
 	if dir != null:
-		for file_name in dir.get_files():
-			if not file_name.ends_with(".tres"):
+		for dir_file in dir.get_files():
+			var file_name := dir_file.trim_suffix(".remap")
+			if not (file_name.ends_with(".tres") or file_name.ends_with(".res")):
 				continue
 			var res: Resource = load(DATA_DIR + "/" + file_name)
 			var faction := res as FactionData
@@ -57,6 +58,7 @@ func _load_factions() -> void:
 			if faction.hostility_to_other_factions.is_empty():
 				faction.hostility_to_other_factions = DEFAULT_MATRIX.get(faction.faction_id, {}).duplicate()
 			factions[faction.faction_id] = faction
+		print("[Data] factions=%d" % factions.size())
 	for id in FACTION_IDS:
 		if not factions.has(id):
 			push_warning("Faction data missing: " + id)

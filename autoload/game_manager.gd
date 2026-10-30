@@ -46,6 +46,14 @@ var coop_active: bool = false
 var last_result: Dictionary = {}
 var run_seed: int = 0
 
+## ---- multiplayer kill attribution (reset every start_level) ----------------
+## player_stats[peer_id] = {
+##   "kills": int, "headshots": int, "specials": int,
+##   "bosses": int, "by_weapon": {weapon_id: int}, "damage_dealt": int,
+##   "character_id": StringName,
+## }
+var player_stats: Dictionary = {}
+
 var levels: Dictionary = {}
 var weapons: Dictionary = {}
 var characters: Dictionary = {}
@@ -85,6 +93,8 @@ func _load_all_data() -> void:
 	weapons = _load_resources(DATA_WEAPONS)
 	characters = _load_resources(DATA_CHARACTERS)
 	zombies = _load_resources(DATA_ZOMBIES)
+	print("[Data] levels=%d weapons=%d characters=%d zombies=%d" % [
+		levels.size(), weapons.size(), characters.size(), zombies.size()])
 
 
 func _load_resources(dir_path: String) -> Dictionary:
@@ -94,9 +104,12 @@ func _load_resources(dir_path: String) -> Dictionary:
 		push_warning("Data directory missing: " + dir_path)
 		return result
 	for file_name in dir.get_files():
-		if not file_name.ends_with(".tres"):
+		# Exported PCKs store converted resources as "name.tres.remap"; the
+		# original name still resolves through ResourceLoader.
+		var clean := file_name.trim_suffix(".remap")
+		if not (clean.ends_with(".tres") or clean.ends_with(".res")):
 			continue
-		var res: Resource = load(dir_path + "/" + file_name)
+		var res: Resource = load(dir_path + "/" + clean)
 		if res == null:
 			continue
 		var id_value: Variant = res.get("id")
@@ -242,7 +255,113 @@ func get_soldier_roles() -> Array[Resource]:
 	return out
 
 
-# ------------------------------------------------------------------ flow ----
+# ------------------------------------------------- multiplayer attribution ----
+## Per-peer kill accounting. Only meaningful in a networked session, but the
+## host records itself too so the result screen can show every player's line
+## without branching on "am I the host".
+
+const _BLANK_PLAYER_STATS := {
+	"kills": 0,
+	"headshots": 0,
+	"specials": 0,
+	"bosses": 0,
+	"downs": 0,
+	"rescues": 0,
+	"damage_dealt": 0,
+	"by_weapon": {},
+	"character_id": &"",
+}
+
+
+func _ensure_player_stats(peer_id: int) -> Dictionary:
+	if not player_stats.has(peer_id):
+		player_stats[peer_id] = _BLANK_PLAYER_STATS.duplicate(true)
+	return player_stats[peer_id]
+
+
+func record_player_kill(peer_id: int, is_head: bool, is_special: bool,
+		weapon_id: StringName = &"unknown") -> void:
+	if peer_id <= 0:
+		return
+	var stats := _ensure_player_stats(peer_id)
+	stats["kills"] = int(stats["kills"]) + 1
+	if is_head:
+		stats["headshots"] = int(stats["headshots"]) + 1
+	if is_special:
+		stats["specials"] = int(stats["specials"]) + 1
+	var by_weapon: Dictionary = stats["by_weapon"]
+	var key := String(weapon_id)
+	by_weapon[key] = int(by_weapon.get(key, 0)) + 1
+
+
+func record_player_boss_kill(peer_id: int, weapon_id: StringName = &"unknown") -> void:
+	if peer_id <= 0:
+		return
+	var stats := _ensure_player_stats(peer_id)
+	stats["bosses"] = int(stats["bosses"]) + 1
+	record_player_kill(peer_id, false, true, weapon_id)
+
+
+func record_player_down(peer_id: int) -> void:
+	if peer_id <= 0:
+		return
+	var stats := _ensure_player_stats(peer_id)
+	stats["downs"] = int(stats["downs"]) + 1
+
+
+func record_player_rescue(peer_id: int) -> void:
+	if peer_id <= 0:
+		return
+	var stats := _ensure_player_stats(peer_id)
+	stats["rescues"] = int(stats["rescues"]) + 1
+
+
+func record_player_damage(peer_id: int, amount: int) -> void:
+	if peer_id <= 0 or amount <= 0:
+		return
+	var stats := _ensure_player_stats(peer_id)
+	stats["damage_dealt"] = int(stats["damage_dealt"]) + amount
+
+
+## Snapshot for the result screen. Always contains at least the local peer so
+## single-player runs render one row instead of an empty panel.
+func get_all_player_stats() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var ids: Array = player_stats.keys()
+	ids.sort()
+	if ids.is_empty():
+		ids = [1]
+	for pid in ids:
+		var stats: Dictionary = player_stats.get(pid, _BLANK_PLAYER_STATS).duplicate(true)
+		stats["peer_id"] = int(pid)
+		stats["name"] = "P%d" % int(pid)
+		if not stats.has("character_id") or stats["character_id"] == &"":
+			stats["character_id"] = selected_character
+		out.append(stats)
+	return out
+
+
+## Called from complete_level so the result screen reads one merged record.
+func _merge_player_stats_into_result(result: Dictionary) -> void:
+	var rows := get_all_player_stats()
+	result["player_stats"] = rows
+	if rows.size() <= 1:
+		var only: Dictionary = rows[0] if not rows.is_empty() else {}
+		if not only.is_empty():
+			if not result.has("kills"):
+				result["kills"] = int(only.get("kills", 0))
+			if not result.has("headshots"):
+				result["headshots"] = int(only.get("headshots", 0))
+			if not result.has("specials"):
+				result["specials"] = int(only.get("specials", 0))
+
+
+func log_player_kill(peer_id: int, is_head: bool, is_special: bool,
+		weapon_id: StringName = &"unknown") -> void:
+	record_player_kill(peer_id, is_head, is_special, weapon_id)
+	EventBus.player_kill.emit(peer_id, is_head, is_special)
+
+
 func start_level(level_id: StringName, mode: StringName = &"", difficulty: StringName = &"",
 		character_id: StringName = &"", squad_ids: Array[StringName] = []) -> void:
 	var level: Resource = get_level(level_id)
@@ -263,6 +382,8 @@ func start_level(level_id: StringName, mode: StringName = &"", difficulty: Strin
 	selected_soldiers = _auto_soldiers(level)
 	run_seed = int(Time.get_unix_time_from_system()) ^ (randi() << 8)
 	last_result = {}
+	player_stats = {}
+	_ensure_player_stats(1)
 	DirectorSystem.begin_level(level, current_difficulty)
 	change_state(State.PLAYING)
 	AudioManager.play_level_music(String(level.music_theme))
@@ -316,6 +437,7 @@ func complete_level(result: Dictionary) -> void:
 	result["difficulty"] = String(current_difficulty)
 	result["seed"] = run_seed
 	var achievements_before: Array = SaveSystem.data.get("achievements", []).duplicate()
+	_merge_player_stats_into_result(result)
 	last_result = result
 	SaveSystem.record_result(result, current_level, current_mode, current_difficulty)
 	SaveSystem.set_progress(current_level.chapter, int(String(current_level.id).substr(1)))

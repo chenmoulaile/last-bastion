@@ -10,7 +10,9 @@ uniform float damage_vignette : hint_range(0.0, 1.0) = 0.0;
 uniform float blood_distortion : hint_range(0.0, 1.0) = 0.0;
 uniform float scanline_intensity : hint_range(0.0, 1.0) = 0.05;
 uniform float time : hint_range(0.0, 1000.0) = 0.0;
-uniform vec2 screen_size : hint_range(0, 1000) = vec2(640, 360);
+// Godot 4 hint_range accepts scalar float/int only; a vec2 uniform must
+// drop the hint or the whole shader fails to compile.
+uniform vec2 screen_size = vec2(640, 360);
 
 void fragment() {
 	vec2 uv = SCREEN_UV;
@@ -54,7 +56,7 @@ void fragment() {
 	// --- scanline (subtle CRT retention) ---
 	if (scanline_intensity > 0.001) {
 		float scan = sin(uv.y * screen_size.y * 3.14159 * 2.0 + time * 3.0);
-		col *= 1.0 - scanline_intensity * 0.10 * maxf(0.0, scan);
+		col *= 1.0 - scanline_intensity * 0.10 * max(0.0, scan);
 	}
 
 	COLOR = vec4(col, 1.0);

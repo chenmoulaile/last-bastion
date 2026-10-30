@@ -81,8 +81,9 @@ func _load_tres_fragments() -> void:
 	if dir == null:
 		push_warning("Archive data directory missing: " + DATA_DIR)
 		return
-	for file_name in dir.get_files():
-		if not file_name.ends_with(".tres"):
+	for dir_file in dir.get_files():
+		var file_name := dir_file.trim_suffix(".remap")
+		if not (file_name.ends_with(".tres") or file_name.ends_with(".res")):
 			continue
 		var res: Resource = load(DATA_DIR + "/" + file_name)
 		if res == null:

@@ -116,10 +116,8 @@ func _scan_sfx() -> void:
 	var dir := DirAccess.open(SFX_DIR)
 	if dir == null:
 		return
-	for file_name in dir.get_files():
-		var clean := file_name
-		if clean.ends_with(".import"):
-			clean = clean.trim_suffix(".import")
+	for dir_file in dir.get_files():
+		var clean := dir_file.trim_suffix(".import").trim_suffix(".remap")
 		if not (clean.ends_with(".ogg") or clean.ends_with(".wav")):
 			continue
 		var base := clean.get_basename()
@@ -134,6 +132,7 @@ func _scan_sfx() -> void:
 		if not _variants.has(key):
 			_variants[key] = []
 		_variants[key].append(stream)
+	print("[Audio] sfx streams=%d variants=%d" % [_streams.size(), _variants.size()])
 
 
 func play_level_music(theme: String) -> void:

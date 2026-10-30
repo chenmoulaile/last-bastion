@@ -45,6 +45,9 @@ var _hp_trail: ColorRect
 var _temp_fill: ColorRect
 var _hp_text: Label
 var _last_hp_ratio: float = 1.0
+## Delayed white "damage ghost" ratio. Eases toward _last_hp_ratio in _process so
+## the trail visibly lags behind the real bar instead of snapping with it.
+var _hp_trail_ratio: float = 1.0
 var _player_name: Label
 var _status_text: Label
 var _downs_text: Label
@@ -1155,6 +1158,13 @@ func _process(delta: float) -> void:
 				Engine.time_scale = 1.0
 	if _pause_open:
 		return
+	# Delayed white damage trail: ease the ghost down toward the real ratio over
+	# ~0.35s regardless of the 10Hz stat refresh cadence, then hide when flush.
+	if _hp_trail != null and _hp_trail_ratio > _last_hp_ratio:
+		_hp_trail_ratio = maxf(_last_hp_ratio, _hp_trail_ratio - delta / 0.35)
+		if _hp_trail_ratio <= _last_hp_ratio + 0.001:
+			_hp_trail_ratio = _last_hp_ratio
+		_hp_trail.size.x = 186.0 * _hp_trail_ratio
 	# 击杀特写：5连杀触发慢动作镜头
 	if _killstreak >= 5 and Engine.time_scale == 1.0:
 		Engine.time_scale = 0.2
@@ -1332,12 +1342,16 @@ func _refresh_health(hp: int, temp_hp: int, max_hp: int) -> void:
 	if _hp_fill == null:
 		return
 	var ratio := clampf(float(hp) / float(maxi(1, max_hp)), 0.0, 1.0)
+	# Trail is persistent state, NOT derived from _last_hp_ratio (which is
+	# rewritten to the current ratio at the end of this function every frame).
+	# Snapping it to [_last_hp_ratio .. 1.0] made the white ghost track the bar
+	# with zero lag; it instead never falls below the current ratio and eases
+	# toward it in _process so the drop is visibly delayed.
 	if _hp_trail != null:
-		var trail_ratio := clampf(_last_hp_ratio, ratio, 1.0)
-		_hp_trail.size.x = 186.0 * trail_ratio
-		_hp_trail.visible = trail_ratio > ratio
-		# Animate trail shrinking with a slight delay
-		_hp_trail.size.x = lerpf(_hp_trail.size.x, 186.0 * trail_ratio, 0.18)
+		# Heal: snapshot must never sit left of the real bar, so pull it up
+		# immediately on heal (the ghost only ever lags downward).
+		_hp_trail_ratio = maxf(ratio, _hp_trail_ratio)
+		_hp_trail.visible = _hp_trail_ratio > ratio + 0.001
 	if ratio < _last_hp_ratio:
 		# Jitter on damage
 		var jitter_amount := (1.0 - ratio) * 1.5

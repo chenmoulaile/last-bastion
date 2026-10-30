@@ -102,6 +102,11 @@ signal enemies_revealed(count: int, radius: float)
 signal signal_noise_changed(level: float)
 signal sample_collected(total: int)
 
+# --- Multiplayer attribution -------------------------------------------------
+## Emitted by GameManager.record_player_kill after the per-peer tally updates.
+## HUD / kill-feed listen to this; it stays silent in a single-player run.
+signal player_kill(peer_id: int, is_head: bool, is_special: bool)
+
 
 func announce(text: String) -> void:
 	notify.emit(text)

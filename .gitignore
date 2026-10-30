@@ -30,3 +30,7 @@ mono_crash.*.json
 
 # Local assistant workspace data
 .workbuddy-ai/
+
+# Local capture output (movie writer AVI + scratch frames)
+out/
+.cache/

@@ -1,0 +1,38 @@
+LAST BASTION · performance gate (real window, not headless)
+============================================================
+
+Machine / renderer
+------------------
+GPU        : Intel(R) UHD Graphics 630
+API        : OpenGL 3.3.0 - Build 27.20.100.8783
+Engine     : Godot 4.7.2-stable (official)
+Window     : 1280x720, internal viewport 640x360
+Vsync      : disabled
+Engine.max_fps : 0 (uncapped)
+OS         : Windows 10.0.26200 (x64)
+
+Command
+-------
+Godot_v4.7.2-stable_win64_console.exe --path . --resolution 1280x720 res://tests/performance.tscn
+
+Workload
+--------
+120 requested common infected + 4 specials, 1.6 s warm-up, 5 s sample.
+Alive at sample time: 114 commons, 3 specials.
+
+Raw output
+----------
+[PERF] frames=420 avg_fps=83.9 min_fps=15.0 commons=114 specials=3
+[PERF] draw_calls=219 memory=92.3MB peak=92.5MB
+[PERF] process=9.48ms physics=33.58ms objects=724 pairs=244
+[PERF] RESULT: PASS
+
+Interpretation
+--------------
+- The test's gate (avg >= 60, commons <= 120, specials <= 4, peak < 600 MB) passes.
+- min_fps=15.0 is a single-frame hitch, not the steady-state rate.
+- physics=33.58 ms/tick exceeds the 16.67 ms 60 Hz budget. At this enemy count the
+  simulation is physics-bound on this machine, so the 60 FPS average should not be
+  read as "stable 60 FPS under all 120-enemy conditions".
+- This machine is an Intel UHD 630, not the Intel Arc listed in docs/TESTING.md;
+  the older 813 FPS figure in that document does not apply to this run.

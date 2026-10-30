@@ -1,76 +1,64 @@
 class_name PlayerNetworkSync
 extends Node2D
-## PlayerNetworkSync - 挂载于 PlayerControllerV2，仅负责网络状态同步。
-## 不修改任何战斗逻辑，只读取/广播位置、朝向、状态。
-## 单机模式下自动禁用，零开销。
+## Owns the player's MultiplayerSynchronizer.
+##
+## The previous implementation ran a second movement loop over RPC and read
+## `facing`/`state` from this helper node instead of the player body, while
+## NetworkManager wrote its interpolation targets to the body. Both sides were
+## disconnected. Replication is now single-source: the synchronizer below
+## mirrors the player body's transform, facing, state and health to every peer.
+
+const REPLICATED_PROPERTIES := [
+	"position", "facing", "aim_angle", "state",
+	"hp", "temp_hp", "is_downed", "is_dead",
+	"black_white", "bleedout", "downs", "medkits", "pills", "visual_id",
+]
 
 var peer_id: int = 1
 var is_local: bool = true
-var net_target_x: float = 0.0
-var net_target_y: float = 0.0
-var net_facing: int = 1
-var net_state: String = "idle"
-var _lerp_speed: float = 12.0
-var _last_input_time: float = 0.0
 
-var _network: Node = null
 
 func _ready() -> void:
-	_network = get_node_or_null("/root/NetworkManager")
-	if _network == null or not _network.is_multiplayer_active():
-		set_process(false)
+	var net := get_node_or_null("/root/NetworkManager")
+	if net == null or not bool(net.call("is_multiplayer_active")):
 		return
-	set_process(true)
-	# 重命名节点便于查找
-	name = "Player_" + str(peer_id)
-
-
-func _process(delta: float) -> void:
-	if _network == null:
+	var body := get_parent()
+	if body == null:
 		return
-	if is_local:
-		_emit_local_state()
-	else:
-		_apply_remote_interpolation(delta)
+	peer_id = body.get_multiplayer_authority()
+	is_local = peer_id == multiplayer.get_unique_id()
+	_build_synchronizer(body, peer_id)
 
 
-func _emit_local_state() -> void:
-	var now := Time.get_ticks_msec() / 1000.0
-	if now - _last_input_time < 0.05:
+func _build_synchronizer(body: Node, owner_id: int) -> void:
+	if body.get_node_or_null("PlayerSync") != null:
 		return
-	_last_input_time = now
-	var pos := global_position
-	var facing := int(get("facing", 1))
-	var state := String(get("state", "idle"))
-	_network.sync_player_move(peer_id, pos.x, pos.y, facing, state)
+	var config := SceneReplicationConfig.new()
+	for prop in REPLICATED_PROPERTIES:
+		if not (prop in body):
+			continue
+		var path := NodePath(".:" + prop)
+		config.add_property(path)
+		config.property_set_sync(path, true)
+		config.property_set_spawn(path, true)
+		config.property_set_replication_mode(
+			path, SceneReplicationConfig.REPLICATION_MODE_ALWAYS)
+	var sync := MultiplayerSynchronizer.new()
+	sync.name = "PlayerSync"
+	sync.root_path = NodePath("..")
+	sync.replication_config = config
+	sync.set_multiplayer_authority(owner_id)
+	body.add_child(sync)
 
 
-func _apply_remote_interpolation(delta: float) -> void:
-	var cur_x := global_position.x
-	var cur_y := global_position.y
-	var new_x := lerpf(cur_x, net_target_x, _lerp_speed * delta)
-	var new_y := lerpf(cur_y, net_target_y, _lerp_speed * delta)
-	global_position = Vector2(new_x, new_y)
-	set("facing", net_facing)
-	set("state", net_state)
-
-
-## RPC 触发点（由 PlayerControllerV2 调用）
-func net_fire(weapon_id: StringName, x: float, y: float, dir_x: float, dir_y: float) -> void:
-	pass  # 由 PlayerControllerV2 处理实际开火，此处仅占位
-
-
-func net_reload(weapon_id: StringName) -> void:
-	pass
-
-
-func net_swap_weapon(weapon_id: StringName) -> void:
-	pass
-
-
-func net_downed() -> void:
-	set("is_downed", true)
-
-
-func net_revived() -> void:
-	set("is_downed", false)
+func snapshot() -> Dictionary:
+	var body := get_parent()
+	if body == null:
+		return {}
+	return {
+		"peer_id": peer_id,
+		"is_local": is_local,
+		"hp": int(body.get("hp")),
+		"facing": int(body.get("facing")),
+		"state": String(body.get("state")),
+	}

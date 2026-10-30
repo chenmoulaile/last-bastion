@@ -3,6 +3,7 @@ extends UIScreen
 
 var _result: Dictionary = {}
 var _failed: bool = false
+var _stats_panel: Panel = null
 
 
 func setup(_payload: Dictionary) -> void:
@@ -97,18 +98,34 @@ func _build_rank_panel() -> void:
 
 
 func _build_stats_panel() -> void:
-	var panel := add_panel(Vector2(236, 62), Vector2(380, 230), UIKit.PANEL, UIKit.LINE)
+	_stats_panel = add_panel(Vector2(236, 62), Vector2(380, 230), UIKit.PANEL, UIKit.LINE)
+	var panel := _stats_panel
 	var head := UIKit.label("DEBRIEF  战斗统计", 7, UIKit.AMBER, UIKit.font_latin())
 	head.position = Vector2(8, 5)
 	head.size = Vector2(364, 8)
 	panel.add_child(head)
 
+	var kills := int(_result.get("kills", 0))
+	var headshots := int(_result.get("headshots", 0))
+	var specials := int(_result.get("specials", 0))
+	var rescues := int(_result.get("rescues", 0))
+	if not _multiplayer_rows().is_empty():
+		kills = 0
+		headshots = 0
+		specials = 0
+		rescues = 0
+		for row in _multiplayer_rows():
+			kills += int(row.get("kills", 0))
+			headshots += int(row.get("headshots", 0))
+			specials += int(row.get("specials", 0))
+			rescues += int(row.get("rescues", 0))
+
 	var stats := [
-		["击杀", str(int(_result.get("kills", 0))), UIKit.INK],
-		["爆头", str(int(_result.get("headshots", 0))), UIKit.AMBER],
-		["特殊感染者", str(int(_result.get("specials", 0))), UIKit.RED],
+		["击杀", str(kills), UIKit.INK],
+		["爆头", str(headshots), UIKit.AMBER],
+		["特殊感染者", str(specials), UIKit.RED],
 		["最高连击", str(int(_result.get("max_combo", 0))), UIKit.GREEN],
-		["救助队友", str(int(_result.get("rescues", 0))), UIKit.TEAL],
+		["救助队友", str(rescues), UIKit.TEAL],
 		["队伍存活", str(int(_result.get("squad_alive", 1))), UIKit.INK],
 		["用时", UIKit.format_time(float(_result.get("time", 0.0))), UIKit.INK],
 		["隐藏房间", str(_result.get("hidden_rooms", []).size()), UIKit.TEAL],
@@ -120,11 +137,13 @@ func _build_stats_panel() -> void:
 		["Tank 击杀", str(int(_result.get("tanks_killed", 0))), UIKit.AMBER],
 		["Witch 惊动", "是" if bool(_result.get("witch_woken", false)) else "否", UIKit.PURPLE],
 	]
+	var is_multiplayer_result := not _multiplayer_rows().is_empty()
+	var row_step := 26.0 if is_multiplayer_result else 34.0
 	for i in stats.size():
 		var col := i % 3
 		var row := int(i / 3)
 		var x := 8.0 + col * 122.0
-		var y := 18.0 + row * 34.0
+		var y := 18.0 + row * row_step
 		var key := UIKit.label(stats[i][0], 7, UIKit.DIM)
 		key.position = Vector2(x, y)
 		key.size = Vector2(116, 8)
@@ -133,6 +152,11 @@ func _build_stats_panel() -> void:
 		value.position = Vector2(x, y + 8)
 		value.size = Vector2(116, 14)
 		panel.add_child(value)
+
+	# Multiplayer results replace the achievements block with the per-player
+	# table (the achievement wall button remains the way to see unlocks).
+	if not _multiplayer_rows().is_empty():
+		return
 
 	var line := ColorRect.new()
 	line.color = UIKit.LINE
@@ -194,43 +218,51 @@ func _build_bottom() -> void:
 	next.grab_focus()
 
 
+func _multiplayer_rows() -> Array:
+	var rows: Array = _result.get("player_stats", [])
+	return rows if rows.size() > 1 else []
+
+
 func _build_multiplayer_stats_panel() -> void:
-	var net := get_node_or_null("/root/NetworkManager")
-	if net == null or not bool(net.call("is_multiplayer_active")):
+	var rows := _multiplayer_rows()
+	if rows.is_empty() or _stats_panel == null:
 		return
-	var stats := GameManager.get_all_player_stats()
-	if stats.is_empty():
-		return
-	var panel := add_panel(Vector2(24, 350), Vector2(592, 90), UIKit.PANEL, UIKit.LINE)
-	var head := UIKit.label("MULTIPLAYER  个人战绩", 7, UIKit.AMBER, UIKit.font_latin())
-	head.position = Vector2(8, 5)
-	head.size = Vector2(576, 8)
+	var panel := UIKit.panel(UIKit.PANEL, UIKit.LINE)
+	panel.name = "MultiplayerStats"
+	panel.position = Vector2(8, 152)
+	panel.size = Vector2(364, 76)
+	_stats_panel.add_child(panel)
+	var head := UIKit.label("MULTIPLAYER  个人战绩", 6, UIKit.AMBER, UIKit.font_latin())
+	head.position = Vector2(4, 3)
+	head.size = Vector2(356, 7)
 	panel.add_child(head)
-	var cols := ["击杀", "爆头", "特感", "倒地", "救助"]
-	var col_w := 576.0 / float(cols.size())
+	var widths := [40.0, 64.0, 64.0, 64.0, 64.0, 64.0]
+	var cols := ["P", "击杀", "爆头", "特感", "倒地", "救助"]
+	var x := 2.0
 	for i in cols.size():
-		var c := UIKit.label(cols[i], 7, UIKit.DIM, UIKit.font_latin())
-		c.position = Vector2(8 + i * col_w, 18)
-		c.size = Vector2(col_w - 8, 8)
+		var c := UIKit.label(cols[i], 6, UIKit.DIM, UIKit.font_latin())
+		c.position = Vector2(x, 13)
+		c.size = Vector2(widths[i], 7)
 		c.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		panel.add_child(c)
-	var y := 30
-	var max_rows := mini(stats.size(), 4)
-	for i in max_rows:
-		var s := stats[i]
-		var name_label := UIKit.label("P" + str(int(s.get("peer_id", 1))), 9, UIKit.INK)
-		name_label.position = Vector2(8, y)
-		name_label.size = Vector2(40, 10)
-		panel.add_child(name_label)
-		var values := [int(s.get("kills", 0)), int(s.get("headshots", 0)),
-			int(s.get("specials", 0)), int(s.get("downs", 0)), int(s.get("rescues", 0))]
-		for j in 5:
-			var v := UIKit.label(str(values[j]), 10, UIKit.INK, UIKit.font_latin_bold())
-			v.position = Vector2(48 + j * col_w, y)
-			v.size = Vector2(col_w - 8, 10)
+		x += widths[i]
+	var y := 24.0
+	for i in mini(rows.size(), 4):
+		var s: Dictionary = rows[i]
+		var values := ["P" + str(int(s.get("peer_id", 1))),
+			str(int(s.get("kills", 0))), str(int(s.get("headshots", 0))),
+			str(int(s.get("specials", 0))), str(int(s.get("downs", 0))),
+			str(int(s.get("rescues", 0)))]
+		x = 2.0
+		for j in values.size():
+			var v := UIKit.label(values[j], 7,
+				UIKit.AMBER if j == 0 else UIKit.INK, UIKit.font_latin())
+			v.position = Vector2(x, y)
+			v.size = Vector2(widths[j], 8)
 			v.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			panel.add_child(v)
-		y += 14
+			x += widths[j]
+		y += 13.0
 
 
 func _next_pressed() -> void:
