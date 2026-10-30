@@ -78,6 +78,7 @@ const ACTION_ALIASES: Dictionary = {
 ## --- 生命/状态(字段名与现有 player.gd 对齐,兼容 HUD 的 .get() 读取) ---
 var max_hp: int = 100
 var hp: int = 100
+var _base_max_hp: int = 100
 var temp_hp: int = 0
 var downs: int = 0
 var black_white: bool = false
@@ -105,6 +106,13 @@ var facing: int = 1
 ## Replicated movement state ("idle"/"walk"/"attack"/"downed"/"dead").
 var state: String = "idle"
 var camera: Camera2D = null
+var rappelling: bool = false
+## Remote replicas are driven by MultiplayerSynchronizer only; they must never
+## read local input, run AI or create a camera on this peer.
+var is_remote_player: bool = false
+var _rappel_from: Vector2 = Vector2.ZERO
+var _rappel_to: Vector2 = Vector2.ZERO
+var _rappel_t: float = 0.0
 var aim_dir: Vector2 = Vector2.RIGHT
 var aim_angle: float = 0.0
 var run_speed: float = 220.0
@@ -147,6 +155,9 @@ var _frontal_guards: Dictionary = {}
 
 var _renderer: PlayerRenderer = null
 var _passives: Array[Node] = []
+## Public alias used by UI/tests and the narrative layer ("is a passive
+## attached?"); the game logic itself iterates _passives.
+var passive: Node = null
 var _action_cache: Dictionary = {}
 var _skill_payload: Dictionary = {"handled": false}
 var _prompt_payload: Dictionary = {"text": ""}
@@ -177,12 +188,14 @@ func _ready() -> void:
 		character_data = load(FALLBACK_DATA) as ReworkCharacterData
 	max_hp = character_data.max_hp
 	hp = max_hp
+	_base_max_hp = max_hp
 	run_speed = character_data.speed
 	crouch_speed = run_speed * 0.5
 	stealth_speed_multiplier = 1.0
 	collision_layer = 2
 	collision_mask = 1 | 8 | 16 | 64
 	floor_snap_length = 8.0
+	_build_collision()
 	_bus = _autoload(&"EventBus")
 	_audio = _autoload(&"AudioManager")
 	_game = _autoload(&"GameManager")
@@ -226,6 +239,9 @@ func _exit_tree() -> void:
 ## ------------------------------------------------------------ 主循器 ----
 
 func _physics_process(delta: float) -> void:
+	if is_remote_player:
+		_sync_visuals()
+		return
 	_tick_timers(delta)
 	if is_dead:
 		velocity.x = move_toward(velocity.x, 0.0, 900.0 * delta)
@@ -244,10 +260,15 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		_sync_visuals()
 		return
+	if rappelling:
+		_tick_rappel(delta)
+		_sync_visuals()
+		return
 	_read_aim(delta)
 	_tick_movement(delta)
 	_tick_actions(delta)
 	_tick_interaction()
+	_apply_gravity(delta)
 	move_and_slide()
 	_sync_visuals()
 
@@ -464,10 +485,13 @@ func _fire_weapon(weapon: Resource) -> void:
 	var pellets: int = maxi(1, int(_wint(weapon, "pellets", 1)))
 	var pierce: int = maxi(0, int(_wint(weapon, "pierce", 0)))
 	var base_damage := float(_wint(weapon, "damage", 10)) * get_damage_mult()
+	var first_hit := Vector2.INF
 	for i in pellets:
 		var shot_angle := aim_angle + deg_to_rad(randf_range(-spread, spread) * 0.5)
 		var dir := Vector2(cos(shot_angle), sin(shot_angle))
-		_hitscan(origin, dir, range_px, pierce, base_damage, wid)
+		var hit := _hitscan(origin, dir, range_px, pierce, base_damage, wid)
+		if first_hit == Vector2.INF and hit != Vector2.INF:
+			first_hit = hit
 	if _renderer:
 		_renderer.trigger_muzzle_flash()
 	attack_anim_timer = 0.16
@@ -477,20 +501,42 @@ func _fire_weapon(weapon: Resource) -> void:
 		_bus.gunshot.emit(global_position, 900.0)
 	shots_fired.emit(wid, global_position)
 	_emit_state(&"fire")
+	if _network != null and bool(_network.call("is_multiplayer_active")):
+		_network.call("broadcast_player_shot", int(_network.call("get_peer_id")),
+			wid, origin, aim_dir, first_hit)
 	if _bus:
 		_bus.ammo_changed.emit(int(state["mag"]), int(state["reserve"]))
 	if int(state["mag"]) <= 0:
 		start_reload()
 
 
+## Remote shooters' muzzle flash / tracer / gunshot / impact blood. Damage is
+## arbitrated separately by the host; this is presentation only.
+func play_remote_shot(weapon_id: StringName, origin: Vector2, dir: Vector2,
+		hit_pos: Vector2) -> void:
+	if _renderer:
+		_renderer.trigger_muzzle_flash()
+	attack_anim_timer = 0.16
+	var end := hit_pos if hit_pos != Vector2.INF else origin + dir * 420.0
+	if level != null and is_instance_valid(level.get("fx_layer")):
+		Fx.tracer(level.get("fx_layer"), origin, end)
+		if hit_pos != Vector2.INF:
+			Fx.blood(level.get("fx_layer"), hit_pos, -dir, 1.0)
+	var audio := _audio if _audio != null else get_node_or_null("/root/AudioManager")
+	if audio != null and audio.has_method("play_sfx_2d"):
+		audio.call("play_sfx_2d", weapon_id, origin, 900.0)
+	_emit_state(&"fire")
+
+
 func _hitscan(origin: Vector2, dir: Vector2, range_px: float, pierce: int,
-		damage: float, weapon_id: StringName) -> void:
+		damage: float, weapon_id: StringName) -> Vector2:
 	## 与现有 player.gd 相同的穿透逻辑: 命中后前移 2px 继续查询,
 	## 打到无 apply_damage/hit 方法的物体(墙)即停止。
 	var space := get_world_2d().direct_space_state
 	var exclude: Array[RID] = [get_rid()]
 	var from := origin
 	var remaining := range_px
+	var first_hit := Vector2.INF
 	for i in 1 + pierce:
 		var query := PhysicsRayQueryParameters2D.create(from, from + dir * remaining,
 			ENEMY_RAY_MASK, exclude)
@@ -501,6 +547,8 @@ func _hitscan(origin: Vector2, dir: Vector2, range_px: float, pierce: int,
 		exclude.append(result["rid"])
 		var collider: Object = result["collider"]
 		var point: Vector2 = result["position"]
+		if first_hit == Vector2.INF:
+			first_hit = point
 		_apply_hit(collider, point, dir, damage, weapon_id)
 		from = point + dir * 2.0
 		remaining = range_px - origin.distance_to(from)
@@ -508,6 +556,7 @@ func _hitscan(origin: Vector2, dir: Vector2, range_px: float, pierce: int,
 			break
 		if not (collider.has_method("apply_damage") or collider.has_method("hit")):
 			break
+	return first_hit
 
 
 func _apply_hit(collider: Object, point: Vector2, dir: Vector2, damage: float,
@@ -722,6 +771,7 @@ func _attach_passive(passive_id: StringName) -> void:
 	node.name = "Passive_%s" % passive_id
 	add_child(node)
 	_passives.append(node)
+	passive = node
 
 
 func attach_passive(passive_id: StringName) -> void:
@@ -897,18 +947,52 @@ func revive(_healer: Node) -> void:
 	if is_dead or not is_downed:
 		return
 	is_downed = false
-	black_white = downs >= _max_downs()
-	hp = 30
-	temp_hp = 30 if black_white else 0
 	bleedout = BLEEDOUT_TIME
 	control_immune = CONTROL_IMMUNE_TIME
-	iframes = 1.0
+	iframes = 2.0
+	# Second incapacitation is the black-and-white state: max HP collapses to 1
+	# until a medkit is used. First revive keeps the normal pool and tops up
+	# temporary health, matching the legacy player rules.
+	if downs >= 2:
+		black_white = true
+		max_hp = 1
+		hp = 1
+	else:
+		black_white = false
+		max_hp = maxi(1, _base_max_hp)
+		hp = maxi(1, int(_base_max_hp * 0.35))
+	temp_hp = 30
 	if _renderer:
 		_renderer.set_downed(false)
 	revived.emit()
 	if _bus:
 		_bus.player_rescued.emit()
 	_emit_state(&"revived")
+
+
+## Clear black-and-white and heal 80% of missing HP. Called by the medkit item
+## component and by tests that drive the downed flow directly.
+func _finish_medkit() -> void:
+	medkits = maxi(0, medkits - 1)
+	if black_white:
+		black_white = false
+		max_hp = maxi(1, _base_max_hp)
+	var missing := max_hp - hp
+	hp = mini(max_hp, hp + int(ceil(float(missing) * 0.8)))
+	temp_hp = 0
+	if _bus:
+		_bus.player_healed.emit(hp)
+	_emit_state(&"healed")
+
+
+func _use_pills() -> void:
+	if pills <= 0 or is_dead:
+		return
+	pills -= 1
+	temp_hp = mini(100, temp_hp + 50)
+	if _bus:
+		_bus.player_healed.emit(50)
+	_emit_state(&"pills")
 
 
 ## 网络同步：客户端接收伤害并扣血。
@@ -928,9 +1012,10 @@ func heal(amount: int) -> void:
 func heal_full() -> void:
 	if is_dead:
 		return
+	black_white = false
+	max_hp = maxi(1, _base_max_hp)
 	hp = max_hp
 	temp_hp = 0
-	black_white = false
 
 
 func set_stealth_invisible(duration: float) -> void:
@@ -939,15 +1024,37 @@ func set_stealth_invisible(duration: float) -> void:
 	_emit_state(&"healed")
 
 
+func start_rappel(target_y: float) -> bool:
+	if is_dead or is_downed or is_controlled or rappelling:
+		return false
+	rappelling = true
+	_rappel_from = global_position
+	_rappel_to = Vector2(global_position.x, target_y)
+	_rappel_t = 0.0
+	velocity = Vector2.ZERO
+	_emit_state(&"rappel")
+	return true
+
+
+func _tick_rappel(delta: float) -> void:
+	_rappel_t = minf(1.0, _rappel_t + delta / 0.34)
+	global_position = _rappel_from.lerp(_rappel_to, ease(_rappel_t, 0.6))
+	if _rappel_t >= 1.0:
+		rappelling = false
+		global_position = _rappel_to
+		velocity = Vector2.ZERO
+
+
 func respawn_at(pos: Vector2) -> void:
 	global_position = pos
 	velocity = Vector2.ZERO
 	is_dead = false
 	is_downed = false
 	is_controlled = false
+	black_white = false
+	max_hp = maxi(1, _base_max_hp)
 	hp = max_hp
 	downs = 0
-	black_white = false
 	bleedout = BLEEDOUT_TIME
 	iframes = 2.0
 	if _renderer:
@@ -1130,6 +1237,18 @@ func _sync_weapon_visual(force: bool = false) -> void:
 		_renderer.set_weapon_visual(kind, visual)
 
 
+func _build_collision() -> void:
+	if get_node_or_null("Collision") != null:
+		return
+	var shape := CollisionShape2D.new()
+	shape.name = "Collision"
+	var rect := RectangleShape2D.new()
+	rect.size = Vector2(12, 28)
+	shape.shape = rect
+	shape.position = Vector2(0, -14)
+	add_child(shape)
+
+
 func _build_camera() -> void:
 	if get_node_or_null("Camera") != null:
 		return
@@ -1188,9 +1307,7 @@ func _medkit_stub() -> void:
 	else:
 		if medkits <= 0 or is_dead:
 			return
-		medkits -= 1
-		heal(int(70.0 * _medkit_mult()))
-		black_white = false
+		_finish_medkit()
 	_emit_state(&"medkit")
 
 
@@ -1198,10 +1315,7 @@ func _pills_stub() -> void:
 	if _item_component != null:
 		_item_component.use_pills()
 	else:
-		if pills <= 0 or is_dead:
-			return
-		pills -= 1
-		temp_hp += 50
+		_use_pills()
 	_emit_state(&"pills")
 
 
@@ -1238,6 +1352,20 @@ func _medkit_mult() -> float:
 
 func _sync_visuals() -> void:
 	if _renderer == null:
+		return
+	if is_remote_player:
+		var remote_anim := CodeRenderer.STATE_IDLE
+		if not is_downed and not is_dead:
+			if state == "walk":
+				remote_anim = CodeRenderer.STATE_WALK
+			elif state == "attack":
+				remote_anim = CodeRenderer.STATE_ATTACK
+		_renderer.set_anim_state(remote_anim)
+		_renderer.set_facing(facing)
+		_renderer.set_aim_angle(aim_angle)
+		_renderer.set_health_ratio(float(hp) / float(maxi(1, max_hp)))
+		_renderer.set_downed(is_downed)
+		_renderer.set_dead(is_dead)
 		return
 	var anim_state := CodeRenderer.STATE_IDLE
 	if is_dead:

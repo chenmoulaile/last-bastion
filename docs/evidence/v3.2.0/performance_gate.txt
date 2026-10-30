@@ -1,0 +1,56 @@
+LAST BASTION v3.2.0 · performance gate (real window)
+=====================================================
+
+Machine / renderer
+------------------
+GPU        : Intel(R) UHD Graphics 630
+API        : OpenGL 3.3.0 - Build 27.20.100.8783
+Engine     : Godot 4.7.2-stable (official)
+Window     : 1280x720, internal viewport 640x360
+Vsync      : disabled
+Engine.max_fps : 0 (uncapped)
+OS         : Windows 10.0.26200 (x64)
+
+Workload
+--------
+tests/performance.tscn requests 120 common infected + 4 specials, ends the
+Director, waits 1.6s (shader/physics warm-up), then samples 5s. Actual alive
+count at sample time is reported below (some bodies die or despawn during the
+warm-up, so it is 103-108 commons + 3-4 specials, not exactly 114+3).
+
+LOD policy applied (scripts/zombies/zombie_base.gd)
+---------------------------------------------------
+- <=140 px from the nearest player : full AI/physics every tick, full collision.
+- 140-320 px                       : AI/physics every 6 ticks (10 Hz), still collides.
+- >320 px / off-screen             : sleeping: no AI, no movement, no push/world
+                                     contacts; layer 8/16 keeps it hittable by
+                                     player rays, collision_mask=0.
+- LOD collision is rewritten only when the tier changes (avoids broadphase churn).
+
+Three consecutive runs (same machine, same build)
+-------------------------------------------------
+Run 1: [PERF] frames=1076 avg_fps=214.9 min_fps=18.7 commons=107 specials=3
+       [PERF] draw_calls=199 memory=92.4MB peak=92.6MB
+       [PERF] process=7.81ms physics=7.36ms objects=692 pairs=135
+Run 2: [PERF] frames=994 avg_fps=198.7 min_fps=50.4 commons=103 specials=4
+       [PERF] draw_calls=213 memory=92.5MB peak=92.6MB
+       [PERF] process=8.33ms physics=8.93ms objects=711 pairs=180
+Run 3: [PERF] frames=1014 avg_fps=202.6 min_fps=57.9 commons=108 specials=4
+       [PERF] draw_calls=204 memory=92.5MB peak=92.6MB
+       [PERF] process=7.59ms physics=8.36ms objects=690 pairs=196
+
+Before vs after (same 114+3 workload era)
+-----------------------------------------
+Before LOD (v3.1.1): avg_fps=83.9  min_fps=15.0  physics=33.58ms  pairs=244
+After  LOD (v3.2.0): physics=7.36-8.93ms, avg_fps=198.7-214.9, pairs=135-196
+
+Honest interpretation
+---------------------
+- The requested physics budget (<16 ms/tick) is met in all three runs (7-9 ms).
+- Average frame rate is 199-215 FPS uncapped.
+- min_fps is NOT stable 60: observed 18.7 / 50.4 / 57.9. These are isolated
+  frame hits (OS scheduling, GC, spawn warm-up), not the sustained rate.
+  Therefore "physics <16 ms" is proven; "every frame >=60 FPS" is not.
+- process=7.6-8.3ms + physics=7.4-8.9ms can still exceed 16.7ms on a tick frame;
+  the 60 Hz budget on this UHD 630 has little headroom.
+- test gate result: PASS (avg >=60, commons <=120, specials <=4, peak <600MB).

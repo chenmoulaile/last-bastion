@@ -2,6 +2,10 @@ extends UIScreen
 ## Title screen: campaign resume, archive summary and secondary screens.
 
 var _continue_level: LevelData
+var _coop_button: Button = null
+var _mp_overlay: Control = null
+var _mp_status: Label = null
+var _mp_ip: LineEdit = null
 
 
 func _build() -> void:
@@ -22,7 +26,7 @@ func _build() -> void:
 	tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(tagline)
 
-	var menu_panel := add_panel(Vector2(24, 154), Vector2(212, 190), Color(0.035, 0.045, 0.058, 0.90), UIKit.LINE)
+	var menu_panel := add_panel(Vector2(24, 154), Vector2(212, 194), Color(0.035, 0.045, 0.058, 0.90), UIKit.LINE)
 	var menu_title := UIKit.label("CAMPAIGN", 7, UIKit.AMBER, UIKit.font_latin())
 	menu_title.position = Vector2(8, 4)
 	menu_panel.add_child(menu_title)
@@ -34,43 +38,49 @@ func _build() -> void:
 		continue_text = "继续战役"
 	if _continue_level != null:
 		continue_text += "  " + String(_continue_level.id).to_upper()
-	var continue_button := UIKit.button(continue_text, 196, 22, true)
-	continue_button.position = Vector2(8, 18)
+	var continue_button := UIKit.button(continue_text, 196, 20, true)
+	continue_button.position = Vector2(8, 16)
 	continue_button.pressed.connect(_on_continue)
 	menu_panel.add_child(continue_button)
 
-	var level_button := UIKit.button("章节选择", 196, 22)
-	level_button.position = Vector2(8, 42)
+	var level_button := UIKit.button("章节选择", 196, 20)
+	level_button.position = Vector2(8, 38)
 	level_button.pressed.connect(func() -> void: go(&"levels"))
 	menu_panel.add_child(level_button)
 
-	var survivor_button := UIKit.button("幸存者小队", 196, 22)
-	survivor_button.position = Vector2(8, 66)
+	var survivor_button := UIKit.button("幸存者小队", 196, 20)
+	survivor_button.position = Vector2(8, 60)
 	survivor_button.pressed.connect(func() -> void: go(&"survivors"))
 	menu_panel.add_child(survivor_button)
 
-	var archive_button := UIKit.button("档案库  " + _archive_summary(), 196, 22)
-	archive_button.position = Vector2(8, 90)
+	var archive_button := UIKit.button("档案库  " + _archive_summary(), 196, 20)
+	archive_button.position = Vector2(8, 82)
 	archive_button.pressed.connect(func() -> void: go(&"archives"))
 	menu_panel.add_child(archive_button)
 
-	var settings_button := UIKit.button("设置", 196, 22)
-	settings_button.position = Vector2(8, 114)
+	var settings_button := UIKit.button("设置", 196, 20)
+	settings_button.position = Vector2(8, 104)
 	settings_button.pressed.connect(func() -> void: go(&"settings"))
 	menu_panel.add_child(settings_button)
 
-	var credits_button := UIKit.button("制作人员", 196, 22)
-	credits_button.position = Vector2(8, 138)
+	var credits_button := UIKit.button("制作人员", 196, 20)
+	credits_button.position = Vector2(8, 126)
 	credits_button.pressed.connect(func() -> void: go(&"credits"))
 	menu_panel.add_child(credits_button)
 
-	var quit_button := UIKit.button("退出游戏", 196, 22)
-	quit_button.position = Vector2(8, 162)
+	var coop_button := UIKit.button("联机合作  ONLINE", 196, 20)
+	coop_button.position = Vector2(8, 148)
+	coop_button.pressed.connect(_open_multiplayer_panel)
+	menu_panel.add_child(coop_button)
+	_coop_button = coop_button
+
+	var quit_button := UIKit.button("退出游戏", 196, 20)
+	quit_button.position = Vector2(8, 170)
 	quit_button.pressed.connect(func() -> void: go(&"quit"))
 	menu_panel.add_child(quit_button)
 
 	# Add neon hover animation to all menu buttons
-	for btn in [continue_button, level_button, survivor_button, archive_button, settings_button, credits_button, quit_button]:
+	for btn in [continue_button, level_button, survivor_button, archive_button, settings_button, credits_button, coop_button, quit_button]:
 		_animate_button_hover(btn)
 	_build_archive()
 	continue_button.grab_focus()
@@ -195,3 +205,128 @@ func _archive_summary() -> String:
 	if ArchiveManager == null:
 		return "0/0"
 	return "%d/%d" % [ArchiveManager.unlocked_count(), ArchiveManager.total_count()]
+
+
+# ------------------------------------------------------------- online co-op ----
+
+func _open_multiplayer_panel() -> void:
+	if _mp_overlay != null and is_instance_valid(_mp_overlay):
+		return
+	_mp_overlay = Control.new()
+	_mp_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_mp_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_mp_overlay)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.0, 0.0, 0.0, 0.74)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	_mp_overlay.add_child(dim)
+
+	var panel := UIKit.panel(Color(0.035, 0.045, 0.058, 0.98), UIKit.AMBER)
+	panel.position = Vector2(150, 58)
+	panel.size = Vector2(340, 244)
+	_mp_overlay.add_child(panel)
+
+	var title := UIKit.label("ONLINE CO-OP  ·  联机合作", 9, UIKit.AMBER, UIKit.font_latin())
+	title.position = Vector2(12, 10)
+	title.size = Vector2(316, 12)
+	panel.add_child(title)
+	var sub := UIKit.label("IP 直连 · 端口 7777 · 主机创建后立即进入 L01", 7, UIKit.DIM)
+	sub.position = Vector2(12, 26)
+	sub.size = Vector2(316, 10)
+	panel.add_child(sub)
+
+	var host_button := UIKit.button("创建房间  (HOST)", 316, 28, true)
+	host_button.position = Vector2(12, 46)
+	host_button.pressed.connect(_on_host_pressed)
+	panel.add_child(host_button)
+
+	var ip_label := UIKit.label("主机 IP", 7, UIKit.DIM, UIKit.font_latin())
+	ip_label.position = Vector2(12, 84)
+	ip_label.size = Vector2(60, 10)
+	panel.add_child(ip_label)
+	_mp_ip = LineEdit.new()
+	_mp_ip.text = "127.0.0.1"
+	_mp_ip.position = Vector2(12, 96)
+	_mp_ip.size = Vector2(220, 26)
+	_mp_ip.add_theme_font_override("font", UIKit.font_latin())
+	_mp_ip.add_theme_font_size_override("font_size", 10)
+	_mp_ip.add_theme_color_override("font_color", UIKit.INK)
+	_mp_ip.add_theme_color_override("font_placeholder_color", UIKit.DIM)
+	_mp_ip.add_theme_stylebox_override("normal",
+		UIKit.panel_style(Color(0.02, 0.03, 0.04, 0.95), UIKit.LINE))
+	_mp_ip.add_theme_stylebox_override("focus",
+		UIKit.panel_style(Color(0.02, 0.03, 0.04, 0.95), UIKit.AMBER))
+	panel.add_child(_mp_ip)
+
+	var join_button := UIKit.button("加入房间", 84, 26)
+	join_button.position = Vector2(244, 96)
+	join_button.pressed.connect(_on_join_pressed)
+	panel.add_child(join_button)
+
+	_mp_status = UIKit.label("选择创建或加入；本机测试可直接用 127.0.0.1。", 8, UIKit.MUTED)
+	_mp_status.position = Vector2(12, 132)
+	_mp_status.size = Vector2(316, 34)
+	_mp_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	panel.add_child(_mp_status)
+
+	var back_button := UIKit.button("返回", 96, 24)
+	back_button.position = Vector2(12, 196)
+	back_button.pressed.connect(_close_multiplayer_panel)
+	panel.add_child(back_button)
+	var tip := UIKit.label("主机先进入关卡；客户端加入后会收到同一关卡。", 7, UIKit.DIM)
+	tip.position = Vector2(116, 202)
+	tip.size = Vector2(212, 10)
+	panel.add_child(tip)
+	host_button.grab_focus()
+
+
+func _close_multiplayer_panel() -> void:
+	if _mp_overlay != null and is_instance_valid(_mp_overlay):
+		_mp_overlay.queue_free()
+	_mp_overlay = null
+	_mp_status = null
+	_mp_ip = null
+	if _coop_button != null and is_instance_valid(_coop_button):
+		_coop_button.grab_focus()
+
+
+func _on_host_pressed() -> void:
+	if NetworkManager.is_multiplayer_active():
+		_set_mp_status("已有会话在运行。", UIKit.RED)
+		return
+	if not NetworkManager.connection_failed.is_connected(_on_network_error):
+		NetworkManager.connection_failed.connect(_on_network_error)
+	NetworkManager.host_session()
+	if not NetworkManager.is_host:
+		_set_mp_status("创建房间失败。", UIKit.RED)
+		return
+	_set_mp_status("房间已创建，正在进入 L01……", UIKit.GREEN)
+	NetworkManager.start_coop_level(&"l01", &"SQUAD", &"NORMAL", &"assault")
+
+
+func _on_join_pressed() -> void:
+	if NetworkManager.is_multiplayer_active():
+		_set_mp_status("已有会话在运行。", UIKit.RED)
+		return
+	var ip := "127.0.0.1"
+	if _mp_ip != null and is_instance_valid(_mp_ip):
+		ip = _mp_ip.text.strip_edges()
+		if ip.is_empty():
+			ip = "127.0.0.1"
+	if not NetworkManager.connection_failed.is_connected(_on_network_error):
+		NetworkManager.connection_failed.connect(_on_network_error)
+	NetworkManager.join_session(ip)
+	_set_mp_status("正在连接 %s:7777，等待主机下发关卡……" % ip, UIKit.AMBER)
+
+
+func _on_network_error(reason: String) -> void:
+	_set_mp_status("连接失败：" + reason, UIKit.RED)
+
+
+func _set_mp_status(text: String, color: Color) -> void:
+	if _mp_status == null or not is_instance_valid(_mp_status):
+		return
+	_mp_status.text = text
+	_mp_status.add_theme_color_override("font_color", color)

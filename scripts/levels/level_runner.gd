@@ -62,6 +62,7 @@ var _tanks_killed: int = 0
 var _tank_kill_time: float = 999.0
 var _tank_spawn_time: float = 0.0
 var _boss_node: Node = null
+var _network_spawn_override := false
 var _boss_kind: StringName = &""
 var _boss_nodes: Array = []
 var _boss_phase: int = 1
@@ -167,6 +168,9 @@ func _ready() -> void:
 	else:
 		EventBus.level_event.emit(data.title + " — " + data.subtitle)
 	call_deferred("_intro")
+	var net := get_node_or_null("/root/NetworkManager")
+	if net != null and bool(net.call("is_multiplayer_active")):
+		net.call_deferred("notify_level_ready")
 
 
 func _intro() -> void:
@@ -613,6 +617,11 @@ func _spawn_player() -> void:
 		if ResourceLoader.exists(fb_path):
 			rework_data = load(fb_path) as ReworkCharacterData
 	p.character_data = rework_data
+	var net := get_node_or_null("/root/NetworkManager")
+	if net != null and bool(net.call("is_multiplayer_active")):
+		var pid := int(net.call("get_peer_id"))
+		p.name = "Player_" + str(pid)
+		p.set_multiplayer_authority(pid)
 	actors.add_child(p)
 	player = p
 	for wid in data.player_weapons:
@@ -630,7 +639,10 @@ func _spawn_player() -> void:
 func spawn_network_player(peer_id: int, character_id: StringName, x: float, y: float) -> void:
 	var p: Node2D = PlayerControllerV2.new()
 	p.level = self
-	p.auto_camera = true
+	# Remote bodies must never create a Camera2D: the last camera made current
+	# would steal the view from the local player on this peer.
+	p.auto_camera = false
+	p.is_remote_player = true
 	p.position = Vector2(x, y)
 	p.name = "Player_" + str(peer_id)
 	p.set_multiplayer_authority(peer_id)
@@ -700,6 +712,7 @@ func _connect_events() -> void:
 	EventBus.director_request_boss.connect(_on_director_boss)
 	EventBus.gunshot.connect(_on_gunshot)
 	EventBus.door_kicked.connect(_on_door_kicked)
+	EventBus.player_died.connect(on_player_died)
 
 
 func _process(delta: float) -> void:
@@ -1443,6 +1456,10 @@ func _finish_level() -> void:
 
 # ------------------------------------------------------------------ combat ----
 func _spawn_zombie(kind: StringName, pos: Vector2, alert: bool = false) -> Node:
+	var net := get_node_or_null("/root/NetworkManager")
+	var net_active := net != null and bool(net.call("is_multiplayer_active"))
+	if net_active and not bool(net.get("is_host")) and not _network_spawn_override:
+		return null
 	var zd := GameManager.get_zombie(kind)
 	if zd == null:
 		zd = GameManager.get_zombie(&"common")
@@ -1452,6 +1469,10 @@ func _spawn_zombie(kind: StringName, pos: Vector2, alert: bool = false) -> Node:
 	z.level = self
 	z.position = pos
 	actors.add_child(z)
+	if int(z.net_id) == 0:
+		z.net_id = z.get_instance_id()
+	if net_active and bool(net.get("is_host")):
+		net.call_deferred("broadcast_zombie_spawn", kind, z.net_id, pos.x, pos.y)
 	if alert:
 		z.alerted = true
 		z.target = player
@@ -1459,6 +1480,18 @@ func _spawn_zombie(kind: StringName, pos: Vector2, alert: bool = false) -> Node:
 		EventBus.special_spawned.emit(zd.id)
 	if kind == &"tank" or (kind == &"charger" and data.id == &"l08"):
 		_register_boss(z, kind)
+	return z
+
+
+## Client-side visual spawn driven by NetworkManager.rpc_zombie_spawn. The
+## zombie is AI-disabled by ZombieBase because _is_network_host is false.
+func spawn_network_zombie(kind: StringName, net_id: int, pos: Vector2) -> Node:
+	_network_spawn_override = true
+	var z = _spawn_zombie(kind, pos, false)
+	_network_spawn_override = false
+	if z != null:
+		z.net_id = net_id
+		z.name = "Zombie_" + str(net_id)
 	return z
 
 

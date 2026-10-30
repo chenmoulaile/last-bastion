@@ -117,7 +117,7 @@ func _test_level(path: String, mode: StringName, expected_allies: int) -> void:
 	await get_tree().create_timer(0.12, true, false, true).timeout
 	Input.action_release("melee")
 
-	scene.spawn_horde_at(player.global_position, 6, true)
+	scene.spawn_horde_at(player.global_position, 12, true)
 	scene.spawn_special(&"hunter")
 	scene.spawn_boss(&"tank")
 	scene.start_defense(4.0, 1, 4)

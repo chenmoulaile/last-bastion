@@ -1,0 +1,66 @@
+LAST BASTION v3.2.0 · two-process co-op verification
+=====================================================
+
+Topology
+--------
+Two independent Godot processes on one machine, ENet over 127.0.0.1:7777.
+Host creates the room and immediately starts L01; the client joins and receives
+the synchronized level start. Both processes were also run with a real window
+for the screenshots (--capture).
+
+Lifecycle implemented
+---------------------
+1. Main menu -> "联机合作 ONLINE" -> Host (创建房间) or Join (IP).
+2. Host: NetworkManager.host_session() + start_coop_level(L01).
+3. Client connects -> host sends rpc_start_level -> both load L01.
+4. LevelRunner names the local body Player_<peer_id>, sets multiplayer authority.
+5. Client level ready -> rpc_client_level_ready -> host spawns Player_<client>
+   and sends the host body to the client.
+6. Two-phase replication handshake: spawn nodes on both sides, then host asks
+   clients to enable synchronizers, receives acks, then enables its own.
+   This avoids Godot SceneCache permanently caching missing node paths.
+7. Host spawns zombies -> rpc_zombie_spawn -> client visual copies (AI disabled).
+   Host broadcasts position at 20 Hz; clients interpolate.
+8. Client shots send rpc_zombie_damage to the host; the host applies damage,
+   broadcasts death/dismember; clients remove the visual copy.
+9. Player shots broadcast rpc_player_shot; remote peers play muzzle flash,
+   tracer, positional gunshot and impact blood (presentation only).
+
+Headless acceptance result
+--------------------------
+HOST (0 failed):
+  PASS host level loaded
+  PASS client peer registered on host
+  PASS client player body spawned on host
+  PASS host sees both player bodies
+  PASS client movement replicated to host (x=280.0)
+  PASS host spawned test zombie
+  PASS host broadcast zombie spawn
+  PASS host received remote-shot event from client (5 events)
+  PASS client shot killed host-authoritative zombie
+CLIENT (0 failed):
+  PASS client connected
+  PASS client received synchronized level
+  PASS client local Player_<id> exists
+  PASS client sees remote Player_1
+  PASS client received zombie spawn
+  PASS client received host remote-shot presentation
+
+GUI capture result (0 failed on both peers)
+-------------------------------------------
+Camera diagnostics after the fight:
+  HOST   camera=(220,208) target=Player_1 (local)
+  CLIENT camera=(280,208) target=Player_<id> (local)
+Screenshots:
+  docs/evidence/v3.2.0/02_host_coop_combat.png
+  docs/evidence/v3.2.0/03_client_coop_combat.png
+
+Known limits (not tested / not production-grade)
+------------------------------------------------
+- Only 2 processes on loopback; no 3-4 player, NAT, packet loss or jitter test.
+- Zombie damage from clients is host-arbitrated, but the client also applies
+  local damage for immediate feedback; this is a co-op trust model, not anti-cheat.
+- Late join after a fight is supported by the spawn handshake but not stress-tested.
+- No host/join lobby UI beyond the dialog; no ready/kick/character select.
+- Remote shooting is presentation + host damage; it is not a rollback/lag-
+  compensated netcode.

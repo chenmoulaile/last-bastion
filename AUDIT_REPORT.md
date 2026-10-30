@@ -1,5 +1,99 @@
 # AUDIT_REPORT · LAST BASTION
 
+## v3.2.0 终局闭环（2026-10-30）
+
+**发布标签**：`v3.2.0`  
+**引擎**：Godot 4.7.2-stable，gl_compatibility  
+**测试机**：Intel(R) UHD Graphics 630，OpenGL 3.3.0 Build 27.20.100.8783，Windows 10.0.26200 x64  
+**证据目录**：`docs/evidence/v3.2.0/`  
+**Windows 构建**：`build/windows/LastBastion.exe`（FileVersion 3.2.0.0，导出验证见 `docs/evidence/v3.2.0/build_verification.txt`）
+
+### 0. v3.2.0 摘要
+
+- **联机闭环可用**：主菜单新增 Host/Join UI；主机创建房间即进入 L01，客户端加入后收到同一关卡；双方玩家、僵尸生成/位置/死亡、远程射击表现均走 RPC + MultiplayerSynchronizer。双进程本机回环实测：host 0 失败、client 0 失败。
+- **物理瓶颈已压到目标内**：僵尸 LOD 从“只冻结动画”扩展为三级（近距全速 / 中距 1/6 AI / 远距休眠 + 无推挤碰撞，但仍可被子弹命中）并补上玩家一直缺失的碰撞体/重力。`tests/performance.tscn` 三次实测 physics = **7.36 / 8.93 / 8.36 ms**（v3.1.1 为 33.58 ms），平均 **198.7–214.9 FPS**；最低帧 18.7 / 50.4 / 57.9，仍不是稳定 60。
+- **旧测试修复**：smoke 32/32、integration 91/91、narrative 106/106、integration_regression 36/36、verify_player_stats 29/29、coop 0 失败。campaign 仅剩文档允许的 `special spawned` 随机例外。
+- **新增真实缺陷**：玩家没有 CollisionShape2D 且常规分支从不施加重力（拾取/落地/跳跃实际是假的）；关卡从未连接 `EventBus.player_died`（检查点/指挥官失败永不触发）；远端玩家副本会读本地输入并创建相机（抢镜头/跟着本地按键绳降）；远程僵尸没有 `Zombie_<net_id>` 命名导致客户端伤害 RPC 找不到主机僵尸。均已修复。
+
+### 1. 联机闭环（从“底层通”到“能玩”）
+
+- **UI**：主菜单新增“联机合作 ONLINE”，面板提供创建房间（Host）、IP 输入、加入房间（Join）和状态提示。截图：`docs/evidence/v3.2.0/01_main_menu_coop.png`。
+- **会话生命周期**：主机 `start_coop_level(L01)` → 向客户端下发 `rpc_start_level` → 双方加载同一关 → 客户端 `rpc_client_level_ready` → 主机生成客户端身体、向客户端发送主机身体 → 双方通过 `rpc_enable_replication` / ack 握手后才启用 MultiplayerSynchronizer。这个两阶段握手是必要的：Godot 4.7 的 SceneCache 会对“尚未生成的节点路径”永久缓存空引用。
+- **玩家同步**：本地玩家命名 `Player_<peer_id>` 并在入树前设置 authority；远端副本 `is_remote_player=true`、`auto_camera=false`，不读输入、不跑 AI、不创建相机，只由同步器驱动位置/朝向/状态/血量。双进程断言：客户端把自身移到 x=280，主机看到 x=280.0。
+- **僵尸同步**：主机 `_spawn_zombie` 广播 `rpc_zombie_spawn(kind, net_id, x, y)`；客户端生成 AI 关闭的视觉副本并重命名为 `Zombie_<net_id>`；主机 20Hz 广播位置，客户端插值；主机死亡广播 `rpc_zombie_death`；客户端射击 `rpc_zombie_damage` 交给主机裁定伤害/死亡。双进程断言：客户端看到僵尸、客户端 5 发击杀主机权威僵尸。
+- **远程玩家表现**：任何玩家开火广播 `rpc_player_shot`；远端副本播放枪口火光、tracer、2D 枪声和命中血雾；伤害仍由主机裁定（客户端本地也有即时反馈）。双进程断言：主机收到 5 次远程射击，客户端收到主机 1 次远程射击。
+- 证据：`docs/evidence/v3.2.0/02_host_coop_combat.png`、`03_client_coop_combat.png`、`coop_verification.txt`。
+
+### 2. 物理重构（33.58ms → 7–9ms）
+
+LOD 规则（`scripts/zombies/zombie_base.gd`）：
+
+| 距离（最近玩家） | AI/物理频率 | 碰撞 | 说明 |
+|---|---|---|---|
+| ≤140 px | 每 tick（60Hz） | 全碰撞 | 近战/镜头内主战场 |
+| 140–320 px | 每 6 tick（10Hz） | 全碰撞 | 屏幕中部，保留攻击 |
+| >320 px / 屏外 | 休眠：无 AI、无移动 | layer 8/16 保留可被子弹命中，mask=0 不产生推挤/世界接触 | 玩家靠近后距离检查唤醒 |
+
+关键修复：
+- 原 LOD 只把 sprite 冻结第一帧，AI 仍每 tick 跑；现在按等级跳过 `_ai_tick`、`move_and_slide` 和分离。
+- LOD 碰撞只在等级变化时重写，避免 100+ 僵尸每 0.5s 重复设置 layer 触发 broadphase 重建（曾造成 86/161ms 的物理尖峰）。
+- 远距僵尸保留可被玩家射线命中的 layer 8/16，但 mask=0；既保远距离射击，又不产生推挤/世界 pairs。这是回归测试 `HealthComponent damaged 信号被触发` 从失败恢复 36/36 的原因。
+- 玩家补上 12×28 CollisionShape2D，并在常规分支调用 `_apply_gravity`；此前拾取 Area2D 永远检测不到玩家，落地/跳跃也是表面逻辑。
+
+真实三次门禁（同一构建、同一机器、关 VSync、1280×720）：
+
+| 运行 | 存活 | avg FPS | min FPS | physics | process | pairs |
+|---|---|---|---|---|---|---|
+| 1 | 107 普感 + 3 特感 | 214.9 | 18.7 | 7.36ms | 7.81ms | 135 |
+| 2 | 103 普感 + 4 特感 | 198.7 | 50.4 | 8.93ms | 8.33ms | 180 |
+| 3 | 108 普感 + 4 特感 | 202.6 | 57.9 | 8.36ms | 7.59ms | 196 |
+
+结论：**physics <16ms 的三次目标全部达成**（7–9ms），平均帧率约 200 FPS；但 **min FPS 仍会掉到 18.7/50.4/57.9**，`process + physics` 在物理 tick 帧仍可能超过 16.7ms。因此“物理预算达标”是实测结论，“每一帧稳定 60 FPS”不是。完整原始输出：`docs/evidence/v3.2.0/performance_gate.txt`。
+
+### 3. 回归修复与通过率
+
+| 套件 | 结果 |
+|---|---|
+| smoke | 32 / 32 PASS |
+| integration | 91 / 91 PASS |
+| narrative | 106 / 106 PASS |
+| integration_regression | 36 / 36 PASS |
+| verify_player_stats | 29 / 29 PASS |
+| coop_probe（双进程） | host 0 失败 / client 0 失败 |
+| campaign | 154 checks；仅 `special spawned` 随机例外失败（等级/种类每次不同） |
+| performance | 门禁 PASS；数据见 §2 |
+
+本轮真正修复的旧系统缺陷：
+1. **玩家无碰撞体/无重力**：新增 12×28 碰撞体和常规分支重力，拾取、落地、跳跃、Area2D 交互恢复。
+2. **player_died 未接线**：`LevelRunner._connect_events` 增加 `EventBus.player_died.connect(on_player_died)`；检查点重生与 COMMAND 指挥官阵亡失败恢复。
+3. **复活/黑白色/医疗包**：新玩家移植旧玩家规则——首次复活 30 临时 HP；第二次倒地复活进入黑白色、max_hp=1；医疗包清除黑白色并恢复 max HP；药丸 +50 临时 HP。
+4. **窗口绳降**：新玩家补 `start_rappel` / `_tick_rappel`，integration 的 3 项绳降检查恢复。
+5. **测试自身缺陷**：HealthComponent 测试改用 Dictionary 捕获（GDScript lambda 对标量局部变量是值捕获）；stealth 测试去除 `bool(null)`；reload 测试改为明确半仓 + 轮询 70% 取消窗口，而不是假设固定 reload_time。
+6. **远端玩家表现**：远端副本不再读本地输入、不再创建相机；修复客户端截图里“远端玩家跟着本地按键绳降/抢镜头”。
+
+### 4. 构建、Tag 与 Release
+
+- 版本：`project.godot` / 主菜单页脚 / 导出元数据统一为 **3.2.0**。
+- 导出：`Godot_v4.7.2-stable_win64_console.exe --headless --path . --export-release "Windows Desktop" build/windows/LastBastion.exe`
+- 产物：`build/windows/LastBastion.exe`（单文件嵌入 PCK，约 123 MiB）。
+- 发布：tag `v3.2.0` + GitHub Release（exe 作为 Release 资产）。导出/启动/数据加载验证输出见 `docs/evidence/v3.2.0/build_verification.txt`（128,418,744 字节，FileVersion 3.2.0.0，启动退出码 0，11 关/20 武器/14 角色/19 僵尸/4 派系/81 SFX 全部从 PCK 加载）。
+- 链路覆盖说明：主菜单联机面板为真实渲染；Host/Join 按钮调用与 coop 探针相同的 NetworkManager API；coop 探针通过 `EventBus.start_level_requested`（Main.gd 也监听该事件）加载同一关卡并验证双人战斗。导出的 exe 已验证启动与数据加载；**未在 exe 内自动化“脚本点击菜单→结算”的完整 UI 流程**；结算页（含多人战绩表）在 v3.1.1 的真实渲染截图中验证。
+- 历史说明：v3.1.1 的 `tests/net_sync_probe` 已被 `tests/coop_probe` 取代并删除（后者覆盖关卡同步、僵尸同步、远程射击与伤害裁定）。
+- 证据目录：`docs/evidence/v3.2.0/`（主菜单、联机 UI、双端战斗、性能、回归汇总）。
+
+### 5. v3.2.0 未完成/边界
+
+- 只测了 2 个进程的本机回环；3–4 人、NAT 穿透、丢包/抖动未测。
+- 客户端伤害由主机裁定，但客户端本地也应用伤害做即时反馈；这是合作信任模型，不是反作弊。
+- LOD 中距僵尸 AI 为 10Hz、远距休眠；玩家靠近会唤醒，但观感/攻击节奏与全速不同，属性能换取的取舍。
+- 最低帧仍有 18.7–57.9 的孤立卡顿；“每帧稳定 60”未证明。
+- 联机只有 Host/Join 对话框，没有大厅、准备、踢人、选角；远程射击是表现 + 主机伤害，不是回滚/延迟补偿网络码。
+- campaign 的 `special spawned` 仍是随机例外，未做确定性种子。
+
+---
+
+## 附录：v3.1.1-GoldAudit 历史审计（2026-10-30）
+
 **审计日期**：2026-10-30  
 **发布标签**：`v3.1.1-GoldAudit`（用户确认；原任务写作 `v2.5.0-GoldAudit`，但仓库 HEAD 已是 `v3.1.0` 且 `v2.5.0` 旧标签已存在）  
 **审计基线**：`fcdc1b5`（v3.1.0）+ 工作树中上一轮未提交修复 + 本轮修复  

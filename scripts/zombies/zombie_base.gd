@@ -35,6 +35,8 @@ var killer_peer_id: int = 1
 var _lod_level: int = 0  # 0=全细节, 1=简化动画, 2=仅位置
 var _lod_check_timer: float = 0.0
 var _lod_check_interval: float = 0.5
+var _lod_skip: int = 0
+var _lod_collision_level: int = -1
 
 var stagger_timer: float = 0.0
 var attack_cooldown: float = 0.0
@@ -42,6 +44,7 @@ var attack_cooldown: float = 0.0
 ## 网络同步字段
 var _network: Node = null
 var _is_network_host: bool = false
+var net_id: int = 0
 var _net_target_x: float = 0.0
 var _net_target_y: float = 0.0
 var _net_facing: int = -1
@@ -90,11 +93,15 @@ func _ready() -> void:
 	_network = get_node_or_null("/root/NetworkManager")
 	if _network != null and _network.is_multiplayer_active():
 		_is_network_host = _network.is_host
+		net_id = get_instance_id()
+		name = "Zombie_" + str(net_id)
 		if not _is_network_host:
 			# 客户端：名称标记，位置由网络同步
-			name = "Zombie_" + str(get_instance_id())
+			pass
 	else:
 		_is_network_host = true  # 单机视为主机
+		net_id = get_instance_id()
+		name = "Zombie_" + str(net_id)
 	if data.id == &"tank":
 		var diff := GameManager.current_difficulty
 		if diff == &"HARD":
@@ -152,6 +159,16 @@ func _physics_process(delta: float) -> void:
 	if _lod_check_timer <= 0.0:
 		_lod_check_timer = _lod_check_interval
 		_update_lod_level()
+		_apply_lod_collision()
+	var lod_interval := 1
+	if _lod_level == 1:
+		lod_interval = 6
+	elif _lod_level >= 2:
+		lod_interval = 12
+	if lod_interval > 1:
+		_lod_skip += 1
+		if _lod_skip % lod_interval != 0:
+			return
 	spawn_time += 0.0
 	stagger_timer = maxf(0.0, stagger_timer - delta)
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
@@ -217,17 +234,16 @@ func _physics_process(delta: float) -> void:
 			sprite.play("hurt")
 		move_and_slide()
 		return
-	_ai_tick(delta)
+	if _lod_level < 2:
+		_ai_tick(delta)
 	if _lod_level < 1:
 		_apply_separation(delta)
 	if _lod_level < 2:
 		move_and_slide()
 	else:
-		# LOD 2：仅向玩家移动，不进行物理碰撞
-		var player := get_tree().get_first_node_in_group("player")
-		if player != null and is_instance_valid(player):
-			var dir: Vector2 = (player.global_position - global_position).normalized()
-			global_position += dir * data.walk_speed_max * 0.5 * delta
+		# LOD 2: sleep off-screen. No AI, no movement and no collision until the
+		# distance check wakes the body as the player approaches.
+		pass
 	# 爬行僵尸拖拽血迹。
 	if _crawling and is_on_floor() and randf() < 0.3:
 		Fx.blood_decal(level.fx_layer if level else get_parent(),
@@ -596,6 +612,10 @@ func apply_damage(amount: int, from_dir: Vector2, is_head: bool, source: StringN
 	var final_amount := float(amount)
 	if is_head and data.head_hittable and not data.head_immune:
 		final_amount *= 2.0
+	# Client hits are arbitrated by the host; the local copy also shows feedback.
+	if _network != null and _network.is_multiplayer_active() and not _is_network_host and net_id != 0:
+		_network.rpc_id(1, "rpc_zombie_damage", net_id, amount, is_head,
+			from_dir.x, from_dir.y, damage_type)
 	_take_raw_damage(final_amount, source, damage_type, is_head)
 	# 信号驱动伤害反馈：每命中一次发射一次 damaged，同一帧多次命中各自独立。
 	if health_component != null:
@@ -731,7 +751,9 @@ func _die(source: StringName, is_head: bool = false) -> void:
 	# Host 广播断肢特效给所有客户端。
 	if _is_network_host and _network != null and _network.is_multiplayer_active() and last_damage_type in [&"shotgun", &"explosive", &"melee"]:
 		var dir := Vector2(float(facing), 0.0)
-		_network.rpc_zombie_dismember(get_instance_id(), global_position.x, global_position.y, dir.x, dir.y, last_damage_type)
+		_network.rpc_zombie_dismember(net_id, global_position.x, global_position.y, dir.x, dir.y, last_damage_type)
+	if _is_network_host and _network != null and _network.is_multiplayer_active():
+		_network.call("broadcast_zombie_death", net_id)
 	_on_death_effect()
 	died.emit(data.id, global_position, source, killer_peer_id)
 	if level:
@@ -916,15 +938,22 @@ func _set_facing_from_target() -> void:
 
 ## LOD 等级更新：基于与玩家的距离。
 func _update_lod_level() -> void:
-	var player := get_tree().get_first_node_in_group("player")
-	if player == null or not is_instance_valid(player):
+	var nearest := 1e9
+	var player_x := global_position.x
+	for candidate in get_tree().get_nodes_in_group("player"):
+		if candidate is Node2D and is_instance_valid(candidate):
+			var d: float = global_position.distance_to((candidate as Node2D).global_position)
+			if d < nearest:
+				nearest = d
+				player_x = (candidate as Node2D).global_position.x
+	if nearest == 1e9:
 		_lod_level = 2
 		return
-	var dist := global_position.distance_to(player.global_position)
-	if dist > 400.0:
-		_lod_level = 2  # 仅位置更新
-	elif dist > 200.0:
-		_lod_level = 1  # 简化动画
+	var dx := absf(global_position.x - player_x)
+	if nearest > 320.0 or dx > 320.0:
+		_lod_level = 2  # 仅位置更新，关闭 AI 与碰撞
+	elif nearest > 140.0 or dx > 140.0:
+		_lod_level = 1  # 降频 AI / 动画
 	else:
 		_lod_level = 0  # 全细节
 	# 根据 LOD 调整精灵可见度与更新
@@ -934,6 +963,22 @@ func _update_lod_level() -> void:
 		elif _lod_level >= 1:
 			# 降低动画更新频率已在 _tick_outline 中处理
 			pass
+
+
+## Far/off-screen infected stop generating collision pairs; they remain
+## hittable again as soon as the distance check brings them back to LOD 0/1.
+func _apply_lod_collision() -> void:
+	if _lod_collision_level == _lod_level:
+		return
+	_lod_collision_level = _lod_level
+	if _lod_level >= 2:
+		# Stay hittable by player rays (layer 8/16) but generate no push/world
+		# pairs: mask 0 means this sleeping body never initiates contacts.
+		collision_layer = 16 if data.is_special else 8
+		collision_mask = 0
+	else:
+		collision_layer = 16 if data.is_special else 8
+		collision_mask = 1 | 2 | 4 | 64
 
 
 

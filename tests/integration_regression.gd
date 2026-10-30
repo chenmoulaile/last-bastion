@@ -93,38 +93,47 @@ func _test_reload_cancel() -> void:
 	var player: Node = scene.get_player()
 	_check(player != null, "player spawned for reload test")
 
-	# 触发换弹（空仓）
-	Input.action_press("fire")
-	await get_tree().create_timer(0.2, true, false, true).timeout
-	Input.action_release("fire")
-	await get_tree().create_timer(0.2, true, false, true).timeout
+	# 明确设置半仓弹药再启动换弹，避免依赖初始弹药量或自动开火。
+	var slots: Array = player.get("weapon_slots")
+	var idx: int = int(player.get("slot_index"))
+	var has_reload_case := not slots.is_empty()
+	_check(has_reload_case, "player has a weapon slot")
+	if has_reload_case:
+		var wid: StringName = slots[idx]
+		var weapon: Resource = player.call("_current_weapon")
+		var mag_size := 12
+		if weapon != null:
+			mag_size = int(weapon.get("mag_size"))
+		var ammo: Dictionary = player.get("ammo")
+		var st: Dictionary = ammo.get(wid, {"mag": 0, "reserve": 0})
+		st["mag"] = maxi(1, int(float(mag_size) * 0.5))
+		if int(st.get("reserve", 0)) <= 0:
+			st["reserve"] = 30
+		ammo[wid] = st
+		player.set("ammo", ammo)
+		player.call("start_reload")
+		await get_tree().create_timer(0.15, true, false, true).timeout
+		_check(bool(player.get("reloading")), "进入换弹状态")
 
-	# 检查是否处于换弹状态
-	var reloading_before := bool(player.get("reloading"))
-	_check(reloading_before, "进入换弹状态")
+		# 轮询到 70% 取消窗口，而不是依赖某个武器的固定 reload_time。
+		var ib := get_node_or_null("/root/InputBuffer")
+		_check(ib != null, "InputBuffer autoload 存在")
+		var cancel_open := false
+		var waited := 0.0
+		while waited < 3.0:
+			await get_tree().create_timer(0.1, true, false, true).timeout
+			waited += 0.1
+			var total := float(player.get("_reload_total"))
+			var timer := float(player.get("reload_timer"))
+			if total > 0.0 and timer <= total * 0.3:
+				cancel_open = true
+				break
+		_check(cancel_open, "换弹进度 >= 70%，可取消窗口打开")
 
-	# 等待换弹进度达到 70%（reload_timer <= reload_total * 0.3）
-	await get_tree().create_timer(0.7, true, false, true).timeout
-
-	# 在换弹最后 30% 按射击，应取消换弹并立即开火
-	var ib := get_node_or_null("/root/InputBuffer")
-	_check(ib != null, "InputBuffer autoload 存在")
-	if ib != null:
-		ib.note_press("fire")
-
-	# 手动触发消费逻辑（模拟 _tick_timers 中的检查）
-	var reload_total := float(player.get("_reload_total"))
-	var reload_timer := float(player.get("reload_timer"))
-	var cancel_open := reload_total > 0.0 and reload_timer <= reload_total * 0.3
-	_check(cancel_open, "换弹进度 >= 70%，可取消窗口打开")
-
-	if cancel_open and ib != null:
-		var consumed: bool = ib.consume("fire", 0.3)
-		_check(consumed, "InputBuffer.consume(fire) 返回 true")
-		# 换弹应被中断
-		await get_tree().create_timer(0.1, true, false, true).timeout
-		var reloading_after := bool(player.get("reloading"))
-		_check(not reloading_after, "换弹被取消")
+		if cancel_open and ib != null:
+			ib.note_press("fire")
+			await get_tree().create_timer(0.2, true, false, true).timeout
+			_check(not bool(player.get("reloading")), "换弹被取消")
 
 	scene.queue_free()
 	await get_tree().process_frame
@@ -222,15 +231,14 @@ func _test_headshot_feedback() -> void:
 	# 爆头反馈通过 GameFeelBridge 的 _on_health_damaged 处理（is_critical=true）
 	# 验证 HealthComponent 的 damaged 信号支持 is_critical 参数
 	var hc := HealthComponent.new()
-	var crit_emitted := false
-	var crit_amount := 0.0
+	var hc_state := {"emitted": false, "amount": 0.0}
 	hc.damaged.connect(func(amount, source, pos, critical):
-		crit_emitted = true
-		crit_amount = amount
+		hc_state["emitted"] = true
+		hc_state["amount"] = amount
 	)
 	hc.take_damage(100.0, null, Vector2.ZERO, true)
-	_check(crit_emitted, "HealthComponent.damaged 信号发射（is_critical=true）")
-	_check(crit_amount == 100.0, "损伤数值传递正确")
+	_check(bool(hc_state["emitted"]), "HealthComponent.damaged 信号发射（is_critical=true）")
+	_check(is_equal_approx(float(hc_state["amount"]), 100.0), "损伤数值传递正确")
 	print("[REG] 测试 5 通过：爆头反馈信号")
 
 
@@ -313,7 +321,7 @@ func _test_stealth_execution() -> void:
 	_check(passive_found, "shadow_strike 被动组件已挂载")
 
 	# 检查处决相关字段
-	var is_stealthed := bool(player.get("is_stealthed"))
+	var is_stealthed: bool = player.get("is_stealthed") == true
 	var visibility := float(player.get("visibility"))
 	_check(visibility >= 0.0 and visibility <= 1.0, "可见性字段有效")
 

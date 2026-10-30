@@ -218,6 +218,9 @@ func _test_passives() -> void:
 	_check(int(marcus.get("hp")) == hp_before, "backstab blocked for zero damage")
 	_check(float(marcus.get("backstab_block_cd")) > 0.0, "backstab block starts 30s cooldown")
 	await get_tree().create_timer(0.3, true, false, true).timeout
+	# The block intentionally grants 0.25s of i-frames; clear them so this check
+	# measures the frontal damage rule rather than frame timing.
+	marcus.set("iframes", 0.0)
 	marcus.call("take_damage", 20, Vector2(-1, 0), &"zombie", &"melee")
 	_check(int(marcus.get("hp")) < hp_before, "frontal damage still lands")
 
