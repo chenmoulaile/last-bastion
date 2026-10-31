@@ -34,38 +34,75 @@ func _build() -> void:
 		continue_text = "继续战役"
 	if _continue_level != null:
 		continue_text += "  " + String(_continue_level.id).to_upper()
-	var continue_button := UIKit.button(continue_text, 196, 24, true)
+	var continue_button := UIKit.button("[1] " + continue_text, 196, 24, true)
 	continue_button.position = Vector2(8, 16)
 	continue_button.pressed.connect(_on_continue)
 	menu_panel.add_child(continue_button)
 
-	var level_button := UIKit.button("章节选择", 196, 24)
+	var level_button := UIKit.button("[2] 章节选择", 196, 24)
 	level_button.position = Vector2(8, 44)
 	level_button.pressed.connect(func() -> void: go(&"levels"))
 	menu_panel.add_child(level_button)
 
-	var character_button := UIKit.button("角色档案", 196, 24)
+	var character_button := UIKit.button("[3] 角色档案", 196, 24)
 	character_button.position = Vector2(8, 72)
 	character_button.pressed.connect(func() -> void: go(&"characters"))
 	menu_panel.add_child(character_button)
 
-	var settings_button := UIKit.button("设置", 196, 24)
+	var settings_button := UIKit.button("[4] 设置", 196, 24)
 	settings_button.position = Vector2(8, 100)
 	settings_button.pressed.connect(func() -> void: go(&"settings"))
 	menu_panel.add_child(settings_button)
 
-	var credits_button := UIKit.button("制作人员", 196, 24)
+	var credits_button := UIKit.button("[5] 制作人员", 196, 24)
 	credits_button.position = Vector2(8, 128)
 	credits_button.pressed.connect(func() -> void: go(&"credits"))
 	menu_panel.add_child(credits_button)
 
-	var quit_button := UIKit.button("退出游戏", 196, 24)
+	var quit_button := UIKit.button("[Esc] 退出游戏", 196, 24)
 	quit_button.position = Vector2(8, 156)
 	quit_button.pressed.connect(func() -> void: go(&"quit"))
 	menu_panel.add_child(quit_button)
 
 	_build_archive()
+	_build_hotkey_hint()
 	continue_button.grab_focus()
+
+
+func _build_hotkey_hint() -> void:
+	var hint := UIKit.label("↑↓ 选择  Enter 确认  1-5 快捷  Esc 退出  F11 全屏", 7, UIKit.MUTED)
+	hint.position = Vector2(100, 348)
+	hint.size = Vector2(224, 10)
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	add_child(hint)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key == null or not key.pressed or key.echo:
+		return
+	match key.physical_keycode:
+		KEY_1, KEY_KP_1:
+			_on_continue()
+		KEY_2, KEY_KP_2:
+			go(&"levels")
+		KEY_3, KEY_KP_3:
+			go(&"characters")
+		KEY_4, KEY_KP_4:
+			go(&"settings")
+		KEY_5, KEY_KP_5:
+			go(&"credits")
+		KEY_ESCAPE:
+			go(&"quit")
+		KEY_F11:
+			var mode := DisplayServer.window_get_mode()
+			if mode == DisplayServer.WINDOW_MODE_FULLSCREEN:
+				DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+			else:
+				DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		_:
+			return
+	get_viewport().set_input_as_handled()
 
 
 func _build_archive() -> void:

@@ -43,7 +43,7 @@ SHEETS = {
     "assault": "A_3x3_sprite_sheet_grid__9_equ_2026-10-31T00-09-11.png",
     "heavy":   "A_3x3_sprite_sheet_grid__9_equ_2026-10-31T00-10-54.png",
     "medic":   "A_3x3_sprite_sheet_grid__9_equ_2026-10-31T00-11-04.png",
-    "ninja":   "A_3x3_sprite_sheet_grid__9_equ_2026-10-31T00-11-17.png",
+    "ninja":   "A_3x3_sprite_sheet_grid_with_E_2026-10-31T03-33-49.png",
     "officer": "A_3x3_sprite_sheet_grid_with_E_2026-10-31T00-44-41.png",
     "scout":   "A_3x3_sprite_sheet_grid__9_equ_2026-10-31T00-11-38.png",
 }
