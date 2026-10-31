@@ -1,6 +1,8 @@
 shader_type canvas_item;
 // 「锈蚀频率」漫画后处理：色阶量化 + 纸张颗粒 + 信号干扰扭曲。
 // 平时克制档案感；Gore 事件时 intensity 短暂增强（暴力瞬间漫画化）。
+// Godot 4：屏幕纹理必须显式声明为 hint_screen_texture uniform（P0-1）。
+uniform sampler2D SCREEN_TEXTURE : hint_screen_texture, filter_linear_mipmap;
 
 uniform float intensity : hint_range(0.0, 1.0) = 0.0;   // gore 增强 0->1
 uniform float interference : hint_range(0.0, 1.0) = 0.0; // 信号干扰（最终 Boss）

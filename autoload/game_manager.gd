@@ -130,7 +130,10 @@ func get_playable_characters() -> Array[CharacterData]:
 	for character in characters.values():
 		if character.soldier_role == &"":
 			out.append(character)
+	# 锈蚀频率四主角置顶，其余按解锁分
 	out.sort_custom(func(a: CharacterData, b: CharacterData) -> bool:
+		if a.survivor != b.survivor:
+			return a.survivor
 		return a.unlock_score < b.unlock_score)
 	return out
 
@@ -180,8 +183,12 @@ func default_mode_for(level: LevelData) -> StringName:
 
 func _auto_squad() -> Array[StringName]:
 	var pool: Array[StringName] = []
+	# 「锈蚀频率」：队友自动补齐优先其余三主角（P0-3d）
+	for cid in [&"lin_yuan", &"marcus", &"lucia", &"victor"]:
+		if cid != selected_character and is_character_unlocked(cid):
+			pool.append(cid)
 	for character in get_playable_characters():
-		if character.id == selected_character:
+		if character.id == selected_character or character.id in pool:
 			continue
 		if is_character_unlocked(character.id):
 			pool.append(character.id)
@@ -337,6 +344,10 @@ func all_weapons_unlocked() -> bool:
 
 func is_character_unlocked(id: StringName) -> bool:
 	if id in [&"assault", &"medic", &"heavy", &"scout"]:
+		return true
+	# 「锈蚀频率」四主角：免费初始可用（P0-3b）
+	var ch := get_character(id)
+	if ch != null and (ch as CharacterData).survivor and (ch as CharacterData).unlock_score == 0:
 		return true
 	if id in [&"rifleman", &"gunner", &"medic_soldier", &"demolisher"]:
 		return true

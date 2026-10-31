@@ -193,6 +193,9 @@ func _setup_weapons() -> void:
 			ammo[id] = {"mag": data.mag_size, "reserve": data.reserve_ammo}
 	slot_index = 0
 	_update_weapon_visual()
+	# P0-4：出生武器名广播——HUD 初始文案写死「M9 手枪」，切枪前不会刷新
+	if _current_weapon() != null:
+		EventBus.weapon_changed.emit(_current_weapon().id, _current_weapon().display_name)
 
 
 func _create_flashlight() -> void:

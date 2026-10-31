@@ -119,6 +119,24 @@ func _make_card(c: CharacterData, pos: Vector2) -> Control:
 		status.add_theme_color_override("font_color", UIKit.GREEN)
 	else:
 		status.text = "AVAILABLE  ·  点击选择"
+	# 「锈蚀频率」四主角：显示代号/被动/中文简介；旧六角色标注「原型小队」（P0-3c）
+	if c.survivor:
+		var passive := UIKit.label("%s · %s" % [c.codename, c.passive_name], 7, c.accent)
+		passive.position = Vector2(56, 30)
+		passive.size = Vector2(126, 9)
+		passive.clip_text = true
+		card.add_child(passive)
+		var bio := UIKit.label(c.bio, 6, UIKit.MUTED)
+		bio.position = Vector2(8, 31)
+		bio.size = Vector2(46, 22)
+		bio.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		bio.visible = false  # 卡片空间有限；简介显示在底部详情栏
+		card.add_child(bio)
+	else:
+		var legacy := UIKit.label("原型小队", 6, UIKit.DIM)
+		legacy.position = Vector2(56, 30)
+		legacy.size = Vector2(126, 9)
+		card.add_child(legacy)
 
 	var button := Button.new()
 	button.size = Vector2(188, 110)
@@ -170,7 +188,13 @@ func _refresh_bottom() -> void:
 		return
 	_bottom_portrait.texture = UIKit.portrait(c.portrait)
 	_bottom_name.text = c.display_name + "  ·  " + c.callsign
-	_bottom_skill.text = "技能 " + c.skill_name + " — " + c.skill_desc
+	# 「锈蚀频率」主角展示被动与中文简介；旧角色展示技能与原型标注（P0-3c）
+	if c.survivor:
+		_bottom_name.text += "  ·「%s」" % c.codename
+		_bottom_skill.text = "被动 %s — %s\n%s" % [c.passive_name, c.passive_desc, c.bio]
+	else:
+		_bottom_name.text += "  · 原型小队"
+		_bottom_skill.text = "技能 " + c.skill_name + " — " + c.skill_desc
 
 
 func _select_character(id: StringName) -> void:

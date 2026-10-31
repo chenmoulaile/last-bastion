@@ -568,6 +568,20 @@ func _connect_events() -> void:
 	EventBus.director_request_supply.connect(_on_director_supply)
 	EventBus.gunshot.connect(_on_gunshot)
 	EventBus.door_kicked.connect(_on_door_kicked)
+	# 最终抉择信号（P0-2）：缺了这条 4-2 选完结局没有任何反应
+	EventBus.story_choice_made.connect(_on_story_choice_made)
+
+
+func _exit_tree() -> void:
+	# _swap_view 重建关卡时会新建实例，必须断开防止悬挂回调（P0-2b）
+	if EventBus.story_choice_made.is_connected(_on_story_choice_made):
+		EventBus.story_choice_made.disconnect(_on_story_choice_made)
+	if EventBus.comic_intensity_spike.is_connected(_on_comic_spike):
+		EventBus.comic_intensity_spike.disconnect(_on_comic_spike)
+	if EventBus.signal_interference.is_connected(_on_interference):
+		EventBus.signal_interference.disconnect(_on_interference)
+	if EventBus.enemy_killed.is_connected(_on_kill_fx):
+		EventBus.enemy_killed.disconnect(_on_kill_fx)
 
 
 func _process(delta: float) -> void:
@@ -634,8 +648,18 @@ func _build_comic_fx() -> void:
 	rect.size = Vector2(642, 362)
 	rect.position = Vector2(-1, -1)
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var shader: Shader = load("res://shaders/comic_post_process.gdshader")
+	# 白屏保险丝（P0-1b）：4.7.2 无编译状态探针，改用源码标记检查——
+	# Godot 4 屏幕纹理必须声明 hint_screen_texture；标记缺失 = 回退到 Godot 3
+	# 宏的已损坏版本，直接关闭后处理而不是用白色盖死整屏。
+	var usable: bool = shader != null \
+		and shader.source_code.contains("hint_screen_texture") \
+		and shader.source_code.contains("shader_type canvas_item")
+	if not usable:
+		push_warning("comic shader unusable, post-process disabled (white-screen fuse)")
+	rect.visible = usable
 	_comic_mat = ShaderMaterial.new()
-	_comic_mat.shader = load("res://shaders/comic_post_process.gdshader")
+	_comic_mat.shader = shader
 	rect.material = _comic_mat
 	layer.add_child(rect)
 	EventBus.comic_intensity_spike.connect(_on_comic_spike)
