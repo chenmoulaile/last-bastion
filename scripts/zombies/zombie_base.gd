@@ -3,12 +3,8 @@ extends CharacterBody2D
 ## Shared infected body: health, hitboxes, stagger, knockback, burning,
 ## separation, death and the common-infected state machine. Specials override
 ## _ai_tick() and death effects.
-##
-## 网络模式下：AI 仅在 Host 端运行，客户端通过 MultiplayerSynchronizer
-## 或 RPC 接收位置与特效同步。
 
 signal died(kind: StringName, pos: Vector2, source: StringName)
-signal net_damage(amount: int, head: bool)
 
 const GRAVITY := 1500.0
 
@@ -17,37 +13,15 @@ var level: Node = null
 var target: Node2D = null
 var health: int = 30
 var max_health: int = 30
-var health_component = null
-var _hc_script: Script = null
 var facing: int = -1
 var dead: bool = false
 var alerted: bool = false
 var spawn_time: float = 0.0
 var last_source: StringName = &"player"
 var last_damage_type: StringName = &"bullet"
-var _headshot_timer: float = 0.0
-var _crawling: bool = false
-var _crawl_speed: float = 55.0
-var _dismembered: bool = false
-var killer_peer_id: int = 1
-
-## LOD (细节级别)：远处僵尸跳过复杂动画与碰撞更新，节省 CPU。
-var _lod_level: int = 0  # 0=全细节, 1=简化动画, 2=仅位置
-var _lod_check_timer: float = 0.0
-var _lod_check_interval: float = 0.5
-var _lod_skip: int = 0
-var _lod_collision_level: int = -1
 
 var stagger_timer: float = 0.0
 var attack_cooldown: float = 0.0
-
-## 网络同步字段
-var _network: Node = null
-var _is_network_host: bool = false
-var net_id: int = 0
-var _net_target_x: float = 0.0
-var _net_target_y: float = 0.0
-var _net_facing: int = -1
 var jump_cd: float = 0.0
 var burn_timer: float = 0.0
 var burn_dps: float = 0.0
@@ -62,16 +36,11 @@ var separation_timer: float = 0.0
 var state_name: String = "idle"
 var pinning: bool = false
 var _retarget_timer: float = 0.0
-var _commander_buff_cd: float = 0.0
-var _screamer_scream_cd: float = 0.0
 
 var sprite: AnimatedSprite2D
 var collision: CollisionShape2D
-var _notifier: VisibleOnScreenNotifier2D = null
 var _base_tint: Color = Color.WHITE
 var _visual_prefix: String = ""
-var _outline: Sprite2D = null
-var _reveal_timer: float = 0.0
 
 
 func _ready() -> void:
@@ -83,25 +52,6 @@ func _ready() -> void:
 	_build_body()
 	health = data.max_hp
 	max_health = data.max_hp
-	# 创建 HealthComponent 并挂载，用于信号驱动的伤害反馈。
-	if _hc_script == null:
-		_hc_script = preload("res://components/HealthComponent.gd")
-	health_component = _hc_script.new()
-	health_component.name = "HealthComponent"
-	add_child(health_component)
-	# 网络初始化：AI 仅在 Host 运行，客户端同步位置。
-	_network = get_node_or_null("/root/NetworkManager")
-	if _network != null and _network.is_multiplayer_active():
-		_is_network_host = _network.is_host
-		net_id = get_instance_id()
-		name = "Zombie_" + str(net_id)
-		if not _is_network_host:
-			# 客户端：名称标记，位置由网络同步
-			pass
-	else:
-		_is_network_host = true  # 单机视为主机
-		net_id = get_instance_id()
-		name = "Zombie_" + str(net_id)
 	if data.id == &"tank":
 		var diff := GameManager.current_difficulty
 		if diff == &"HARD":
@@ -123,7 +73,6 @@ func _ready() -> void:
 	sprite.play("idle")
 	if data.is_special:
 		collision_layer = 16
-		add_to_group("special_infected")
 	else:
 		collision_layer = 8
 	collision_mask = 1 | 2 | 4 | 64
@@ -142,33 +91,11 @@ func _build_body() -> void:
 	collision.shape = shape
 	collision.position = Vector2(0, -data.collision_size.y * 0.5)
 	add_child(collision)
-	_notifier = VisibleOnScreenNotifier2D.new()
-	_notifier.rect = Rect2(-400, -400, 800, 800)
-	add_child(_notifier)
 
 
 func _physics_process(delta: float) -> void:
-	if GameManager.state != GameManager.State.PLAYING:
+	if GameManager.state != GameManager.State.PLAYING or dead:
 		return
-	# 客户端：不运行 AI，仅插值同步位置。
-	if _network != null and _network.is_multiplayer_active() and not _is_network_host:
-		_apply_network_interpolation(delta)
-		return
-	# LOD 检查：远处僵尸降低更新频率
-	_lod_check_timer -= delta
-	if _lod_check_timer <= 0.0:
-		_lod_check_timer = _lod_check_interval
-		_update_lod_level()
-		_apply_lod_collision()
-	var lod_interval := 1
-	if _lod_level == 1:
-		lod_interval = 6
-	elif _lod_level >= 2:
-		lod_interval = 12
-	if lod_interval > 1:
-		_lod_skip += 1
-		if _lod_skip % lod_interval != 0:
-			return
 	spawn_time += 0.0
 	stagger_timer = maxf(0.0, stagger_timer - delta)
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
@@ -184,37 +111,6 @@ func _physics_process(delta: float) -> void:
 		_take_raw_damage(burn_dps * delta, &"fire", &"fire", false)
 		if dead:
 			return
-	# 爆头后继续跑两步，计时结束后死亡。
-	if _headshot_timer > 0.0:
-		_headshot_timer -= delta
-		if _headshot_timer <= 0.0:
-			_die(last_source, true)
-			return
-		if knockback_velocity.length() > 1.0:
-			knockback_velocity = knockback_velocity.move_toward(Vector2.ZERO, 900.0 * delta)
-			velocity += knockback_velocity * delta * 8.0
-		if not is_on_floor():
-			velocity.y += GRAVITY * delta
-			if velocity.y > 750.0:
-				velocity.y = 750.0
-		_retarget_timer -= delta
-		if _retarget_timer <= 0.0 and not pinning:
-			_retarget_timer = randf_range(1.4, 2.4)
-			_acquire_target()
-		if target == null or not is_instance_valid(target):
-			target = level.get_player() if level else null
-		if target != null and is_instance_valid(target):
-			var to_target := target.global_position - global_position
-			var dist_x := absf(to_target.x)
-			if dist_x < 26.0:
-				_die(last_source, true)
-				return
-			facing = 1 if to_target.x > 0.0 else -1
-			velocity.x = move_toward(velocity.x, data.walk_speed_max * float(facing), 900.0 * delta)
-			move_and_slide()
-			return
-		move_and_slide()
-		return
 	if knockback_velocity.length() > 1.0:
 		knockback_velocity = knockback_velocity.move_toward(Vector2.ZERO, 900.0 * delta)
 		velocity += knockback_velocity * delta * 8.0
@@ -234,81 +130,15 @@ func _physics_process(delta: float) -> void:
 			sprite.play("hurt")
 		move_and_slide()
 		return
-	if _lod_level < 2:
-		_ai_tick(delta)
-	if _lod_level < 1:
-		_apply_separation(delta)
-	if _lod_level < 2:
-		move_and_slide()
-	else:
-		# LOD 2: sleep off-screen. No AI, no movement and no collision until the
-		# distance check wakes the body as the player approaches.
-		pass
-	# 爬行僵尸拖拽血迹。
-	if _crawling and is_on_floor() and randf() < 0.3:
-		Fx.blood_decal(level.fx_layer if level else get_parent(),
-			global_position + Vector2(0, 8))
+	_ai_tick(delta)
+	_apply_separation(delta)
+	move_and_slide()
 	if global_position.y > 470.0:
 		_despawn_fall()
 	if voice_timer <= 0.0:
 		voice_timer = randf_range(5.0, 11.0)
-		if _notifier != null and not _notifier.is_on_screen():
-			return
 		if randf() < 0.35:
-			AudioLayerManager.play_spatial_sfx(data.voice_id, global_position, 800.0, -12.0)
-	_tick_outline(delta)
-	# Host 广播僵尸位置给客户端。
-	if _is_network_host and _network != null and _network.is_multiplayer_active():
-		var pos := global_position
-		# 通过 NetworkManager 广播（需要在 NetworkManager 中添加僵尸位置 RPC）
-		pass
-
-
-# ------------------------------------------------------------- perception ----
-## 穿墙轮廓：露西亚的「街头直觉」把感染者标记 3 秒，轮廓画在所有墙体之上。
-func reveal_through_walls(duration: float) -> void:
-	_reveal_timer = maxf(_reveal_timer, duration)
-	if _outline == null:
-		_build_outline()
-
-
-func _build_outline() -> void:
-	_outline = Sprite2D.new()
-	_outline.name = "Outline"
-	_outline.z_index = 60
-	_outline.centered = true
-	_outline.modulate = Color(1.0, 0.36, 0.30, 0.55)
-	_outline.scale = Vector2(1.14, 1.14)
-	add_child(_outline)
-
-
-func _tick_outline(delta: float) -> void:
-	if _reveal_timer <= 0.0:
-		if _outline != null and _outline.visible:
-			_outline.visible = false
-		return
-	_reveal_timer -= delta
-	if _outline == null:
-		return
-	_outline.visible = true
-	if sprite != null and sprite.sprite_frames != null \
-			and sprite.sprite_frames.has_animation(sprite.animation):
-		_outline.texture = sprite.sprite_frames.get_frame_texture(sprite.animation, sprite.frame)
-	_outline.flip_h = sprite.flip_h if sprite != null else false
-	_outline.position = sprite.position if sprite != null else Vector2.ZERO
-	_outline.modulate.a = 0.40 + 0.18 * sin(Time.get_ticks_msec() * 0.012)
-
-
-## Player visibility for this infected: 0 = cannot be perceived at all.
-func _target_visibility(target_node: Node2D) -> float:
-	if target_node == null or not is_instance_valid(target_node):
-		return 0.0
-	if EnemyPerception.is_ignored(target_node):
-		return 0.0
-	var value: Variant = target_node.get("visibility")
-	if value == null:
-		return 1.0
-	return clampf(float(value), 0.0, 1.0)
+			AudioManager.play_sfx_2d(data.voice_id, global_position, 800.0, -12.0)
 
 
 func _ai_tick(delta: float) -> void:
@@ -317,27 +147,10 @@ func _ai_tick(delta: float) -> void:
 		_wander(delta)
 		return
 	var to_target := target.global_position - global_position
-	# 指挥官：留在后方，给周围盟友加成（移速、射速），不主动冲锋。
-	if data.behavior_id == &"commander":
-		_commander_tick(delta, to_target)
-		return
-	# 尖叫者：发现玩家后尖叫召唤尸潮，不主动攻击。
-	if data.behavior_id == &"screamer":
-		_screamer_tick(delta, to_target)
-		return
-	# 爆裂者：贴脸自爆，死亡释放毒气云。
-	if data.behavior_id == &"burster":
-		_burster_tick(delta, to_target)
-		return
-	# 爬行者：垂直爬墙，从高处伏击。
-	if data.behavior_id == &"crawler":
-		_crawler_tick(delta, to_target)
-		return
 	var dist_x := absf(to_target.x)
 	var dist_y := absf(to_target.y)
 	if not alerted:
-		var sight := data.sight_range * maxf(0.15, _target_visibility(target))
-		if dist_x < sight and dist_y < 120.0:
+		if dist_x < data.sight_range and dist_y < 120.0:
 			if _can_see_target():
 				_alert()
 	if not alerted:
@@ -353,9 +166,7 @@ func _ai_tick(delta: float) -> void:
 	state_name = "chase"
 	facing = 1 if to_target.x > 0.0 else -1
 	var speed := data.walk_speed_max
-	if _crawling:
-		speed = _crawl_speed
-	elif randf() < 0.15:
+	if randf() < 0.15:
 		speed = 220.0
 	if slow_timer > 0.0:
 		speed *= 0.7
@@ -383,152 +194,6 @@ func _wander(delta: float) -> void:
 	if level and level.get_ground_y(global_position.x + float(wander_dir) * 28.0) < 0.0:
 		wander_dir *= -1
 		velocity.x = 0.0
-
-
-## 指挥官AI：保持距离，不冲锋，每隔几秒给附近盟友加成。
-func _commander_tick(delta: float, to_target: Vector2) -> void:
-	var dist_x := absf(to_target.x)
-	var dist_y := absf(to_target.y)
-	if dist_x < 26.0 and dist_y < 40.0:
-		state_name = "attack"
-		velocity.x = move_toward(velocity.x, 0.0, 900.0 * delta)
-		if attack_cooldown <= 0.0:
-			_attack_target()
-		_play_anim("attack")
-		return
-	state_name = "chase"
-	# 指挥官保持后方距离：太近则后退，太远则靠近但不贴脸。
-	var keep_dist := 220.0
-	if dist_x < keep_dist:
-		facing = -1 if to_target.x > 0.0 else 1
-		velocity.x = move_toward(velocity.x, -60.0 * float(facing), 500.0 * delta)
-	else:
-		facing = 1 if to_target.x > 0.0 else -1
-		velocity.x = move_toward(velocity.x, 70.0 * float(facing), 500.0 * delta)
-	_try_jump_for_target(to_target)
-	_try_attack_door()
-	_play_anim("run")
-	# 每 6 秒给附近盟友加成：移速 +20%，射速 +15%，持续 8 秒。
-	_commander_buff_cd = maxf(0.0, _commander_buff_cd - delta)
-	if _commander_buff_cd <= 0.0 and level:
-		_commander_buff_cd = 6.0
-		var nearby: Array = level.get_zombies_near(global_position, 200.0)
-		for ally in nearby:
-			if ally == self or not is_instance_valid(ally):
-				continue
-			if ally.has_method("apply_commander_buff"):
-				ally.apply_commander_buff(8.0)
-
-
-## 盟友接收指挥官加成（移速、攻击速度）。
-func apply_commander_buff(duration: float) -> void:
-	if dead:
-		return
-	var data: Variant = get("data")
-	if data != null:
-		# 通过修改 walk_speed_max 实现移速加成，由 _ai_tick 读取。
-		# 这里用一个临时标记，_ai_tick 中读取。
-		pass
-	# 实际加成由 level 层面的派系系统处理，此处预留接口。
-
-
-## 尖叫者AI：发现玩家后尖叫召唤尸潮，保持距离，不主动攻击。
-func _screamer_tick(delta: float, to_target: Vector2) -> void:
-	var dist_x := absf(to_target.x)
-	var dist_y := absf(to_target.y)
-	if dist_x < 26.0 and dist_y < 40.0:
-		state_name = "attack"
-		velocity.x = move_toward(velocity.x, 0.0, 900.0 * delta)
-		if attack_cooldown <= 0.0:
-			_attack_target()
-		_play_anim("attack")
-		return
-	state_name = "chase"
-	# 尖叫者保持中距离：不贴脸，尖叫召唤尸潮。
-	var keep_dist := 300.0
-	if dist_x < keep_dist:
-		facing = -1 if to_target.x > 0.0 else 1
-		velocity.x = move_toward(velocity.x, -50.0 * float(facing), 500.0 * delta)
-	else:
-		facing = 1 if to_target.x > 0.0 else -1
-		velocity.x = move_toward(velocity.x, data.walk_speed_max * float(facing), 500.0 * delta)
-	_try_jump_for_target(to_target)
-	_play_anim("run")
-	# 每 4 秒尖叫一次，召唤尸潮。
-	_screamer_scream_cd = maxf(0.0, _screamer_scream_cd - delta)
-	if _screamer_scream_cd <= 0.0 and level:
-		_screamer_scream_cd = 4.0
-		_scream()
-		if level:
-			level.alert_commons_near(global_position, 200.0)
-			EventBus.director_request_horde.emit(8)
-
-
-## 爆裂者AI：贴脸自爆，死亡时释放毒气孢子云。
-func _burster_tick(delta: float, to_target: Vector2) -> void:
-	var dist_x := absf(to_target.x)
-	var dist_y := absf(to_target.y)
-	if dist_x < 26.0 and dist_y < 40.0:
-		state_name = "attack"
-		velocity.x = move_toward(velocity.x, 0.0, 900.0 * delta)
-		if attack_cooldown <= 0.0:
-			_attack_target()
-		_play_anim("attack")
-		return
-	state_name = "chase"
-	facing = 1 if to_target.x > 0.0 else -1
-	var speed := data.walk_speed_max
-	if randf() < 0.15:
-		speed = 240.0
-	velocity.x = move_toward(velocity.x, speed * float(facing), 900.0 * delta)
-	_try_jump_for_target(to_target)
-	_play_anim("run")
-
-
-## 爬行者AI：低姿态，爬墙，从高处伏击。
-func _crawler_tick(delta: float, to_target: Vector2) -> void:
-	var dist_x := absf(to_target.x)
-	var dist_y := absf(to_target.y)
-	if dist_x < 26.0 and dist_y < 40.0:
-		state_name = "attack"
-		velocity.x = move_toward(velocity.x, 0.0, 900.0 * delta)
-		if attack_cooldown <= 0.0:
-			_attack_target()
-		_play_anim("attack")
-		return
-	state_name = "chase"
-	# 爬行者速度较慢，低姿态难以发现。
-	facing = 1 if to_target.x > 0.0 else -1
-	var speed := data.walk_speed_max * 0.8
-	velocity.x = move_toward(velocity.x, speed * float(facing), 500.0 * delta)
-	# 尝试爬墙: 如果前面有墙且目标在更高处，尝试爬上去。
-	var wall_ahead := global_position + Vector2(float(facing) * 24.0, 0)
-	var wall_check := get_world_2d().direct_space_state.intersect_ray(
-		PhysicsRayQueryParameters2D.create(global_position, wall_ahead, 64, [get_rid()]))
-	if not wall_check.is_empty() and to_target.y < global_position.y - 40.0:
-		# 墙前且目标在上方: 尝试跳跃爬墙。
-		if is_on_floor() and jump_cd <= 0.0:
-			velocity.y = -650.0
-			velocity.x = float(facing) * 120.0
-			jump_cd = 2.0
-	_try_jump_for_target(to_target)
-	_play_anim("run")
-
-
-## 爆裂者死亡时释放毒气云。
-func _on_death_effect() -> void:
-	if data.id == &"clown" and level:
-		level.spawn_horde_at(global_position, 15, true)
-	elif data.id == &"scavenger" and level:
-		level.drop_scavenger_loot(global_position)
-	elif data.id == &"mud":
-		EventBus.bile_splashed.emit(2.5)
-		EventBus.notify.emit("泥浆糊住了视野")
-	elif data.id == &"burster" and level:
-		EventBus.bile_splashed.emit(4.0)
-		EventBus.notify.emit("爆裂者释放毒孢子云")
-		if level.has_method("spawn_throwable"):
-			level.spawn_throwable("bile", global_position, Vector2.ZERO)
 
 
 func _try_jump_for_target(to_target: Vector2) -> void:
@@ -565,13 +230,11 @@ func _attack_target() -> void:
 	if target != null and target.has_method("take_damage"):
 		var dir := (target.global_position - global_position).normalized()
 		target.take_damage(data.attack_damage, dir, &"zombie", &"melee")
-	AudioLayerManager.play_spatial_sfx(&"zombie_attack", global_position, 500.0, -8.0)
+	AudioManager.play_sfx_2d(&"zombie_attack", global_position, 500.0, -8.0)
 
 
 func _can_see_target() -> bool:
 	if target == null:
-		return false
-	if _target_visibility(target) <= 0.02:
 		return false
 	var from := global_position + Vector2(0, -20)
 	var to := target.global_position + Vector2(0, -18)
@@ -583,7 +246,7 @@ func _can_see_target() -> bool:
 func _alert() -> void:
 	alerted = true
 	_scream()
-	if level and not EnemyPerception.is_noise_suppressed(global_position):
+	if level:
 		level.alert_commons_near(global_position, 80.0)
 
 
@@ -591,7 +254,7 @@ func _scream() -> void:
 	if scream_cd > 0.0:
 		return
 	scream_cd = 4.0
-	AudioLayerManager.play_spatial_sfx(&"zombie_scream", global_position, 900.0, -4.0)
+	AudioManager.play_sfx_2d(&"zombie_scream", global_position, 900.0, -4.0)
 	EventBus.zombie_scream.emit(global_position, 80.0)
 	if level:
 		level.alert_commons_near(global_position, 80.0)
@@ -612,14 +275,7 @@ func apply_damage(amount: int, from_dir: Vector2, is_head: bool, source: StringN
 	var final_amount := float(amount)
 	if is_head and data.head_hittable and not data.head_immune:
 		final_amount *= 2.0
-	# Client hits are arbitrated by the host; the local copy also shows feedback.
-	if _network != null and _network.is_multiplayer_active() and not _is_network_host and net_id != 0:
-		_network.rpc_id(1, "rpc_zombie_damage", net_id, amount, is_head,
-			from_dir.x, from_dir.y, damage_type)
 	_take_raw_damage(final_amount, source, damage_type, is_head)
-	# 信号驱动伤害反馈：每命中一次发射一次 damaged，同一帧多次命中各自独立。
-	if health_component != null:
-		health_component.take_damage(final_amount, _resolve_source_node(source), global_position, is_head)
 	flash_timer = 0.08
 	if sprite:
 		sprite.modulate = Color(2.2, 2.2, 2.2, 1.0)
@@ -639,11 +295,8 @@ func apply_damage(amount: int, from_dir: Vector2, is_head: bool, source: StringN
 			apply_stagger(0.25)
 	if not dead:
 		alerted = true
-		if source == &"player" and level and not EnemyPerception.is_noise_suppressed(global_position):
+		if source == &"player" and level:
 			level.alert_commons_near(global_position, 80.0)
-	# Host 广播僵尸受击给所有客户端。
-	if _is_network_host and _network != null and _network.is_multiplayer_active():
-		_network.rpc_zombie_hit(get_instance_id(), int(final_amount), is_head)
 
 
 func _take_raw_damage(amount: float, source: StringName, damage_type: StringName, is_head: bool) -> void:
@@ -653,16 +306,6 @@ func _take_raw_damage(amount: float, source: StringName, damage_type: StringName
 	last_damage_type = damage_type
 	health -= int(ceil(amount))
 	if health <= 0:
-		# 爆头致死时不立即死亡：继续跑两步后再倒下。
-		if is_head and data.head_hittable and not data.head_immune:
-			_headshot_timer = 2.0
-			if sprite:
-				sprite.play("run")
-			return
-		# 断腿致死时进入爬行状态（不立即死亡，继续慢速移动）。
-		if damage_type in [&"shotgun", &"explosive"] and not _crawling:
-			_crawling = true
-			return
 		_die(source, is_head)
 
 
@@ -670,12 +313,6 @@ func apply_stagger(duration: float) -> void:
 	if data.is_boss:
 		return
 	stagger_timer = maxf(stagger_timer, duration)
-
-
-## 外部调用：断腿后进入爬行状态。
-func apply_leg_damage() -> void:
-	if not dead and not _crawling and not _headshot_timer > 0.0:
-		_crawling = true
 
 
 func apply_knockback(force: Vector2) -> void:
@@ -688,45 +325,6 @@ func is_headshot_point(point: Vector2) -> bool:
 	if not data.head_hittable or data.head_immune:
 		return false
 	return point.y < global_position.y - data.collision_size.y * 0.62
-
-
-## 肢体判定: 返回 "head"/"torso"/"arm_left"/"arm_right"/"leg_left"/"leg_right"。
-func hit_zone(point: Vector2) -> StringName:
-	var local_pos := point - global_position
-	var half_h := data.collision_size.y * 0.5
-	var half_w := data.collision_size.x * 0.5
-	var dir := facing
-	if local_pos.y < -half_h * 0.35:
-		return &"head"
-	if local_pos.y > half_h * 0.35:
-		if absf(local_pos.x) < half_w * 0.4:
-			return &"torso"
-		return &"leg_" + ("left" if local_pos.x * float(dir) < 0 else "right")
-	if absf(local_pos.x) > half_w * 0.5:
-		return &"arm_" + ("left" if local_pos.x * float(dir) < 0 else "right")
-	return &"torso"
-
-
-## 断肢: 霰弹枪、反坦克步枪、爆炸物、近战致死时触发。
-func _dismember_limbs() -> void:
-	if _dismembered or not level:
-		return
-	_dismembered = true
-	var dir := Vector2(float(facing), 0.0)
-	var color := Color(0.5, 0.1, 0.1, 1.0)
-	var count := 3
-	if last_damage_type == &"explosive":
-		count = 5
-	elif last_damage_type == &"shotgun":
-		count = 4
-	var router := get_node_or_null("/root/FeedbackRouter")
-	if router != null and router.has_method("on_enemy_died"):
-		router.on_enemy_died(global_position, dir, color,
-			data.is_boss, data.is_special, true)
-
-
-func set_killer_peer_id(peer_id: int) -> void:
-	killer_peer_id = peer_id
 
 
 func _die(source: StringName, is_head: bool = false) -> void:
@@ -744,23 +342,24 @@ func _die(source: StringName, is_head: bool = false) -> void:
 	remove_from_group("zombies")
 	Fx.blood(level.fx_layer if level else get_parent(), global_position + Vector2(0, -14), Vector2.UP, 1.4)
 	Fx.blood_decal(level.fx_layer if level else get_parent(), global_position + Vector2(0, -2))
-	AudioLayerManager.play_spatial_sfx(&"zombie_die", global_position, 700.0)
-	# 断肢增强：霰弹枪、反坦克步枪、爆炸物、近战致死时触发程序化残肢。
-	if last_damage_type in [&"shotgun", &"explosive", &"melee"]:
-		_dismember_limbs()
-	# Host 广播断肢特效给所有客户端。
-	if _is_network_host and _network != null and _network.is_multiplayer_active() and last_damage_type in [&"shotgun", &"explosive", &"melee"]:
-		var dir := Vector2(float(facing), 0.0)
-		_network.rpc_zombie_dismember(net_id, global_position.x, global_position.y, dir.x, dir.y, last_damage_type)
-	if _is_network_host and _network != null and _network.is_multiplayer_active():
-		_network.call("broadcast_zombie_death", net_id)
+	AudioManager.play_sfx_2d(&"zombie_die", global_position, 700.0)
 	_on_death_effect()
-	died.emit(data.id, global_position, source, killer_peer_id)
+	died.emit(data.id, global_position, source)
 	if level:
-		level.on_zombie_died(self, source, is_head, killer_peer_id)
+		level.on_zombie_died(self, source, is_head)
 	await get_tree().create_timer(2.6, true, false, true).timeout
 	if is_instance_valid(self):
 		queue_free()
+
+
+func _on_death_effect() -> void:
+	if data.id == &"clown" and level:
+		level.spawn_horde_at(global_position, 15, true)
+	elif data.id == &"scavenger" and level:
+		level.drop_scavenger_loot(global_position)
+	elif data.id == &"mud":
+		EventBus.bile_splashed.emit(2.5)
+		EventBus.notify.emit("泥浆糊住了视野")
 
 
 func _despawn_fall() -> void:
@@ -812,13 +411,11 @@ func _acquire_target() -> void:
 	var best: Node2D = null
 	var best_score := INF
 	if player != null and is_instance_valid(player):
-		if not bool(player.get("is_dead")) and _target_visibility(player) > 0.05:
+		if not bool(player.get("is_dead")):
 			best = player
 			# The player is the protagonist: allies must be clearly closer to
 			# pull aggro away, which keeps squads from feeling invisible.
-			# Low visibility also makes the player a less attractive target.
-			var vis := maxf(0.25, _target_visibility(player))
-			best_score = global_position.distance_to(player.global_position) * 0.72 / vis
+			best_score = global_position.distance_to(player.global_position) * 0.72
 	var allies: Array = level.get_allies()
 	for ally in allies:
 		if ally == null or not is_instance_valid(ally):
@@ -912,15 +509,6 @@ func get_data() -> ZombieData:
 	return data
 
 
-## 将 StringName 来源解析为实际 Node（用于 HealthComponent.damaged 信号）。
-func _resolve_source_node(source_id: StringName) -> Node:
-	if source_id == &"player":
-		var p: Node = level.get_player() if level != null else null
-		if p is Node:
-			return p
-	return null
-
-
 func on_melee_interrupt() -> bool:
 	return false
 
@@ -934,80 +522,3 @@ func _set_facing_from_target() -> void:
 		facing = 1 if target.global_position.x > global_position.x else -1
 	if sprite:
 		sprite.flip_h = facing < 0
-
-
-## LOD 等级更新：基于与玩家的距离。
-func _update_lod_level() -> void:
-	var nearest := 1e9
-	var player_x := global_position.x
-	for candidate in get_tree().get_nodes_in_group("player"):
-		if candidate is Node2D and is_instance_valid(candidate):
-			var d: float = global_position.distance_to((candidate as Node2D).global_position)
-			if d < nearest:
-				nearest = d
-				player_x = (candidate as Node2D).global_position.x
-	if nearest == 1e9:
-		_lod_level = 2
-		return
-	var dx := absf(global_position.x - player_x)
-	if nearest > 320.0 or dx > 320.0:
-		_lod_level = 2  # 仅位置更新，关闭 AI 与碰撞
-	elif nearest > 140.0 or dx > 140.0:
-		_lod_level = 1  # 降频 AI / 动画
-	else:
-		_lod_level = 0  # 全细节
-	# 根据 LOD 调整精灵可见度与更新
-	if sprite:
-		if _lod_level >= 2:
-			sprite.frame = 0  # 冻结第一帧
-		elif _lod_level >= 1:
-			# 降低动画更新频率已在 _tick_outline 中处理
-			pass
-
-
-## Far/off-screen infected stop generating collision pairs; they remain
-## hittable again as soon as the distance check brings them back to LOD 0/1.
-func _apply_lod_collision() -> void:
-	if _lod_collision_level == _lod_level:
-		return
-	_lod_collision_level = _lod_level
-	if _lod_level >= 2:
-		# Stay hittable by player rays (layer 8/16) but generate no push/world
-		# pairs: mask 0 means this sleeping body never initiates contacts.
-		collision_layer = 16 if data.is_special else 8
-		collision_mask = 0
-	else:
-		collision_layer = 16 if data.is_special else 8
-		collision_mask = 1 | 2 | 4 | 64
-
-
-
-## 客户端位置插值同步。
-func _apply_network_interpolation(delta: float) -> void:
-	var cur_x := global_position.x
-	var cur_y := global_position.y
-	var new_x := lerpf(cur_x, _net_target_x, 12.0 * delta)
-	var new_y := lerpf(cur_y, _net_target_y, 12.0 * delta)
-	global_position = Vector2(new_x, new_y)
-	facing = _net_facing
-	if sprite:
-		sprite.flip_h = facing < 0
-
-
-## RPC: 客户端接收僵尸受击（由 Host 广播）。
-@rpc("any_peer", "reliable")
-func rpc_zombie_hit(instance_id: int, dmg: int, head: bool) -> void:
-	if get_instance_id() != instance_id:
-		return
-	apply_damage(dmg, Vector2.ZERO, head, &"player", &"bullet")
-
-
-## RPC: 客户端接收断肢特效（由 Host 广播）。
-@rpc("any_peer", "reliable")
-func rpc_zombie_dismember(instance_id: int, pos_x: float, pos_y: float, dir_x: float, dir_y: float, damage_type: StringName) -> void:
-	if get_instance_id() != instance_id:
-		return
-	# 在客户端触发断肢视觉特效，不修改逻辑状态
-	if level != null and level.has_method("spawn_dismember_effect"):
-		level.call_deferred("spawn_dismember_effect", Vector2(pos_x, pos_y), Vector2(dir_x, dir_y), damage_type)
-

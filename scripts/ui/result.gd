@@ -3,7 +3,6 @@ extends UIScreen
 
 var _result: Dictionary = {}
 var _failed: bool = false
-var _stats_panel: Panel = null
 
 
 func setup(_payload: Dictionary) -> void:
@@ -18,10 +17,9 @@ func _build() -> void:
 	add_background("title_bg", 0.62)
 	var accent := UIKit.RED if _failed else UIKit.AMBER
 	var kicker := "MISSION FAILED" if _failed else "MISSION COMPLETE"
-	add_header(kicker, str(_result.get("level_title", "任务结算")), accent)
+	add_header(kicker, String(_result.get("level_title", "任务结算")), accent)
 	_build_rank_panel()
 	_build_stats_panel()
-	_build_multiplayer_stats_panel()
 	_build_bottom()
 	add_footer("检查点记录会保留 · 失败不会扣除总分 · 重新部署后 AI Director 会重新计算节奏")
 
@@ -35,14 +33,14 @@ func _build_rank_panel() -> void:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	panel.add_child(label)
 
-	var rank := str(_result.get("rank", "F"))
+	var rank := String(_result.get("rank", "F"))
 	if _failed:
 		var fail := UIKit.title("FAILED", 30, UIKit.RED)
 		fail.position = Vector2(0, 26)
 		fail.size = Vector2(200, 38)
 		fail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		panel.add_child(fail)
-		var reason := UIKit.label(str(_result.get("reason", "小队全灭")), 9, UIKit.MUTED)
+		var reason := UIKit.label(String(_result.get("reason", "小队全灭")), 9, UIKit.MUTED)
 		reason.position = Vector2(12, 68)
 		reason.size = Vector2(176, 24)
 		reason.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -90,7 +88,7 @@ func _build_rank_panel() -> void:
 	mode.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	panel.add_child(mode)
 
-	var id_label := UIKit.label(str(_result.get("level_id", "")).to_upper(), 7, UIKit.DIM, UIKit.font_latin())
+	var id_label := UIKit.label(String(_result.get("level_id", "")).to_upper(), 7, UIKit.DIM, UIKit.font_latin())
 	id_label.position = Vector2(0, 204)
 	id_label.size = Vector2(200, 8)
 	id_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -98,34 +96,18 @@ func _build_rank_panel() -> void:
 
 
 func _build_stats_panel() -> void:
-	_stats_panel = add_panel(Vector2(236, 62), Vector2(380, 230), UIKit.PANEL, UIKit.LINE)
-	var panel := _stats_panel
+	var panel := add_panel(Vector2(236, 62), Vector2(380, 230), UIKit.PANEL, UIKit.LINE)
 	var head := UIKit.label("DEBRIEF  战斗统计", 7, UIKit.AMBER, UIKit.font_latin())
 	head.position = Vector2(8, 5)
 	head.size = Vector2(364, 8)
 	panel.add_child(head)
 
-	var kills := int(_result.get("kills", 0))
-	var headshots := int(_result.get("headshots", 0))
-	var specials := int(_result.get("specials", 0))
-	var rescues := int(_result.get("rescues", 0))
-	if not _multiplayer_rows().is_empty():
-		kills = 0
-		headshots = 0
-		specials = 0
-		rescues = 0
-		for row in _multiplayer_rows():
-			kills += int(row.get("kills", 0))
-			headshots += int(row.get("headshots", 0))
-			specials += int(row.get("specials", 0))
-			rescues += int(row.get("rescues", 0))
-
 	var stats := [
-		["击杀", str(kills), UIKit.INK],
-		["爆头", str(headshots), UIKit.AMBER],
-		["特殊感染者", str(specials), UIKit.RED],
+		["击杀", str(int(_result.get("kills", 0))), UIKit.INK],
+		["爆头", str(int(_result.get("headshots", 0))), UIKit.AMBER],
+		["特殊感染者", str(int(_result.get("specials", 0))), UIKit.RED],
 		["最高连击", str(int(_result.get("max_combo", 0))), UIKit.GREEN],
-		["救助队友", str(rescues), UIKit.TEAL],
+		["救助队友", str(int(_result.get("rescues", 0))), UIKit.TEAL],
 		["队伍存活", str(int(_result.get("squad_alive", 1))), UIKit.INK],
 		["用时", UIKit.format_time(float(_result.get("time", 0.0))), UIKit.INK],
 		["隐藏房间", str(_result.get("hidden_rooms", []).size()), UIKit.TEAL],
@@ -137,13 +119,11 @@ func _build_stats_panel() -> void:
 		["Tank 击杀", str(int(_result.get("tanks_killed", 0))), UIKit.AMBER],
 		["Witch 惊动", "是" if bool(_result.get("witch_woken", false)) else "否", UIKit.PURPLE],
 	]
-	var is_multiplayer_result := not _multiplayer_rows().is_empty()
-	var row_step := 26.0 if is_multiplayer_result else 34.0
 	for i in stats.size():
 		var col := i % 3
 		var row := int(i / 3)
 		var x := 8.0 + col * 122.0
-		var y := 18.0 + row * row_step
+		var y := 18.0 + row * 34.0
 		var key := UIKit.label(stats[i][0], 7, UIKit.DIM)
 		key.position = Vector2(x, y)
 		key.size = Vector2(116, 8)
@@ -152,11 +132,6 @@ func _build_stats_panel() -> void:
 		value.position = Vector2(x, y + 8)
 		value.size = Vector2(116, 14)
 		panel.add_child(value)
-
-	# Multiplayer results replace the achievements block with the per-player
-	# table (the achievement wall button remains the way to see unlocks).
-	if not _multiplayer_rows().is_empty():
-		return
 
 	var line := ColorRect.new()
 	line.color = UIKit.LINE
@@ -177,7 +152,7 @@ func _build_stats_panel() -> void:
 		panel.add_child(none)
 	else:
 		for i in mini(new_achievements.size(), 5):
-			var id := str(new_achievements[i])
+			var id := String(new_achievements[i])
 			var icon := UIKit.icon_rect(_achievement_icon(id), 16.0)
 			icon.position = Vector2(8 + i * 72, 207)
 			panel.add_child(icon)
@@ -218,53 +193,6 @@ func _build_bottom() -> void:
 	next.grab_focus()
 
 
-func _multiplayer_rows() -> Array:
-	var rows: Array = _result.get("player_stats", [])
-	return rows if rows.size() > 1 else []
-
-
-func _build_multiplayer_stats_panel() -> void:
-	var rows := _multiplayer_rows()
-	if rows.is_empty() or _stats_panel == null:
-		return
-	var panel := UIKit.panel(UIKit.PANEL, UIKit.LINE)
-	panel.name = "MultiplayerStats"
-	panel.position = Vector2(8, 152)
-	panel.size = Vector2(364, 76)
-	_stats_panel.add_child(panel)
-	var head := UIKit.label("MULTIPLAYER  个人战绩", 6, UIKit.AMBER, UIKit.font_latin())
-	head.position = Vector2(4, 3)
-	head.size = Vector2(356, 7)
-	panel.add_child(head)
-	var widths := [40.0, 64.0, 64.0, 64.0, 64.0, 64.0]
-	var cols := ["P", "击杀", "爆头", "特感", "倒地", "救助"]
-	var x := 2.0
-	for i in cols.size():
-		var c := UIKit.label(cols[i], 6, UIKit.DIM, UIKit.font_latin())
-		c.position = Vector2(x, 13)
-		c.size = Vector2(widths[i], 7)
-		c.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		panel.add_child(c)
-		x += widths[i]
-	var y := 24.0
-	for i in mini(rows.size(), 4):
-		var s: Dictionary = rows[i]
-		var values := ["P" + str(int(s.get("peer_id", 1))),
-			str(int(s.get("kills", 0))), str(int(s.get("headshots", 0))),
-			str(int(s.get("specials", 0))), str(int(s.get("downs", 0))),
-			str(int(s.get("rescues", 0)))]
-		x = 2.0
-		for j in values.size():
-			var v := UIKit.label(values[j], 7,
-				UIKit.AMBER if j == 0 else UIKit.INK, UIKit.font_latin())
-			v.position = Vector2(x, y)
-			v.size = Vector2(widths[j], 8)
-			v.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			panel.add_child(v)
-			x += widths[j]
-		y += 13.0
-
-
 func _next_pressed() -> void:
 	if _is_last_level():
 		go(&"menu")
@@ -276,18 +204,18 @@ func _is_last_level() -> bool:
 	var levels := GameManager.get_levels()
 	if levels.is_empty():
 		return true
-	return str(levels[levels.size() - 1].id) == str(_result.get("level_id", ""))
+	return String(levels[levels.size() - 1].id) == String(_result.get("level_id", ""))
 
 
 func _achievement_name(id: String) -> String:
 	for row in SaveSystem.ACHIEVEMENTS:
-		if str(row.get("id", "")) == id:
-			return str(row.get("name", id))
+		if String(row.get("id", "")) == id:
+			return String(row.get("name", id))
 	return id
 
 
 func _achievement_icon(id: String) -> String:
 	for row in SaveSystem.ACHIEVEMENTS:
-		if str(row.get("id", "")) == id:
-			return str(row.get("icon", "ach_" + id))
+		if String(row.get("id", "")) == id:
+			return String(row.get("icon", "ach_" + id))
 	return "ach_" + id

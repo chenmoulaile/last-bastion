@@ -262,5 +262,4 @@ func _start() -> void:
 	GameManager.selected_character = GameManager.selected_character
 	GameManager.current_difficulty = _difficulty
 	GameManager.current_mode = _mode
-	GameManager.start_level(_level.id, _mode, _difficulty, GameManager.selected_character,
-		GameManager.selected_squad)
+	GameManager.start_level(_level.id, _mode, _difficulty, GameManager.selected_character)

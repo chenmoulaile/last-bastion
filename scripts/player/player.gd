@@ -20,23 +20,6 @@ var level: Node = null
 var character: CharacterData
 var visual_id: String = "assault"
 
-## --- narrative / stealth layer (2019 RUST FREQUENCY) ----------------------
-signal silent_execution(victim: Node)
-signal backstab_blocked
-
-var visibility: float = 1.0 # 0 = 完全不可见；感染者用它缩放视野
-var is_stealthed: bool = false
-var stealth_speed_multiplier: float = 0.6
-var is_executing: bool = false
-var execute_timer: float = 0.0
-var _invisible_timer: float = 0.0
-var passive: Node = null
-var damage_multipliers: Dictionary = {} # group -> multiplier (维克多)
-var passive_block_backstab: bool = false
-var passive_block_cooldown: float = 30.0
-var backstab_block_cd: float = 0.0
-var samples: int = 0
-
 var max_hp: int = 100
 var hp: int = 100
 var temp_hp: int = 0
@@ -79,7 +62,6 @@ var ammo: Dictionary = {}
 var weapon_cooldown: float = 0.0
 var reload_timer: float = 0.0
 var reloading: bool = false
-var _reload_total: float = 0.0
 var spread_heat: float = 0.0
 var last_shot_time: float = -10.0
 var shoot_anim_timer: float = 0.0
@@ -131,44 +113,19 @@ func _ready() -> void:
 	character = GameManager.get_character(GameManager.selected_character)
 	if character == null:
 		character = GameManager.get_character(&"assault")
-	visual_id = character.animation_id()
+	visual_id = character.portrait
 	max_hp = character.max_hp
 	hp = max_hp
 	run_speed = character.speed
-	stealth_speed_multiplier = character.stealth_speed_multiplier
-	crouch_speed = run_speed * stealth_speed_multiplier
+	crouch_speed = run_speed * 0.5
 	sprite.sprite_frames = SpriteLibrary.character_frames(visual_id)
 	sprite.play("idle")
-	_apply_palette()
 	_setup_weapons()
-	_install_passive()
 	_emit_all_state()
 	Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
 	if level != null and bool(level.get("dark")):
 		_create_flashlight()
 	call_deferred("_setup_camera")
-
-
-## 调色板偏移：不重画像素素材，用 modulate 区分四名角色。
-func _apply_palette() -> void:
-	if character == null:
-		return
-	var tint: Color = character.palette_tint
-	if tint == Color.WHITE:
-		return
-	sprite.modulate = tint
-	weapon_sprite.modulate = tint.lightened(0.15)
-
-
-func _install_passive() -> void:
-	if character == null or not character.has_passive():
-		return
-	if not PassiveRegistry.has_passive(character.passive_ability_id):
-		push_warning("Unknown passive: " + String(character.passive_ability_id))
-		return
-	passive = PassiveRegistry.create(character.passive_ability_id, self, character)
-	if passive != null:
-		add_child(passive)
 
 
 func _setup_camera() -> void:
@@ -242,13 +199,6 @@ func _physics_process(delta: float) -> void:
 		if sprite.animation != "hurt":
 			sprite.play("hurt")
 		return
-	if is_executing:
-		velocity.x = move_toward(velocity.x, 0.0, 1400.0 * delta)
-		if not is_on_floor():
-			velocity.y += GRAVITY * delta
-		move_and_slide()
-		sprite.play("melee")
-		return
 	if is_downed:
 		_tick_downed(delta)
 		return
@@ -284,18 +234,7 @@ func _tick_timers(delta: float) -> void:
 		var data := _current_weapon()
 		var reload_speed := 2.0 if assault_rush_timer > 0.0 else 1.0
 		reload_timer -= delta * reload_speed
-		# InputBuffer 换弹取消：进度 >= 70% 时按射击可取消换弹并立即开火。
-		var _ib := get_node_or_null("/root/InputBuffer")
-		if _ib != null and _ib.has_method("consume") \
-				and _ib.consume("fire", 0.3) \
-				and _reload_total > 0.0 \
-				and reload_timer <= _reload_total * 0.3:
-			reloading = false
-			reload_timer = 0.0
-			var weapon := _current_weapon()
-			if weapon != null:
-				_try_fire(weapon)
-		elif reload_timer <= 0.0:
+		if reload_timer <= 0.0:
 			_finish_reload()
 	if temp_hp > 0:
 		_temp_decay_accum += delta
@@ -310,26 +249,6 @@ func _tick_timers(delta: float) -> void:
 		medkit_channel -= delta
 		if medkit_channel <= 0.0:
 			_finish_medkit()
-	execute_timer = maxf(0.0, execute_timer - delta)
-	if execute_timer <= 0.0:
-		is_executing = false
-	backstab_block_cd = maxf(0.0, backstab_block_cd - delta)
-	if _invisible_timer > 0.0:
-		_invisible_timer = maxf(0.0, _invisible_timer - delta)
-	visibility = 0.0 if _invisible_timer > 0.0 else (0.45 if is_stealthed else 1.0)
-
-
-## 处决/潜行让玩家进入“不可见”窗口，由被动脚本调用。
-func set_stealth_invisible(duration: float) -> void:
-	_invisible_timer = maxf(_invisible_timer, duration)
-	visibility = 0.0
-
-
-func _update_stealth() -> void:
-	var now := Time.get_ticks_msec() / 1000.0
-	var quiet := now - last_shot_time > 1.2
-	is_stealthed = is_crouching and not is_sliding and not flashlight_on and quiet \
-		and not is_dead and not is_downed and not is_controlled
 
 
 func _tick_movement(delta: float) -> void:
@@ -376,7 +295,6 @@ func _tick_movement(delta: float) -> void:
 		var target_x := input_x * speed
 		var accel := 1800.0 if on_floor else 900.0
 		velocity.x = move_toward(velocity.x, target_x, accel * delta)
-	_update_stealth()
 
 	# Crouch + jump drops through one-way platforms.
 	if jump_buffer > 0.0 and Input.is_action_pressed("crouch") and on_floor:
@@ -505,8 +423,7 @@ func _tick_actions(delta: float) -> void:
 	if Input.is_action_just_pressed("reload"):
 		_start_reload()
 	if Input.is_action_just_pressed("melee"):
-		if not _try_execution():
-			_shove()
+		_shove()
 	if Input.is_action_just_pressed("skill"):
 		_use_skill()
 	if Input.is_action_just_pressed("throw"):
@@ -615,8 +532,6 @@ func _fire_weapon(weapon: WeaponData) -> void:
 	Fx.shell(level.fx_layer, global_position + Vector2(facing * 4.0, -16.0), -facing)
 	AudioManager.play_sfx(weapon.id)
 	AudioManager.play_sfx(&"gunshot", 1.0, -8.0)
-	AudioLayerManager.play_shot_layer(weapon.id, SfxManifest.weapon_weight(weapon.id) > 0.65)
-	AudioManager.duck_music(20.0, 0.35) if weapon.id != &"m9" else AudioManager.duck_music(12.0, 0.25)
 	EventBus.gunshot.emit(global_position, 900.0)
 	EventBus.shake(0.8 if weapon.id != &"shotgun" else 1.6)
 	shoot_anim_timer = 0.16
@@ -656,7 +571,6 @@ func _apply_hit(weapon: WeaponData, hit: Dictionary, dir: Vector2) -> void:
 	var point: Vector2 = hit["position"]
 	var distance := global_position.distance_to(point)
 	var damage := float(weapon.damage) * MathUtils.damage_falloff(distance, weapon.effective_range)
-	damage *= _damage_scale(collider)
 	var is_head := false
 	if collider.has_method("is_headshot_point"):
 		is_head = bool(collider.is_headshot_point(point))
@@ -688,9 +602,7 @@ func _start_reload() -> void:
 		return
 	reloading = true
 	reload_timer = weapon.reload_time
-	_reload_total = reload_timer
 	AudioManager.play_sfx(&"reload")
-	AudioLayerManager.play_reload_sequence(weapon.id, weapon.reload_time, int(state["mag"]) == 0)
 	EventBus.ammo_changed.emit(int(state["mag"]), int(state["reserve"]))
 
 
@@ -720,7 +632,7 @@ func _swing_melee(weapon: WeaponData) -> void:
 	for zombie in level.get_zombies_in_cone(origin, facing, weapon.melee_range, weapon.melee_arc):
 		count += 1
 		var dir: Vector2 = (zombie.global_position - origin).normalized()
-		zombie.apply_damage(int(round(float(weapon.damage) * _damage_scale(zombie))), -dir, false, &"player", &"melee")
+		zombie.apply_damage(weapon.damage, -dir, false, &"player", &"melee")
 		zombie.apply_knockback(dir * weapon.knockback)
 		zombie.apply_stagger(0.5)
 		Fx.blood(level.fx_layer, zombie.global_position + Vector2(0, -14), dir, 1.1)
@@ -743,7 +655,7 @@ func _shove() -> void:
 	for zombie in level.get_zombies_in_cone(origin, facing, 46.0, 120.0):
 		hit_any = true
 		var dir: Vector2 = (zombie.global_position - origin).normalized()
-		zombie.apply_damage(int(round(15.0 * _damage_scale(zombie))), -dir, false, &"player", &"melee")
+		zombie.apply_damage(15, -dir, false, &"player", &"melee")
 		zombie.apply_knockback(dir * 120.0)
 		zombie.apply_stagger(0.8)
 		if zombie.has_method("on_melee_interrupt"):
@@ -756,86 +668,6 @@ func _shove() -> void:
 		AudioManager.play_sfx(&"melee_hit")
 	else:
 		AudioManager.play_sfx(&"melee_swing")
-
-
-# ------------------------------------------------------- stealth execute ----
-## 潜行状态下从背后处决：不触发尸潮警觉，并让林远的被动接管感知抑制。
-func _try_execution() -> bool:
-	if not is_stealthed or is_executing:
-		return false
-	var target := _find_execution_target()
-	if target == null:
-		return false
-	_execute(target)
-	return true
-
-
-func _find_execution_target() -> Node:
-	if level == null:
-		return null
-	var origin := global_position + Vector2(0, -14)
-	var best: Node = null
-	var best_dist := 54.0
-	for zombie in get_tree().get_nodes_in_group("zombies"):
-		if zombie == null or not is_instance_valid(zombie):
-			continue
-		if bool(zombie.get("dead")):
-			continue
-		var zdata: Variant = zombie.get("data")
-		if zdata != null and bool(zdata.get("is_boss")):
-			continue
-		var dist: float = origin.distance_to(zombie.global_position)
-		if dist > best_dist:
-			continue
-		var dx: float = zombie.global_position.x - global_position.x
-		if signf(dx) != float(facing):
-			continue
-		var zombie_facing := int(zombie.get("facing"))
-		if zombie_facing == 0:
-			zombie_facing = -facing
-		# Player stands behind the infected when both face the same way.
-		if signf(dx) != float(zombie_facing):
-			continue
-		best = zombie
-		best_dist = dist
-	return best
-
-
-func _execute(target: Node) -> void:
-	is_executing = true
-	execute_timer = 0.55
-	velocity = Vector2.ZERO
-	melee_anim_timer = 0.34
-	reloading = false
-	var dir: Vector2 = (target.global_position - global_position).normalized()
-	if dir.length() < 0.1:
-		dir = Vector2(float(facing), 0.0)
-	# Suppress the room before the damage lands, otherwise the corpse screams.
-	EnemyPerception.suppress_noise(target.global_position, 420.0, 3.0)
-	var damage := character.melee_damage * 6.0 * _damage_scale(target)
-	if target.has_method("apply_damage"):
-		target.apply_damage(int(round(damage)), -dir, true, &"player", &"execution")
-	if target.has_method("apply_stagger"):
-		target.apply_stagger(1.2)
-	Fx.blood(level.fx_layer if level else get_parent(),
-		target.global_position + Vector2(0, -16), dir, 1.7)
-	AudioManager.play_sfx(&"melee_hit")
-	EventBus.shake(3.4)
-	EventBus.hitstop.emit(0.06)
-	EventBus.gore_event.emit(1.0)
-	silent_execution.emit(target)
-
-
-## Group-based damage multipliers (维克多 vs 特殊感染者).
-func _damage_scale(target: Object) -> float:
-	var scale := 1.0
-	if damage_multipliers.is_empty() or not (target is Node):
-		return scale
-	var node := target as Node
-	for group in damage_multipliers.keys():
-		if node.is_in_group(String(group)):
-			scale *= float(damage_multipliers[group])
-	return scale
 
 
 func _cycle_weapon(direction: int) -> void:
@@ -1038,18 +870,6 @@ func take_damage(amount: int, source_dir: Vector2 = Vector2.ZERO, source: String
 		var facing_vec := Vector2(float(facing), 0.0)
 		if facing_vec.dot(source_dir.normalized()) > 0.15:
 			final_amount *= 0.3
-	# 马库斯「老兵直觉」：伤害来自背后 120° 扇形时完全格挡。
-	if passive_block_backstab and backstab_block_cd <= 0.0 and source_dir.length() > 0.1 \
-			and final_amount > 0.0 and source != &"friendly":
-		var behind := Vector2(float(facing), 0.0).dot(source_dir.normalized())
-		if behind > 0.5:
-			backstab_block_cd = passive_block_cooldown
-			iframes = maxf(iframes, 0.25)
-			hurt_anim_timer = 0.12
-			AudioManager.play_sfx(&"ricochet")
-			EventBus.shake(1.6)
-			backstab_blocked.emit()
-			return
 	if source == &"friendly" and not GameManager.friendly_fire_enabled():
 		return
 	if source == &"friendly":

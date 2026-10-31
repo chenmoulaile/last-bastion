@@ -31,36 +31,20 @@ const UNLOCK_GRENADE_4 := 800000
 const UNLOCK_TITLE := 1200000
 
 var state: State = State.BOOT
-var current_level: Resource = null
+var current_level: LevelData = null
 var current_level_id: StringName = &"l01"
 var current_mode: StringName = &"SQUAD"
 var current_difficulty: StringName = &"NORMAL"
 var selected_character: StringName = &"assault"
 var selected_squad: Array[StringName] = []
 var selected_soldiers: Array[StringName] = []
-## Co-op roster locks: player_index -> character_id. Local co-op and any future
-## network session both go through claim_character() so "must pick different
-## survivors" is enforced in exactly one place.
-var coop_slots: Dictionary = {}
-var coop_active: bool = false
 var last_result: Dictionary = {}
 var run_seed: int = 0
-
-## ---- multiplayer kill attribution (reset every start_level) ----------------
-## player_stats[peer_id] = {
-##   "kills": int, "headshots": int, "specials": int,
-##   "bosses": int, "by_weapon": {weapon_id: int}, "damage_dealt": int,
-##   "character_id": StringName,
-## }
-var player_stats: Dictionary = {}
 
 var levels: Dictionary = {}
 var weapons: Dictionary = {}
 var characters: Dictionary = {}
 var zombies: Dictionary = {}
-
-## 战役内货币（废铁/废料）：敌人死亡掉落，关卡间保留。
-var currency: int = 0
 
 var _hitstop_token: int = 0
 
@@ -93,8 +77,6 @@ func _load_all_data() -> void:
 	weapons = _load_resources(DATA_WEAPONS)
 	characters = _load_resources(DATA_CHARACTERS)
 	zombies = _load_resources(DATA_ZOMBIES)
-	print("[Data] levels=%d weapons=%d characters=%d zombies=%d" % [
-		levels.size(), weapons.size(), characters.size(), zombies.size()])
 
 
 func _load_resources(dir_path: String) -> Dictionary:
@@ -104,12 +86,9 @@ func _load_resources(dir_path: String) -> Dictionary:
 		push_warning("Data directory missing: " + dir_path)
 		return result
 	for file_name in dir.get_files():
-		# Exported PCKs store converted resources as "name.tres.remap"; the
-		# original name still resolves through ResourceLoader.
-		var clean := file_name.trim_suffix(".remap")
-		if not (clean.ends_with(".tres") or clean.ends_with(".res")):
+		if not file_name.ends_with(".tres"):
 			continue
-		var res: Resource = load(dir_path + "/" + clean)
+		var res: Resource = load(dir_path + "/" + file_name)
 		if res == null:
 			continue
 		var id_value: Variant = res.get("id")
@@ -119,252 +98,54 @@ func _load_resources(dir_path: String) -> Dictionary:
 	return result
 
 
-func get_level(id: StringName) -> Resource:
+func get_level(id: StringName) -> LevelData:
 	return levels.get(id, null)
 
 
-func get_weapon(id: StringName) -> Resource:
+func get_weapon(id: StringName) -> WeaponData:
 	return weapons.get(id, null)
 
 
-func get_character(id: StringName) -> Resource:
+func get_character(id: StringName) -> CharacterData:
 	return characters.get(id, null)
 
 
-func get_zombie(id: StringName) -> Resource:
+func get_zombie(id: StringName) -> ZombieData:
 	return zombies.get(id, null)
 
 
-func get_levels() -> Array[Resource]:
-	var out: Array[Resource] = []
+func get_levels() -> Array[LevelData]:
+	var out: Array[LevelData] = []
 	for level in levels.values():
 		out.append(level)
-	out.sort_custom(func(a: Resource, b: Resource) -> bool: return String(a.id) < String(b.id))
+	out.sort_custom(func(a: LevelData, b: LevelData) -> bool: return String(a.id) < String(b.id))
 	return out
 
 
-## --- 货币系统 ---
-
-func get_currency() -> int:
-	return currency
-
-
-func add_currency(amount: int) -> void:
-	currency = maxi(0, currency + amount)
-	EventBus.currency_changed.emit(currency)
-
-
-func spend_currency(amount: int) -> bool:
-	if amount <= 0:
-		return true
-	if currency >= amount:
-		currency -= amount
-		EventBus.currency_changed.emit(currency)
-		return true
-	return false
-
-
-func reset_currency() -> void:
-	currency = 0
-	EventBus.currency_changed.emit(0)
-
-
-func get_playable_characters() -> Array[Resource]:
-	var out: Array[Resource] = []
+func get_playable_characters() -> Array[CharacterData]:
+	var out: Array[CharacterData] = []
 	for character in characters.values():
-		if character.soldier_role == &"" and not character.is_archive_survivor():
+		if character.soldier_role == &"":
 			out.append(character)
-	out.sort_custom(func(a: Resource, b: Resource) -> bool:
+	out.sort_custom(func(a: CharacterData, b: CharacterData) -> bool:
 		return a.unlock_score < b.unlock_score)
 	return out
 
 
-## The four named survivors of the 2019 RUST FREQUENCY campaign.
-func get_archive_survivors() -> Array[Resource]:
-	var order := ["lin_yuan", "marcus", "lucia", "victor"]
-	var out: Array[Resource] = []
-	for id in order:
-		var character: Resource = characters.get(StringName(id), null)
-		if character != null:
-			out.append(character)
-	return out
-
-
-## Archive survivors and legacy archetypes live in the same data directory; this
-## keeps squad/command lookups from accidentally pulling narrative characters in.
-func get_survivor(id: StringName) -> Resource:
-	var character: Resource = get_character(id)
-	if character == null or not character.is_archive_survivor():
-		return null
-	return character
-
-
-# --------------------------------------------------------------- co-op ------
-func reset_coop() -> void:
-	coop_slots.clear()
-	coop_active = false
-
-
-## Reserve a survivor for a local player slot. Returns false when another slot
-## already holds that survivor (co-op requires four different characters).
-func claim_character(slot: int, character_id: StringName) -> bool:
-	var key := String(character_id)
-	for other_slot in coop_slots.keys():
-		if int(other_slot) != slot and String(coop_slots[other_slot]) == key:
-			return false
-	coop_slots[slot] = key
-	if slot == 0:
-		selected_character = character_id
-	return true
-
-
-func character_taken_by_other(slot: int, character_id: StringName) -> bool:
-	var key := String(character_id)
-	for other_slot in coop_slots.keys():
-		if int(other_slot) != slot and String(coop_slots[other_slot]) == key:
-			return true
-	return false
-
-
-# --------------------------------------------------------------- story ------
-func story_flag(flag: StringName) -> bool:
-	return SaveSystem.has_flag(flag)
-
-
-func set_story_flag(flag: StringName) -> void:
-	SaveSystem.set_flag(flag)
-
-
-## Chapter 3 has two routes through the same level slot (3-1A sewer / 3-1B
-## front gate). The chapter 2 chip decision decides which one loads.
-func route_variant() -> StringName:
-	return &"sewer" if story_flag(&"route_sewer") else &"gate"
-
-
-func has_deep_archive() -> bool:
-	return ArchiveManager != null and ArchiveManager.highest_security_level_collected() >= 4
-
-
-func get_soldier_roles() -> Array[Resource]:
-	var out: Array[Resource] = []
+func get_soldier_roles() -> Array[CharacterData]:
+	var out: Array[CharacterData] = []
 	for character in characters.values():
 		if character.soldier_role != &"":
 			out.append(character)
-	out.sort_custom(func(a: Resource, b: Resource) -> bool:
+	out.sort_custom(func(a: CharacterData, b: CharacterData) -> bool:
 		return String(a.id) < String(b.id))
 	return out
 
 
-# ------------------------------------------------- multiplayer attribution ----
-## Per-peer kill accounting. Only meaningful in a networked session, but the
-## host records itself too so the result screen can show every player's line
-## without branching on "am I the host".
-
-const _BLANK_PLAYER_STATS := {
-	"kills": 0,
-	"headshots": 0,
-	"specials": 0,
-	"bosses": 0,
-	"downs": 0,
-	"rescues": 0,
-	"damage_dealt": 0,
-	"by_weapon": {},
-	"character_id": &"",
-}
-
-
-func _ensure_player_stats(peer_id: int) -> Dictionary:
-	if not player_stats.has(peer_id):
-		player_stats[peer_id] = _BLANK_PLAYER_STATS.duplicate(true)
-	return player_stats[peer_id]
-
-
-func record_player_kill(peer_id: int, is_head: bool, is_special: bool,
-		weapon_id: StringName = &"unknown") -> void:
-	if peer_id <= 0:
-		return
-	var stats := _ensure_player_stats(peer_id)
-	stats["kills"] = int(stats["kills"]) + 1
-	if is_head:
-		stats["headshots"] = int(stats["headshots"]) + 1
-	if is_special:
-		stats["specials"] = int(stats["specials"]) + 1
-	var by_weapon: Dictionary = stats["by_weapon"]
-	var key := String(weapon_id)
-	by_weapon[key] = int(by_weapon.get(key, 0)) + 1
-
-
-func record_player_boss_kill(peer_id: int, weapon_id: StringName = &"unknown") -> void:
-	if peer_id <= 0:
-		return
-	var stats := _ensure_player_stats(peer_id)
-	stats["bosses"] = int(stats["bosses"]) + 1
-	record_player_kill(peer_id, false, true, weapon_id)
-
-
-func record_player_down(peer_id: int) -> void:
-	if peer_id <= 0:
-		return
-	var stats := _ensure_player_stats(peer_id)
-	stats["downs"] = int(stats["downs"]) + 1
-
-
-func record_player_rescue(peer_id: int) -> void:
-	if peer_id <= 0:
-		return
-	var stats := _ensure_player_stats(peer_id)
-	stats["rescues"] = int(stats["rescues"]) + 1
-
-
-func record_player_damage(peer_id: int, amount: int) -> void:
-	if peer_id <= 0 or amount <= 0:
-		return
-	var stats := _ensure_player_stats(peer_id)
-	stats["damage_dealt"] = int(stats["damage_dealt"]) + amount
-
-
-## Snapshot for the result screen. Always contains at least the local peer so
-## single-player runs render one row instead of an empty panel.
-func get_all_player_stats() -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
-	var ids: Array = player_stats.keys()
-	ids.sort()
-	if ids.is_empty():
-		ids = [1]
-	for pid in ids:
-		var stats: Dictionary = player_stats.get(pid, _BLANK_PLAYER_STATS).duplicate(true)
-		stats["peer_id"] = int(pid)
-		stats["name"] = "P%d" % int(pid)
-		if not stats.has("character_id") or stats["character_id"] == &"":
-			stats["character_id"] = selected_character
-		out.append(stats)
-	return out
-
-
-## Called from complete_level so the result screen reads one merged record.
-func _merge_player_stats_into_result(result: Dictionary) -> void:
-	var rows := get_all_player_stats()
-	result["player_stats"] = rows
-	if rows.size() <= 1:
-		var only: Dictionary = rows[0] if not rows.is_empty() else {}
-		if not only.is_empty():
-			if not result.has("kills"):
-				result["kills"] = int(only.get("kills", 0))
-			if not result.has("headshots"):
-				result["headshots"] = int(only.get("headshots", 0))
-			if not result.has("specials"):
-				result["specials"] = int(only.get("specials", 0))
-
-
-func log_player_kill(peer_id: int, is_head: bool, is_special: bool,
-		weapon_id: StringName = &"unknown") -> void:
-	record_player_kill(peer_id, is_head, is_special, weapon_id)
-	EventBus.player_kill.emit(peer_id, is_head, is_special)
-
-
+# ------------------------------------------------------------------ flow ----
 func start_level(level_id: StringName, mode: StringName = &"", difficulty: StringName = &"",
 		character_id: StringName = &"", squad_ids: Array[StringName] = []) -> void:
-	var level: Resource = get_level(level_id)
+	var level: LevelData = get_level(level_id)
 	if level == null:
 		push_error("Unknown level: " + String(level_id))
 		return
@@ -382,15 +163,13 @@ func start_level(level_id: StringName, mode: StringName = &"", difficulty: Strin
 	selected_soldiers = _auto_soldiers(level)
 	run_seed = int(Time.get_unix_time_from_system()) ^ (randi() << 8)
 	last_result = {}
-	player_stats = {}
-	_ensure_player_stats(1)
 	DirectorSystem.begin_level(level, current_difficulty)
 	change_state(State.PLAYING)
 	AudioManager.play_level_music(String(level.music_theme))
 	EventBus.start_level_requested.emit()
 
 
-func default_mode_for(level: Resource) -> StringName:
+func default_mode_for(level: LevelData) -> StringName:
 	if level.default_mode == &"COMMAND":
 		return &"COMMAND"
 	return &"SQUAD"
@@ -413,7 +192,7 @@ func _auto_squad() -> Array[StringName]:
 	return out
 
 
-func _auto_soldiers(level: Resource) -> Array[StringName]:
+func _auto_soldiers(level: LevelData) -> Array[StringName]:
 	var roles: Array[StringName] = []
 	for role in level.commander_squad:
 		roles.append(StringName(role))
@@ -437,7 +216,6 @@ func complete_level(result: Dictionary) -> void:
 	result["difficulty"] = String(current_difficulty)
 	result["seed"] = run_seed
 	var achievements_before: Array = SaveSystem.data.get("achievements", []).duplicate()
-	_merge_player_stats_into_result(result)
 	last_result = result
 	SaveSystem.record_result(result, current_level, current_mode, current_difficulty)
 	SaveSystem.set_progress(current_level.chapter, int(String(current_level.id).substr(1)))
@@ -448,9 +226,6 @@ func complete_level(result: Dictionary) -> void:
 		if String(ach_id) not in achievements_before:
 			new_achievements.append(String(ach_id))
 	last_result["new_achievements"] = new_achievements
-	# 局外成长：奖励废料与天赋点
-	SaveSystem.award_meta_currency_for_run(score, rank)
-	SaveSystem.award_talent_point()
 	DirectorSystem.end_level()
 	AudioManager.play_result_sting(rank)
 	change_state(State.RESULT)
@@ -562,8 +337,6 @@ func is_character_unlocked(id: StringName) -> bool:
 		return true
 	if id in [&"rifleman", &"gunner", &"medic_soldier", &"demolisher"]:
 		return true
-	if id in [&"lin_yuan", &"marcus", &"lucia", &"victor"]:
-		return true
 	return SaveSystem.is_character_unlocked(id)
 
 
@@ -580,7 +353,7 @@ func grenade_capacity() -> int:
 
 
 func is_level_unlocked(id: StringName) -> bool:
-	var level: Resource = get_level(id)
+	var level: LevelData = get_level(id)
 	if level == null:
 		return false
 	if level.chapter <= 1:

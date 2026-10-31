@@ -22,10 +22,6 @@ var _director_fill: ColorRect
 var _director_label: Label
 var _score_label: Label
 var _combo_label: Label
-var _streak_label: Label
-var _killstreak: int = 0
-var _streak_timer: float = 0.0
-var _streak_cam_timer: float = 0.0
 var _time_label: Label
 var _level_label: Label
 
@@ -41,13 +37,8 @@ var _timer_fill: ColorRect
 var _timer_mode: String = ""
 
 var _hp_fill: ColorRect
-var _hp_trail: ColorRect
 var _temp_fill: ColorRect
 var _hp_text: Label
-var _last_hp_ratio: float = 1.0
-## Delayed white "damage ghost" ratio. Eases toward _last_hp_ratio in _process so
-## the trail visibly lags behind the real bar instead of snapping with it.
-var _hp_trail_ratio: float = 1.0
 var _player_name: Label
 var _status_text: Label
 var _downs_text: Label
@@ -65,8 +56,6 @@ var _throw_index: int = 0
 var _weapon_id: StringName = &""
 var _weapon_mag: int = 0
 var _weapon_reserve: int = 0
-var _currency_label: Label
-var _currency_icon: Control
 
 var _command_panel: Panel
 var _command_cells: Dictionary = {}
@@ -123,7 +112,6 @@ func _ready() -> void:
 	_build_timer_bar()
 	_build_player_panel()
 	_build_weapon_panel()
-	_currency_label.text = str(GameManager.get_currency())
 	_build_command_panel()
 	_build_prompt()
 	_build_event_banner()
@@ -396,15 +384,7 @@ func _build_score_panel() -> void:
 	_combo_label = UIKit.label("", 7, UIKit.GREEN, UIKit.font_latin())
 	_combo_label.position = Vector2(6, 29)
 	_combo_label.size = Vector2(96, 9)
-	_combo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	panel.add_child(_combo_label)
-
-	_streak_label = UIKit.label("", 8, UIKit.RED, UIKit.font_latin_bold())
-	_streak_label.position = Vector2(104, 29)
-	_streak_label.size = Vector2(150, 9)
-	_streak_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_streak_label.visible = false
-	panel.add_child(_streak_label)
 
 	_time_label = UIKit.label("0:00", 8, UIKit.MUTED, UIKit.font_latin())
 	_time_label.position = Vector2(102, 29)
@@ -490,14 +470,6 @@ func _build_player_panel() -> void:
 	back.size = Vector2(186, 7)
 	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(back)
-	_hp_trail = ColorRect.new()
-	_hp_trail.color = Color(1.0, 1.0, 1.0, 0.55)
-	_hp_trail.position = Vector2(40, 15)
-	_hp_trail.size = Vector2(186, 7)
-	_hp_trail.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_hp_trail.material = CanvasItemMaterial.new()
-	_hp_trail.material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	panel.add_child(_hp_trail)
 	_hp_fill = ColorRect.new()
 	_hp_fill.color = UIKit.GREEN
 	_hp_fill.position = Vector2(40, 15)
@@ -603,18 +575,6 @@ func _build_weapon_panel() -> void:
 	throw_key.position = Vector2(128, 38)
 	throw_key.size = Vector2(52, 6)
 	panel.add_child(throw_key)
-
-	## 货币显示（右上角）：废铁/废料，敌人掉落，商人处消费。
-	_currency_icon = ColorRect.new()
-	_currency_icon.color = UIKit.AMBER
-	_currency_icon.size = Vector2(14, 14)
-	_currency_icon.position = Vector2(510, 302)
-	_currency_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(_currency_icon)
-	_currency_label = UIKit.label("0", 12, UIKit.AMBER, UIKit.font_latin_bold())
-	_currency_label.position = Vector2(528, 304)
-	_currency_label.size = Vector2(100, 14)
-	_root.add_child(_currency_label)
 
 
 func _build_command_panel() -> void:
@@ -746,8 +706,8 @@ func _build_pause() -> void:
 	_pause_root.add_child(dim)
 
 	var panel := UIKit.panel(Color(0.045, 0.055, 0.07, 0.98), UIKit.AMBER)
-	panel.position = Vector2(190, 58)
-	panel.size = Vector2(260, 250)
+	panel.position = Vector2(190, 68)
+	panel.size = Vector2(260, 224)
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	_pause_root.add_child(panel)
 
@@ -780,45 +740,20 @@ func _build_pause() -> void:
 	menu.pressed.connect(_pause_menu)
 	panel.add_child(menu)
 
-	var archive := UIKit.button("档案库  " + _archive_progress_text(), 210, 24)
-	archive.position = Vector2(25, 152)
-	archive.pressed.connect(_open_archive_menu)
-	panel.add_child(archive)
-
 	var hint := UIKit.label("ESC 继续 · 进度会在检查点保存", 8, UIKit.MUTED)
-	hint.position = Vector2(0, 184)
+	hint.position = Vector2(0, 158)
 	hint.size = Vector2(260, 10)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	panel.add_child(hint)
 
-	var keys := UIKit.label("WASD 移动   鼠标瞄准   J 开火   F 近战/处决\nE 互动/救助   R 换弹   H 医疗包   T 药丸", 8, UIKit.DIM)
-	keys.position = Vector2(12, 202)
+	var keys := UIKit.label("WASD 移动   鼠标瞄准   J 开火   F 近战\nE 互动/救助   R 换弹   H 医疗包   T 药丸", 8, UIKit.DIM)
+	keys.position = Vector2(12, 178)
 	keys.size = Vector2(236, 34)
 	keys.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	keys.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	panel.add_child(keys)
 
 	_pause_root.set_meta("resume", resume)
-
-
-func _archive_progress_text() -> String:
-	if ArchiveManager == null:
-		return ""
-	return "%d/%d" % [ArchiveManager.unlocked_count(), ArchiveManager.total_count()]
-
-
-## Opens the archive browser on top of the pause menu (tree stays paused, the
-## screen runs in ALWAYS mode and closes itself through its navigate signal).
-func _open_archive_menu() -> void:
-	var packed: PackedScene = load("res://scenes/ui/archive/ArchiveMenu.tscn")
-	if packed == null:
-		return
-	var menu := packed.instantiate()
-	menu.process_mode = Node.PROCESS_MODE_ALWAYS
-	menu.navigate.connect(func(_target: StringName, _payload: Dictionary) -> void:
-		menu.queue_free())
-	_root.add_child(menu)
-	AudioManager.play_sfx(&"ui_click")
 
 
 func _build_debug_panel() -> void:
@@ -872,7 +807,6 @@ func _connect_events() -> void:
 	EventBus.checkpoint_reached.connect(_on_checkpoint)
 	EventBus.command_issued.connect(_on_command_issued)
 	EventBus.formation_changed.connect(_on_formation_changed)
-	EventBus.enemy_killed.connect(_on_enemy_killed_streak)
 	if _debug_panel != null:
 		EventBus.debug_panel_toggled.connect(_toggle_debug)
 		EventBus.debug_vision_toggled.connect(_on_debug_vision_toggled)
@@ -881,7 +815,6 @@ func _connect_events() -> void:
 	EventBus.achievement_unlocked.connect(_on_achievement)
 	EventBus.unlock_earned.connect(_on_unlock)
 	EventBus.toast.connect(_on_toast)
-	EventBus.currency_changed.connect(_on_currency_changed)
 
 
 func _on_health_changed(hp: int, temp_hp: int, max_hp: int) -> void:
@@ -903,10 +836,6 @@ func _on_weapon_changed(id: StringName, display_name: String) -> void:
 	if data != null:
 		_weapon_state.text = String(data.category).to_upper()
 	_refresh_ammo()
-
-
-func _on_currency_changed(amount: int) -> void:
-	_currency_label.text = str(amount)
 
 
 func _on_skill_state(ratio: float, active: bool) -> void:
@@ -1128,51 +1057,9 @@ func _big_toast(title: String, detail: String, color: Color, icon_name: String) 
 
 
 # ------------------------------------------------------------------ refresh --
-func _on_enemy_killed_streak(kind: StringName, source: StringName, pos: Vector2) -> void:
-	if source != &"player":
-		return
-	_killstreak += 1
-	_streak_timer = 2.5
-	if _killstreak >= 3:
-		_streak_label.text = "%d KILL STREAK" % _killstreak
-		_streak_label.visible = true
-		_streak_label.modulate = Color(1, 1, 1, 1)
-		_streak_label.scale = Vector2(1.3, 1.3)
-		var tw := create_tween()
-		tw.tween_property(_streak_label, "scale", Vector2.ONE, 0.2)
-		if _killstreak >= 10:
-			_streak_label.text = "MONSTER KILL!"
-			_streak_label.add_theme_color_override("font_color", UIKit.RED)
-		elif _killstreak >= 5:
-			_streak_label.text = "RAMPAGE!"
-			_streak_label.add_theme_color_override("font_color", Color(1, 0.5, 0, 1))
-
 func _process(delta: float) -> void:
-	if _streak_timer > 0.0:
-		_streak_timer -= delta
-		if _streak_timer <= 0.0:
-			_killstreak = 0
-			_streak_label.visible = false
-			# 结束击杀特写慢动作
-			if Engine.time_scale < 1.0:
-				Engine.time_scale = 1.0
 	if _pause_open:
 		return
-	# Delayed white damage trail: ease the ghost down toward the real ratio over
-	# ~0.35s regardless of the 10Hz stat refresh cadence, then hide when flush.
-	if _hp_trail != null and _hp_trail_ratio > _last_hp_ratio:
-		_hp_trail_ratio = maxf(_last_hp_ratio, _hp_trail_ratio - delta / 0.35)
-		if _hp_trail_ratio <= _last_hp_ratio + 0.001:
-			_hp_trail_ratio = _last_hp_ratio
-		_hp_trail.size.x = 186.0 * _hp_trail_ratio
-	# 击杀特写：5连杀触发慢动作镜头
-	if _killstreak >= 5 and Engine.time_scale == 1.0:
-		Engine.time_scale = 0.2
-		_streak_cam_timer = 1.5
-	if _streak_cam_timer > 0.0:
-		_streak_cam_timer -= delta
-		if _streak_cam_timer <= 0.0 and Engine.time_scale < 1.0:
-			Engine.time_scale = 1.0
 	_refresh_accum += delta
 	_clock_accum += delta
 	if _refresh_accum >= 0.1:
@@ -1342,25 +1229,6 @@ func _refresh_health(hp: int, temp_hp: int, max_hp: int) -> void:
 	if _hp_fill == null:
 		return
 	var ratio := clampf(float(hp) / float(maxi(1, max_hp)), 0.0, 1.0)
-	# Trail is persistent state, NOT derived from _last_hp_ratio (which is
-	# rewritten to the current ratio at the end of this function every frame).
-	# Snapping it to [_last_hp_ratio .. 1.0] made the white ghost track the bar
-	# with zero lag; it instead never falls below the current ratio and eases
-	# toward it in _process so the drop is visibly delayed.
-	if _hp_trail != null:
-		# Heal: snapshot must never sit left of the real bar, so pull it up
-		# immediately on heal (the ghost only ever lags downward).
-		_hp_trail_ratio = maxf(ratio, _hp_trail_ratio)
-		_hp_trail.visible = _hp_trail_ratio > ratio + 0.001
-	if ratio < _last_hp_ratio:
-		# Jitter on damage
-		var jitter_amount := (1.0 - ratio) * 1.5
-		if ScreenShake != null:
-			ScreenShake.add_trauma(2.0)
-		_hp_fill.position.x = 40.0 + randf_range(-jitter_amount, jitter_amount)
-		var tween := create_tween()
-		tween.tween_property(_hp_fill, "position:x", 40.0, 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_last_hp_ratio = ratio
 	_hp_fill.size.x = 186.0 * ratio
 	_hp_fill.color = _hp_color(ratio)
 	_temp_fill.size = Vector2(minf(186.0 * clampf(float(temp_hp) / float(maxi(1, max_hp)), 0.0, 1.0), 186.0 * (1.0 - ratio)), 3)

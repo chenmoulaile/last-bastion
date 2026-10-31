@@ -11,8 +11,6 @@ var _tabs: Dictionary = {}
 var _cards: Dictionary = {}
 var _cards_box: Control
 var _detail_art: TextureRect
-var _detail_chapter: Label
-var _detail_chapter_num: Label
 var _detail_id: Label
 var _detail_title: Label
 var _detail_sub: Label
@@ -65,7 +63,7 @@ func _build() -> void:
 
 
 func _build_tabs() -> void:
-	var names := ["裂城港口", "旧城区", "净化区", "信号核心"]
+	var names := ["郊区突围", "城市坠落", "军事残部", "最后防线"]
 	for i in 4:
 		var chapter := i + 1
 		var btn := UIKit.button("CH.%d  %s" % [chapter, names[i]], 140, 22)
@@ -93,24 +91,6 @@ func _build_detail() -> void:
 	_detail_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	_detail_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(_detail_art)
-
-	# The chapter art has its v1.0 title baked in; cover that strip and draw the
-	# current chapter name from data so renames never go stale.
-	var art_shade := ColorRect.new()
-	art_shade.color = Color(0.03, 0.035, 0.045, 0.88)
-	art_shade.position = Vector2(8, 54)
-	art_shade.size = Vector2(150, 38)
-	art_shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_child(art_shade)
-	_detail_chapter_num = UIKit.label("", 6, UIKit.AMBER, UIKit.font_latin())
-	_detail_chapter_num.position = Vector2(14, 56)
-	_detail_chapter_num.size = Vector2(138, 8)
-	_detail_chapter_num.visible = false
-	panel.add_child(_detail_chapter_num)
-	_detail_chapter = UIKit.label("", 13, UIKit.INK)
-	_detail_chapter.position = Vector2(14, 62)
-	_detail_chapter.size = Vector2(138, 18)
-	panel.add_child(_detail_chapter)
 
 	_detail_id = UIKit.label("L01", 14, UIKit.AMBER, UIKit.font_latin_bold())
 	_detail_id.position = Vector2(166, 6)
@@ -344,10 +324,6 @@ func _refresh_detail() -> void:
 		_mode = &"SQUAD"
 	var unlocked := GameManager.is_level_unlocked(_selected.id)
 	_detail_art.texture = UIKit.texture("res://assets/sprites/ui/ch%d.png" % _selected.chapter)
-	if _detail_chapter != null:
-		_detail_chapter.text = UIKit.chapter_title(_selected.chapter)
-	if _detail_chapter_num != null:
-		_detail_chapter_num.text = "CHAPTER %d" % _selected.chapter
 	_detail_id.text = String(_selected.id).to_upper() + "  ·  " + _selected.chapter_name
 	_detail_title.text = _selected.title
 	_detail_sub.text = _selected.subtitle

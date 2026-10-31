@@ -4,9 +4,7 @@ extends Node2D
 ## parallax, props, doors, supplies, triggers, AI director spawns, extraction,
 ## scoring and the result payload.
 
-const PLAYER_SCENE := preload("res://characters_rework/playable/PlayerControllerV2.gd")
-const ZOMBIE_BASE_SCRIPT := preload("res://scripts/zombies/zombie_base.gd")
-const REWORK_CHAR_DIR := "res://characters_rework/data/playable"
+const PLAYER_SCENE := preload("res://scenes/actors/player.tscn")
 const HUD_SCENE := preload("res://scenes/ui/hud.tscn")
 const WINDOW_RAPPEL := preload("res://scripts/interactables/window_rappel.gd")
 const MAX_COMMONS := 120
@@ -39,13 +37,6 @@ var ground_segments: Array = []
 var platforms: Array = []
 var hud: CanvasLayer
 var formation: StringName = &"wedge"
-var archive_pickups: Array[Node] = []
-var ai_director: Node = null
-var comic_layer: CanvasLayer = null
-var decode_active: bool = false
-var _decode_left: float = 0.0
-var _decode_waves: int = 0
-var _final_choice_open: bool = false
 
 var _rng := RandomNumberGenerator.new()
 var _elapsed: float = 0.0
@@ -62,16 +53,8 @@ var _tanks_killed: int = 0
 var _tank_kill_time: float = 999.0
 var _tank_spawn_time: float = 0.0
 var _boss_node: Node = null
-var _network_spawn_override := false
 var _boss_kind: StringName = &""
 var _boss_nodes: Array = []
-var _boss_phase: int = 1
-var _boss_max_hp: int = 0
-var _ground_segments: Array = []
-var _platforms: Array = []
-var use_roguelite: bool = false
-var roguelite_map: Dictionary = {}
-var roguelite_generator: Node = null
 var _horde_active: bool = false
 var _horde_alive: Array = []
 var _horde_pending: int = 0
@@ -124,10 +107,6 @@ func _ready() -> void:
 		push_error("LevelRunner started without LevelData.")
 		return
 	GameManager.current_level = data
-	# Chapter 3 has two routes through one level slot; the chip decision in 2-3
-	# decides which one loads. Deep-copy so the shared .tres stays untouched.
-	data = data.duplicate(true)
-	_apply_route_variant()
 	level_width = data.length
 	dark = data.dark
 	_rng.seed = GameManager.run_seed ^ hash(String(data.id))
@@ -145,14 +124,9 @@ func _ready() -> void:
 	_build_hidden_room()
 	_build_extraction()
 	_build_zones()
-	_build_archives()
-	_build_cover_zones()
-	_build_narrative()
 	_spawn_player()
 	_spawn_allies()
 	_build_hud()
-	_build_faction_layer()
-	_build_comic_layer()
 	_connect_events()
 	_started_at = Time.get_ticks_msec() / 1000.0
 	_respawn_pos = player.global_position
@@ -161,16 +135,12 @@ func _ready() -> void:
 	EventBus.safe_room_entered.emit(true)
 	_safe_room_timer = 2.0
 	AudioManager.play_ambience(StringName("rain" if data.rain else String(data.theme)))
-	AudioManager.set_ambience_reverb_for_theme(String(data.theme))
 	if data.tutorial_tips.size() > 0:
 		EventBus.level_event.emit(data.tutorial_tips[0])
 		_tips_shown = 1
 	else:
 		EventBus.level_event.emit(data.title + " — " + data.subtitle)
 	call_deferred("_intro")
-	var net := get_node_or_null("/root/NetworkManager")
-	if net != null and bool(net.call("is_multiplayer_active")):
-		net.call_deferred("notify_level_ready")
 
 
 func _intro() -> void:
@@ -243,86 +213,9 @@ func _add_parallax(parent: ParallaxBackground, texture_name: String, scale_value
 
 
 func _build_terrain() -> void:
-	if use_roguelite:
-		_build_roguelite_rooms()
-		return
 	var built := TerrainBuilder.build(self, String(data.theme), level_width, _rng, dark)
 	ground_segments = built.get("segments", [])
 	platforms = built.get("platforms", [])
-
-
-func _build_roguelite_rooms() -> void:
-	var gen: RogueliteMapGenerator = RogueliteMapGenerator.instance()
-	roguelite_generator = gen
-	add_child(gen)
-	var seed_val := int(GameManager.run_seed)
-	var map_data: Dictionary = gen.generate(seed_val, 10, 10)
-	roguelite_map = map_data
-	var rooms_array: Array = map_data.get("rooms", [])
-	var room_size: float = float(map_data.get("room_size", 420.0))
-	# 实例化房间场景
-	for room_info in rooms_array:
-		var scene: PackedScene = room_info.get("scene", null)
-		if scene == null:
-			continue
-		var instance: Node2D = scene.instantiate()
-		instance.position = Vector2(
-			float(room_info.get("world_x", 0.0)),
-			float(room_info.get("world_y", 0.0))
-		)
-		instance.name = "Room_" + str(room_info.get("x", 0)) + "_" + str(room_info.get("y", 0))
-		add_child(instance)
-		# 根据房间类型设置内容
-		var rtype := int(room_info.get("type", 0))
-		if rtype == 0:  # START
-			_setup_start_room(instance)
-		elif rtype == 1:  # COMBAT
-			_setup_combat_room(instance)
-		elif rtype == 2:  # SUPPLY
-			_setup_supply_room(instance)
-		elif rtype == 4:  # BOSS
-			_setup_boss_room(instance)
-
-	# 设置关卡宽度
-	level_width = 10.0 * room_size
-
-
-func _setup_start_room(room: Node2D) -> void:
-	var spawn := room.get_node_or_null("SpawnPoint")
-	if spawn != null:
-		var player := get_node_or_null("Player")
-		if player == null:
-			# 玩家由 _spawn_player 创建，这里记录出生点
-			pass
-
-func _setup_combat_room(room: Node2D) -> void:
-	# 在战斗房间生成敌人
-	var spawn1 := room.get_node_or_null("EnemySpawn1")
-	var spawn2 := room.get_node_or_null("EnemySpawn2")
-	if spawn1 != null:
-		_spawn_zombie(&"common", spawn1.global_position, false)
-	if spawn2 != null:
-		_spawn_zombie(&"common", spawn2.global_position, false)
-
-func _setup_supply_room(room: Node2D) -> void:
-	var drop1 := room.get_node_or_null("SupplyDrop1")
-	var drop2 := room.get_node_or_null("SupplyDrop2")
-	# 补给物品由道具系统生成
-
-func _setup_boss_room(room: Node2D) -> void:
-	var boss_spawn := room.get_node_or_null("BossSpawn")
-	if boss_spawn != null:
-		spawn_boss(&"tank", 1)
-
-
-## 获取 roguelite 模式下的地图宽度。
-func get_roguelite_width() -> float:
-	return level_width
-
-
-## 获取 roguelite 地图数据。
-func get_roguelite_map() -> Dictionary:
-	return roguelite_map
 
 
 func _build_bounds() -> void:
@@ -600,28 +493,9 @@ func _build_zones() -> void:
 
 
 func _spawn_player() -> void:
-	var p: Node2D = PlayerControllerV2.new()
+	var p := PLAYER_SCENE.instantiate()
 	p.level = self
-	p.auto_camera = true
 	p.position = Vector2(220, get_ground_y(220))
-	# 解析选中的角色数据：优先用 GameManager.selected_character，回退到关卡默认武器对应的角色。
-	var char_id := GameManager.selected_character
-	var rework_data: ReworkCharacterData = null
-	if char_id != &"":
-		var path := "%s/%s.tres" % [REWORK_CHAR_DIR, String(char_id)]
-		if ResourceLoader.exists(path):
-			rework_data = load(path) as ReworkCharacterData
-	if rework_data == null:
-		var fallback_id := &"assault"
-		var fb_path := "%s/%s.tres" % [REWORK_CHAR_DIR, String(fallback_id)]
-		if ResourceLoader.exists(fb_path):
-			rework_data = load(fb_path) as ReworkCharacterData
-	p.character_data = rework_data
-	var net := get_node_or_null("/root/NetworkManager")
-	if net != null and bool(net.call("is_multiplayer_active")):
-		var pid := int(net.call("get_peer_id"))
-		p.name = "Player_" + str(pid)
-		p.set_multiplayer_authority(pid)
 	actors.add_child(p)
 	player = p
 	for wid in data.player_weapons:
@@ -631,37 +505,6 @@ func _spawn_player() -> void:
 	# Tutorial loadout: one throwable of each type, as the design doc specifies.
 	if player.get("throwables") is Dictionary:
 		var th: Dictionary = player.get("throwables")
-		th["grenade"] = 1
-		th["molotov"] = 1
-		th["bile"] = 1
-
-
-func spawn_network_player(peer_id: int, character_id: StringName, x: float, y: float) -> void:
-	var p: Node2D = PlayerControllerV2.new()
-	p.level = self
-	# Remote bodies must never create a Camera2D: the last camera made current
-	# would steal the view from the local player on this peer.
-	p.auto_camera = false
-	p.is_remote_player = true
-	p.position = Vector2(x, y)
-	p.name = "Player_" + str(peer_id)
-	p.set_multiplayer_authority(peer_id)
-	var path := "%s/%s.tres" % [REWORK_CHAR_DIR, String(character_id)]
-	var rework_data: ReworkCharacterData = null
-	if ResourceLoader.exists(path):
-		rework_data = load(path) as ReworkCharacterData
-	if rework_data == null:
-		var fb_path := "%s/%s.tres" % [REWORK_CHAR_DIR, "assault"]
-		if ResourceLoader.exists(fb_path):
-			rework_data = load(fb_path) as ReworkCharacterData
-	p.character_data = rework_data
-	actors.add_child(p)
-	for wid in data.player_weapons:
-		var id := StringName(wid)
-		if id != &"":
-			p.give_weapon(id)
-	if p.get("throwables") is Dictionary:
-		var th: Dictionary = p.get("throwables")
 		th["grenade"] = 1
 		th["molotov"] = 1
 		th["bile"] = 1
@@ -709,10 +552,8 @@ func _connect_events() -> void:
 	EventBus.director_request_special.connect(_on_director_special)
 	EventBus.director_request_horde.connect(_on_director_horde)
 	EventBus.director_request_supply.connect(_on_director_supply)
-	EventBus.director_request_boss.connect(_on_director_boss)
 	EventBus.gunshot.connect(_on_gunshot)
 	EventBus.door_kicked.connect(_on_door_kicked)
-	EventBus.player_died.connect(on_player_died)
 
 
 func _process(delta: float) -> void:
@@ -744,7 +585,6 @@ func _process(delta: float) -> void:
 	if _director_report_timer >= 0.5:
 		_director_report_timer = 0.0
 		_report_party()
-		_tick_boss_phases(delta)
 	_objective_timer += delta
 	if _objective_timer >= 1.0:
 		_objective_timer = 0.0
@@ -788,12 +628,6 @@ func _fire_event(ev: Dictionary) -> void:
 		"elevator":
 			EventBus.level_event.emit("电梯警报响起——守住这层楼！")
 			start_horde(14, true)
-		"faction":
-			spawn_faction_event(String(ev.get("event", "")), player)
-		"narrative":
-			DialogueManager.play_conversation(String(ev.get("conversation", "")))
-		"final_choice":
-			open_final_choice()
 		_:
 			EventBus.level_event.emit(String(ev.get("text", "")))
 
@@ -825,290 +659,6 @@ func _report_party() -> void:
 	var avg_hp := total_hp / float(maxi(1, count))
 	DirectorSystem.report_party(avg_hp, 0.8, player.global_position.x)
 	DirectorSystem.set_boss_active(_boss_node != null and is_instance_valid(_boss_node))
-
-
-# ---------------------------------------------------- narrative / factions ----
-
-
-# ---------------------------------------------------- narrative / factions ----
-func _level_number() -> int:
-	var digits := ""
-	for i in String(data.id).length():
-		var ch := String(data.id)[i]
-		if ch >= "0" and ch <= "9":
-			digits += ch
-	return int(digits) if digits != "" else 1
-
-
-## 3-1A / 3-1B share level slot l07; the route is chosen by the chapter 2 chip.
-func _apply_route_variant() -> void:
-	if String(data.id) != "l07":
-		return
-	if GameManager.route_variant() == &"sewer":
-		data.title = "排水系统"
-		data.subtitle = "绕后路线。下面全是失败品。"
-		data.theme = &"subway"
-		data.music_theme = &"subway"
-		data.dark = true
-		data.rain = false
-		data.route_label = "3-1A · 绕后"
-	else:
-		data.title = "净化区正门"
-		data.subtitle = "硬闯路线。防御塔已经上电。"
-		data.theme = &"military"
-		data.music_theme = &"military"
-		data.dark = false
-		data.rain = false
-		data.route_label = "3-1B · 正门"
-
-
-## Terrain is procedural, so a fixed ratio can land in a pit. Probe outwards for
-## the nearest walkable column before placing story props.
-func _ground_point_near(x: float) -> Vector2:
-	for offset in [0.0, 40.0, -40.0, 80.0, -80.0, 140.0, -140.0, 220.0, -220.0, 320.0, -320.0]:
-		var probe := clampf(x + offset, 80.0, level_width - 80.0)
-		var gy := get_ground_y(probe)
-		if gy > 0.0:
-			return Vector2(probe, gy)
-	return Vector2.ZERO
-
-
-## Places archive fragments. When the previous chapter's quota is unmet, extra
-## spawn points are added so the player can catch up (design 2.3).
-func _build_archives() -> void:
-	if data.archive_slots <= 0:
-		return
-	var chapter := data.chapter
-	var slots := data.archive_slots + ArchiveManager.extra_spawn_slots(chapter - 1)
-	var ids := ArchiveManager.plan_for_level(chapter, _level_number(), slots)
-	var ratios := [0.22, 0.38, 0.52, 0.66, 0.78, 0.88]
-	for i in ids.size():
-		var ratio: float = ratios[i % ratios.size()]
-		var point := _ground_point_near(level_width * ratio)
-		if point == Vector2.ZERO:
-			continue
-		var pickup := ArchivePickup.new()
-		pickup.fragment_id = ids[i]
-		pickup.level = self
-		pickup.position = point - Vector2(0, 24.0)
-		pickups.add_child(pickup)
-		archive_pickups.append(pickup)
-	if not ids.is_empty():
-		EventBus.level_event.emit("检测到 %d 份档案信号" % ids.size())
-
-
-## Cover volumes feed Lucia's passive. They are gameplay areas, not colliders.
-func _build_cover_zones() -> void:
-	for ratio in [0.28, 0.44, 0.61, 0.75, 0.9]:
-		var point := _ground_point_near(level_width * float(ratio))
-		if point == Vector2.ZERO:
-			continue
-		var area := Area2D.new()
-		area.name = "Cover"
-		area.add_to_group("cover")
-		area.collision_layer = 64
-		area.collision_mask = 0
-		area.monitoring = false
-		area.monitorable = true
-		var shape := CollisionShape2D.new()
-		var rect := RectangleShape2D.new()
-		rect.size = Vector2(56, 34)
-		shape.shape = rect
-		shape.position = Vector2(0, -17)
-		area.add_child(shape)
-		var sprite := Sprite2D.new()
-		sprite.texture = SpriteLibrary.prop_texture("sandbags")
-		if sprite.texture != null:
-			sprite.centered = false
-			sprite.position = Vector2(-28, -32)
-			sprite.z_index = 1
-			area.add_child(sprite)
-		area.position = point
-		props.add_child(area)
-
-
-## Story beats are Area2D triggers built from LevelData.narrative.
-func _build_narrative() -> void:
-	for row in data.narrative:
-		if not (row is Dictionary):
-			continue
-		var config: Dictionary = row
-		var trigger := NarrativeTrigger.new()
-		trigger.level = self
-		trigger.configure(config)
-		var at := float(config.get("at", 0.5))
-		var point := _ground_point_near(level_width * at)
-		if point == Vector2.ZERO:
-			continue
-		trigger.position = point - Vector2(0, 24.0)
-		add_child(trigger)
-
-
-func _build_faction_layer() -> void:
-	ai_director = AIDirector.new()
-	ai_director.name = "AIDirector"
-	ai_director.level = self
-	add_child(ai_director)
-
-
-func _build_comic_layer() -> void:
-	comic_layer = CanvasLayer.new()
-	comic_layer.name = "ComicPostProcess"
-	comic_layer.set_script(load("res://scripts/fx/comic_post_process.gd"))
-	add_child(comic_layer)
-
-
-# ------------------------------------------------------------- spawn hooks ----
-func spawn_faction_unit(faction_id: String, unit_kind: String, pos: Vector2) -> Node:
-	var unit := FactionUnit.new()
-	unit.faction_id = faction_id
-	unit.unit_kind = unit_kind
-	unit.level = self
-	var gy := get_ground_y(pos.x)
-	unit.position = Vector2(pos.x, gy if gy > 0.0 else pos.y)
-	actors.add_child(unit)
-	return unit
-
-
-func spawn_faction_event(event_id: String, player_node: Node = null) -> void:
-	var origin: Vector2 = player_node.global_position if player_node != null else Vector2.ZERO
-	match event_id:
-		"rust_ambush":
-			for i in 3:
-				spawn_faction_unit("rust", "rust_enforcer", origin + Vector2(-260.0 - i * 40.0, 0))
-			EventBus.level_event.emit("锈帮伏击！")
-		"remnant_support":
-			for i in 2:
-				spawn_faction_unit("remnants", "remnant_patrol", origin + Vector2(-120.0 + i * 50.0, 0))
-			EventBus.level_event.emit("残警火力支援抵达")
-		"horizon_sweep":
-			for i in 3:
-				spawn_faction_unit("horizon", "horizon_enforcer", origin + Vector2(300.0 + i * 40.0, 0))
-			EventBus.level_event.emit("地平线清扫队正在接近")
-		"signal_jam":
-			spawn_faction_unit("signal_bureau", "signal_jammer", origin + Vector2(260.0, 0))
-			EventBus.level_event.emit("信号局部署干扰器")
-		_:
-			EventBus.level_event.emit("派系活动：" + event_id)
-
-
-## Victor's passive drops these; they convert into supplies at the next crate.
-func spawn_sample(pos: Vector2) -> void:
-	var sample := Pickup.new()
-	sample.kind = "ammo"
-	sample.amount = 30
-	sample.level = self
-	sample.position = Vector2(pos.x, pos.y - 10.0)
-	pickups.add_child(sample)
-	add_score(150)
-
-
-func on_archive_collected(fragment_id: String) -> void:
-	add_score(5000)
-	var fragment := ArchiveManager.get_fragment(fragment_id)
-	var title := fragment.title if fragment != null else fragment_id
-	EventBus.level_event.emit("档案收录：" + title)
-	EventBus.objective_changed.emit("档案 %d/%d" % [ArchiveManager.unlocked_count(), ArchiveManager.total_count()])
-	if ArchiveManager.chapter_quota_met(data.chapter):
-		EventBus.notify.emit("本章档案进度已达标")
-
-
-func get_archive_pickups() -> Array[Node]:
-	var out: Array[Node] = []
-	for pickup in archive_pickups:
-		if pickup != null and is_instance_valid(pickup) and not bool(pickup.get("taken")):
-			out.append(pickup)
-	return out
-
-
-func nearest_archive_position(from: Vector2) -> Vector2:
-	var best := Vector2.ZERO
-	var best_dist := INF
-	for pickup in get_archive_pickups():
-		var dist := from.distance_to(pickup.global_position)
-		if dist < best_dist:
-			best_dist = dist
-			best = pickup.global_position
-	return best
-
-
-func burn_archive_pickup(pickup: Node) -> void:
-	if pickup == null or not is_instance_valid(pickup):
-		return
-	var fragment_id := String(pickup.get("fragment_id"))
-	archive_pickups.erase(pickup)
-	Fx.explosion(fx_layer, pickup.global_position, 1.4)
-	AudioManager.play_sfx(&"barrel_explode")
-	EventBus.notify.emit("档案被销毁：" + fragment_id)
-	EventBus.level_event.emit("证据销毁小队烧毁了一份档案")
-	pickup.queue_free()
-
-
-func clamp_spawn_x(x: float) -> float:
-	return clampf(x, 80.0, level_width - 80.0)
-
-
-# ------------------------------------------------------------- final choice ----
-func open_final_choice() -> void:
-	var packed: PackedScene = load("res://scenes/ui/narrative/FinalChoiceUI.tscn")
-	if packed == null:
-		return
-	var ui := packed.instantiate()
-	ui.set("level", self)
-	add_child(ui)
-
-
-func open_story_choice(choice_id: String) -> void:
-	if not StoryChoices.has(choice_id):
-		return
-	var packed: PackedScene = load("res://scenes/ui/narrative/StoryChoiceUI.tscn")
-	if packed == null:
-		return
-	var ui := packed.instantiate()
-	ui.set("level", self)
-	ui.set("choice_id", choice_id)
-	add_child(ui)
-
-
-func play_destroy_ending() -> void:
-	EventBus.level_event.emit("信号已终止")
-	EventBus.objective_changed.emit("信号已终止")
-	AudioManager.play_sfx(&"explosion")
-	Fx.explosion(fx_layer, player.global_position + Vector2(0, -20), 4.0)
-	AudioLayerManager.play_explosion_layer()
-	AudioManager.duck_music(30.0, 0.8)
-	if PostProcess != null:
-		PostProcess.pulse_blood_distortion(0.8, 0.4)
-	EventBus.shake(6.0)
-	EventBus.gore_event.emit(1.4)
-	await get_tree().create_timer(1.0, true, false, true).timeout
-	DialogueManager.play_conversation("ending_destroy")
-	await get_tree().create_timer(7.5, true, false, true).timeout
-	if is_instance_valid(self):
-		_finish_level()
-
-
-func start_decode_defense(seconds: float, waves: int) -> void:
-	decode_active = true
-	_decode_left = seconds
-	_decode_waves = waves
-	EventBus.level_event.emit("解码开始——守住设备 90 秒")
-	EventBus.objective_changed.emit("解码防守 %ds" % int(seconds))
-	start_defense(seconds, waves, 22)
-	if ArchiveManager.highest_security_level_collected() >= 4:
-		# 信号核心防御协议：额外两波敌人
-		_decode_waves += 2
-		EventBus.level_event.emit("信号核心防御协议启动")
-
-
-func _finish_decode() -> void:
-	decode_active = false
-	SaveSystem.set_flag(&"lin_yuan_epilogue")
-	EventBus.level_event.emit("解码完成 · 坐标与名单已解析")
-	DialogueManager.play_conversation("ending_decode")
-	await get_tree().create_timer(8.0, true, false, true).timeout
-	if is_instance_valid(self):
-		_finish_level()
 
 
 # ------------------------------------------------------------------ events ----
@@ -1177,8 +727,6 @@ func _alive_common_count() -> int:
 			continue
 		if node.get("level") != self:
 			continue
-		if node.is_in_group("faction_units"):
-			continue
 		var zd: ZombieData = node.get("data")
 		if zd != null and not zd.is_special:
 			count += 1
@@ -1191,8 +739,6 @@ func _alive_special_count() -> int:
 		if node == null or not is_instance_valid(node) or bool(node.get("dead")):
 			continue
 		if node.get("level") != self:
-			continue
-		if node.is_in_group("faction_units"):
 			continue
 		var zd: ZombieData = node.get("data")
 		if zd != null and zd.is_special and zd.id != &"witch":
@@ -1237,12 +783,6 @@ func _on_director_supply(kind: StringName) -> void:
 	_spawn_director_supply(kind)
 
 
-func _on_director_boss(kind: StringName) -> void:
-	if GameManager.state == GameManager.State.PLAYING and not _finishing:
-		spawn_boss(kind, 1)
-		EventBus.notify.emit("Boss 波次来袭！")
-
-
 func _spawn_director_supply(kind: StringName) -> void:
 	var x := player.global_position.x + 180.0
 	x = clampf(x, 80.0, level_width - 80.0)
@@ -1281,9 +821,6 @@ func _tick_defense(delta: float) -> void:
 	if _defense_left <= 0.0:
 		_defense_active = false
 		add_score(3000)
-		if decode_active:
-			_finish_decode()
-			return
 		EventBus.objective_changed.emit("推进至撤离点")
 		EventBus.level_event.emit("防线守住了")
 		EventBus.notify.emit("防守成功 +3000")
@@ -1456,10 +993,6 @@ func _finish_level() -> void:
 
 # ------------------------------------------------------------------ combat ----
 func _spawn_zombie(kind: StringName, pos: Vector2, alert: bool = false) -> Node:
-	var net := get_node_or_null("/root/NetworkManager")
-	var net_active := net != null and bool(net.call("is_multiplayer_active"))
-	if net_active and not bool(net.get("is_host")) and not _network_spawn_override:
-		return null
 	var zd := GameManager.get_zombie(kind)
 	if zd == null:
 		zd = GameManager.get_zombie(&"common")
@@ -1469,10 +1002,6 @@ func _spawn_zombie(kind: StringName, pos: Vector2, alert: bool = false) -> Node:
 	z.level = self
 	z.position = pos
 	actors.add_child(z)
-	if int(z.net_id) == 0:
-		z.net_id = z.get_instance_id()
-	if net_active and bool(net.get("is_host")):
-		net.call_deferred("broadcast_zombie_spawn", kind, z.net_id, pos.x, pos.y)
 	if alert:
 		z.alerted = true
 		z.target = player
@@ -1483,18 +1012,6 @@ func _spawn_zombie(kind: StringName, pos: Vector2, alert: bool = false) -> Node:
 	return z
 
 
-## Client-side visual spawn driven by NetworkManager.rpc_zombie_spawn. The
-## zombie is AI-disabled by ZombieBase because _is_network_host is false.
-func spawn_network_zombie(kind: StringName, net_id: int, pos: Vector2) -> Node:
-	_network_spawn_override = true
-	var z = _spawn_zombie(kind, pos, false)
-	_network_spawn_override = false
-	if z != null:
-		z.net_id = net_id
-		z.name = "Zombie_" + str(net_id)
-	return z
-
-
 func _register_boss(z: Node, kind: StringName) -> void:
 	_boss_nodes.append(z)
 	if _boss_node != null and is_instance_valid(_boss_node) and not bool(_boss_node.get("dead")):
@@ -1502,8 +1019,6 @@ func _register_boss(z: Node, kind: StringName) -> void:
 	_boss_node = z
 	_boss_kind = kind
 	_tank_spawn_time = _elapsed
-	_boss_phase = 1
-	_boss_max_hp = int(z.get("max_health"))
 	EventBus.boss_spawned.emit(kind)
 	EventBus.boss_health_changed.emit(int(z.get("health")), int(z.get("max_health")))
 	DirectorSystem.set_boss_active(true)
@@ -1511,13 +1026,9 @@ func _register_boss(z: Node, kind: StringName) -> void:
 		AudioManager.set_tank_active(true)
 		EventBus.notify.emit("TANK！")
 		EventBus.level_event.emit("TANK 出现")
-	elif kind == &"hive_mother":
-		AudioManager.set_tank_active(true)
-		EventBus.notify.emit("巢穴母体！")
-		EventBus.level_event.emit("巢穴母体 出现")
 
 
-func on_zombie_died(zombie: Node, source: StringName, is_head: bool, killer_peer_id: int = 1) -> void:
+func on_zombie_died(zombie: Node, source: StringName, is_head: bool) -> void:
 	if zombie == null or not is_instance_valid(zombie):
 		return
 	var zd: ZombieData = zombie.get_data()
@@ -1526,9 +1037,6 @@ func on_zombie_died(zombie: Node, source: StringName, is_head: bool, killer_peer
 	_kills += 1
 	if is_head:
 		_headshots += 1
-	# 多人对局：记录击杀归属。
-	if killer_peer_id != 1:
-		GameManager.record_player_kill(killer_peer_id, is_head, zd.is_special)
 	_combo += 1
 	_combo_timer = 4.0
 	_max_combo = maxi(_max_combo, _combo)
@@ -1550,16 +1058,6 @@ func on_zombie_died(zombie: Node, source: StringName, is_head: bool, killer_peer
 	_horde_alive.erase(zombie)
 	_score += points
 	EventBus.score_changed.emit(_score)
-	# 敌人掉落货币：普通感染者 1-3 废铁，特殊感染者 5-10，Boss 20-30。
-	var drop := 0
-	if zd.is_boss:
-		drop = randi_range(20, 30)
-	elif zd.is_special:
-		drop = randi_range(5, 10)
-	else:
-		drop = randi_range(1, 3)
-	if drop > 0:
-		GameManager.add_currency(drop)
 	EventBus.combo_changed.emit(_combo, mult)
 	EventBus.enemy_died.emit(zd.id, zombie.global_position, points)
 	EventBus.enemy_killed.emit(zd.id, source, zombie.global_position)
@@ -1573,8 +1071,6 @@ func on_zombie_died(zombie: Node, source: StringName, is_head: bool, killer_peer
 			EventBus.boss_health_changed.emit(0, int(zd.max_hp))
 			DirectorSystem.set_boss_active(false)
 			AudioManager.set_tank_active(false)
-			if CinematicCamera != null and CinematicCamera.has_method("trigger_killcam"):
-				CinematicCamera.trigger_killcam(zombie, 0.8, 0.5)
 			_boss_node = null
 			if not _boss_nodes.is_empty():
 				for candidate in _boss_nodes:
@@ -1582,12 +1078,6 @@ func on_zombie_died(zombie: Node, source: StringName, is_head: bool, killer_peer
 						_boss_node = candidate
 						EventBus.boss_health_changed.emit(int(candidate.get("health")), int(candidate.get("max_health")))
 						break
-			# Final chapter: the signal core's death opens the binary ending.
-			if data.final_choice and _boss_nodes.is_empty() and not _final_choice_open:
-				_final_choice_open = true
-				await get_tree().create_timer(2.2, true, false, true).timeout
-				if is_instance_valid(self) and not _finishing and not ArchiveManager.has_final_choice():
-					open_final_choice()
 	if zd.id == &"witch" and zombie.alerted == false:
 		pass
 
@@ -1605,12 +1095,6 @@ func barrel_exploded(_barrel: Node, pos: Vector2, radius: float, damage: int) ->
 	Fx.explosion(fx_layer, pos, 1.5)
 	Fx.smoke(fx_layer, pos + Vector2(0, -10), 1.2)
 	AudioManager.play_sfx_2d(&"explosion", pos, 1200.0)
-	AudioManager.duck_music(24.0, 0.5)
-	AudioLayerManager.play_explosion_layer()
-	if PostProcess != null:
-		PostProcess.pulse_damage_vignette(0.45, 0.3)
-	if CinematicCamera != null and CinematicCamera.has_method("add_trauma_directional"):
-		CinematicCamera.add_trauma_directional(0.6, Vector2.UP)
 	EventBus.barrel_exploded.emit(pos)
 	EventBus.shake(5.0)
 	for z in get_zombies_near(pos, radius):
@@ -1633,12 +1117,6 @@ func explode_at(pos: Vector2, radius: float, damage: int, source: StringName, pl
 	Fx.explosion(fx_layer, pos, 1.3)
 	Fx.smoke(fx_layer, pos + Vector2(0, -8), 1.0)
 	AudioManager.play_sfx_2d(&"explosion", pos, 1200.0)
-	AudioManager.duck_music(22.0, 0.45)
-	AudioLayerManager.play_explosion_layer()
-	if PostProcess != null:
-		PostProcess.pulse_damage_vignette(0.4, 0.3)
-	if CinematicCamera != null and CinematicCamera.has_method("add_trauma_directional"):
-		CinematicCamera.add_trauma_directional(0.5, Vector2.UP)
 	EventBus.explosion.emit(pos, radius)
 	EventBus.shake(4.5)
 	for z in get_zombies_near(pos, radius):
@@ -2181,64 +1659,3 @@ func get_defense_left() -> float:
 
 func get_boss_node() -> Node:
 	return _boss_node
-
-
-func _exit_tree() -> void:
-	## State reset: guarantee zero leaked nodes/resources between level
-	## transitions (start_level → _ready → _exit_tree → next _ready).
-	Fx.reset()
-	ScreenShake.reset()
-	_ground_segments.clear()
-	_platforms.clear()
-	_horde_alive.clear()
-	_horde_pending = 0
-	_boss_node = null
-	_boss_nodes.clear()
-	player = null
-	hud = null
-	fx_layer = null
-	props = null
-	interactables = null
-	pickups = null
-	archive_pickups.clear()
-	_codex.clear()
-
-
-func _tick_boss_phases(delta: float) -> void:
-	var boss := _boss_node
-	if boss == null or not is_instance_valid(boss):
-		return
-	var hp := int(boss.get("health"))
-	var max_hp := int(boss.get("max_health"))
-	var pct := float(hp) / maxf(1.0, float(max_hp))
-	# Tank phases: 100-60% MG sweep, 60-20% tear gas + shield soldiers, 20-0% rear fuel tank weak point.
-	if _boss_kind == &"tank" and _boss_phase < 3:
-		var new_phase := 3
-		if pct > 0.60:
-			new_phase = 1
-		elif pct > 0.20:
-			new_phase = 2
-		if new_phase != _boss_phase:
-			_boss_phase = new_phase
-			if _boss_phase == 2:
-				EventBus.notify.emit("装甲车第2阶段：催泪瓦斯 + 盾兵")
-				start_horde(8, true)
-			elif _boss_phase == 3:
-				EventBus.notify.emit("装甲车第3阶段：尾部油箱弱点暴露")
-				boss.set("damage_taken_mult", 2.0)
-	# Hive Mother phases: destroy 4 energy nodes across 3 phases.
-	elif _boss_kind == &"hive_mother" and _boss_phase < 3:
-		var new_phase := 3
-		if pct > 0.70:
-			new_phase = 1
-		elif pct > 0.35:
-			new_phase = 2
-		if new_phase != _boss_phase:
-			_boss_phase = new_phase
-			if _boss_phase == 2:
-				EventBus.notify.emit("巢穴母体第2阶段：触手激活")
-				start_horde(10, true)
-			elif _boss_phase == 3:
-				EventBus.notify.emit("巢穴母体第3阶段：毒气充满战场")
-				boss.set("burn_aura", true)
-

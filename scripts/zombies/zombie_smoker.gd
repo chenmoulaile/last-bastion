@@ -51,7 +51,7 @@ func _tick_approach(delta: float) -> void:
 		windup = 0.5
 		stop_horizontal(delta)
 		_play_anim("attack")
-		AudioLayerManager.play_spatial_sfx(&"smoker_cough", global_position, 900.0, -2.0)
+		AudioManager.play_sfx_2d(&"smoker_cough", global_position, 900.0, -2.0)
 		return
 	# Prefer a mid-range pocket, but keep advancing if the target escapes.
 	if dist > 260.0:
@@ -96,7 +96,7 @@ func _tick_windup(delta: float) -> void:
 	state = "tongue"
 	state_name = "tongue"
 	tongue_line.visible = true
-	AudioLayerManager.play_spatial_sfx(&"smoker_tongue", global_position, 900.0)
+	AudioManager.play_sfx_2d(&"smoker_tongue", global_position, 900.0)
 	EventBus.ally_pinned.emit(target)
 
 

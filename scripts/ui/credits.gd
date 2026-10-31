@@ -54,9 +54,7 @@ func _build() -> void:
 	thanks.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	right.add_child(thanks)
 
-	var footer := UIKit.label("LAST BASTION · 最后防线  ·  v%s  ·  MIT"
-		% str(ProjectSettings.get_setting("application/config/version", "3.1.1")),
-		8, UIKit.DIM, UIKit.font_latin())
+	var footer := UIKit.label("LAST BASTION · 最后防线  ·  v1.0.0  ·  MIT", 8, UIKit.DIM, UIKit.font_latin())
 	footer.position = Vector2(24, 308)
 	footer.size = Vector2(592, 10)
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
