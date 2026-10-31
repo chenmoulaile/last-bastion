@@ -410,7 +410,7 @@ func _update_aim(delta: float) -> void:
 	var hand := Vector2(facing * 8.0, -22.0)
 	weapon_sprite.position = hand + aim_dir * 4.0
 	weapon_sprite.z_index = 6 if facing > 0 else 4
-	_muzzle_local = hand + aim_dir * 14.0
+	_muzzle_local = hand + aim_dir * 20.0
 	muzzle.position = _muzzle_local
 
 

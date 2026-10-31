@@ -53,13 +53,36 @@ SHEETS = {
 # background removal & extraction
 # ---------------------------------------------------------------------------
 def erase_gridlines(rgb: np.ndarray) -> np.ndarray:
-    """Remove full-length thin dark gridlines (rows/cols >55% dark)."""
+    """Remove thin full-length dark gridlines (isolated runs of dark rows/cols <=6px)."""
     h, w, _ = rgb.shape
     bright = rgb.mean(axis=2)
     out = rgb.copy()
     dark = bright < 140
-    rows = np.where(dark.mean(axis=1) > 0.55)[0]
-    cols = np.where(dark.mean(axis=0) > 0.55)[0]
+
+    def thin_runs(flags: np.ndarray, axis_len: int, span: int) -> np.ndarray:
+        """Return boolean mask (True = thin isolated dark line) along one axis."""
+        line = np.zeros(axis_len, dtype=bool)
+        i = 0
+        while i < axis_len:
+            if flags[i]:
+                j = i
+                while j < axis_len and flags[j]:
+                    j += 1
+                run = j - i
+                lo, hi = max(0, i - 4), min(axis_len, j + 4)
+                neighbor = flags[max(0, i - 12):i].mean() if i > 0 else 0
+                neighbor2 = flags[j:j + 12].mean() if j < axis_len else 0
+                if run <= 6 and neighbor < 0.3 and neighbor2 < 0.3:
+                    line[i:j] = True
+                i = j
+            else:
+                i += 1
+        return line
+
+    drows = dark.mean(axis=1) > 0.55
+    dcols = dark.mean(axis=0) > 0.55
+    rows = np.where(thin_runs(drows, h, w))[0]
+    cols = np.where(thin_runs(dcols, w, h))[0]
     mask = np.zeros((h, w), dtype=bool)
     for r in rows:
         mask[max(0, r-1):r+2, :] = True
@@ -76,16 +99,18 @@ def remove_background(img: Image.Image) -> Image.Image:
     h, w, _ = rgb.shape
 
     border = np.concatenate([rgb[0, :], rgb[-1, :], rgb[:, 0], rgb[:, -1]])
-    bright = border[border.mean(axis=1) > 150]
-    tones = np.unique(bright // 24, axis=0) if len(bright) else []
+    bright = border[border.mean(axis=1) > 140]
+    tones = np.unique(bright // 32, axis=0) if len(bright) else []
 
     def is_bg(px) -> bool:
+        # matches one of the border background tones (within tolerance)...
+        q = px // 32
+        if any(np.array_equal(q, t) for t in tones):
+            return True
+        # ...or is clearly bright paper-white (checker highlights)
         m = px.mean()
         sat = int(px.max()) - int(px.min())
-        if m > 150 and sat < 60:      # light, unsaturated (white / grey checker)
-            return True
-        q = px // 24
-        return any(np.array_equal(q, t) for t in tones)
+        return m > 210 and sat < 40
 
     mask = np.zeros((h, w), dtype=bool)  # True = background
     dq = deque()
@@ -187,33 +212,34 @@ def _band_to_cells(bands: list[tuple[int, int]], span: int, count: int = 3) -> l
     return out
 
 
-def extract_poses(sheet: Image.Image, expected: int = 9) -> list[Image.Image]:
+def extract_poses(sheet: Image.Image, expected: int = 9, grid: tuple[int, int] = (3, 3)) -> list[Image.Image]:
     """Whole-sheet extraction via projection-profile band splitting.
 
     Split rows by content bands, then columns within each row band — immune to
-    grid offsets, split weapons and unconnected pose pieces.
+    grid offsets, split weapons and unconnected pose pieces. grid = (cols, rows).
     """
+    cols_n, rows_n = grid
     cleaned = fill_holes(remove_background(sheet))
     a = np.asarray(cleaned)
     alpha = a[:, :, 3] > 40
     h, w = alpha.shape
 
     row_bands = _split_bands(alpha.any(axis=1))
-    if len(row_bands) < 3:
-        print(f"  [warn] row bands = {len(row_bands)}, fallback to thirds")
-        row_bands = [(0, h // 3), (h // 3, 2 * h // 3), (2 * h // 3, h)]
+    if len(row_bands) < rows_n:
+        print(f"  [warn] row bands = {len(row_bands)}, fallback to grid")
+        row_bands = [(round(r * h / rows_n), round((r + 1) * h / rows_n)) for r in range(rows_n)]
     else:
-        row_bands = _band_to_cells(row_bands, h)
+        row_bands = _band_to_cells(row_bands, h, count=rows_n)
 
     out = []
     for (y0, y1) in row_bands:
         col_bands = _split_bands(alpha[y0:y1].any(axis=0))
-        if len(col_bands) < 3:
-            print(f"  [warn] col bands = {len(col_bands)} in rows {y0}:{y1}, fallback to thirds")
-            cw = w // 3
-            col_bands = [(0, cw), (cw, 2 * cw), (2 * cw, w)]
+        if len(col_bands) < cols_n:
+            print(f"  [warn] col bands = {len(col_bands)} in rows {y0}:{y1}, fallback to grid")
+            cw = w / cols_n
+            col_bands = [(round(c * cw), round((c + 1) * cw)) for c in range(cols_n)]
         else:
-            col_bands = _band_to_cells(col_bands, w)
+            col_bands = _band_to_cells(col_bands, w, count=cols_n)
         for (x0, x1) in col_bands:
             tile = a[y0:y1, x0:x1].copy()
             tile = _trim_glow(tile)
