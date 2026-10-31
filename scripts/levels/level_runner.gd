@@ -230,6 +230,13 @@ func _build_terrain() -> void:
 	platforms = built.get("platforms", [])
 	_gaps = built.get("gaps", [])
 	_paint_gap_warnings()
+	# 锈蚀频率：第三章起信号局开始活动（P1-7a）
+	if data.chapter >= 3:
+		SaveSystem.set_flag(&"story_ch3_reached")
+	# 2-1 帮过残警 → 后续关卡补给箱 +1（P1-5d）
+	if SaveSystem.has_flag(&"help_remnants") and data.chapter >= 2:
+		data.ammo_crates += 1
+		EventBus.notify.emit("残警补给网络：弹药箱 +1")
 
 
 func _build_bounds() -> void:
@@ -570,6 +577,7 @@ func _connect_events() -> void:
 	EventBus.door_kicked.connect(_on_door_kicked)
 	# 最终抉择信号（P0-2）：缺了这条 4-2 选完结局没有任何反应
 	EventBus.story_choice_made.connect(_on_story_choice_made)
+	EventBus.signal_agent_requested.connect(_on_signal_agent_requested)
 
 
 func _exit_tree() -> void:
@@ -612,6 +620,12 @@ func _process(delta: float) -> void:
 			DialogueManager.bark("广播", "「请立即放下武器，接受净化。」")
 	FactionManager.tick_signal_agents(delta)
 	_tick_comic(delta)
+	_agent_cd = maxf(0.0, _agent_cd - delta)
+	for i in range(_corpses.size() - 1, -1, -1):
+		_corpses[i]["t"] -= delta
+		if _corpses[i]["t"] <= 0.0:
+			_corpses.remove_at(i)
+	_tick_markers(delta)
 	_progress = clampf(player.global_position.x / level_width, 0.0, 1.0)
 	_fire_due_events()
 	_show_tips()
@@ -634,6 +648,134 @@ func _process(delta: float) -> void:
 
 # --- 锈蚀频率：剧情事件 -------------------------------------------------------
 var _broadcast_timer := 6.0
+var _corpses: Array[Dictionary] = []
+var _agent_alive: Node = null
+var _agent_cd := 0.0
+var _marker_dots: Array[ColorRect] = []
+var _marker_layer: CanvasLayer
+
+
+func _on_signal_agent_requested() -> void:
+	# P1-7b：第三章关卡落地信号局特工（同屏 ≤1、冷却 60s）
+	if _agent_alive != null and is_instance_valid(_agent_alive):
+		return
+	if _agent_cd > 0.0 or data.chapter < 3 or player == null:
+		return
+	_agent_cd = 60.0
+	var x := _nearest_ground_x(clampf(player.global_position.x + 260.0, 100.0, level_width - 100.0))
+	if x < 0.0:
+		return
+	_agent_alive = _spawn_humans(&"signal_bureau", &"agent", 1, clampf(x / level_width, 0.05, 0.95))
+
+
+func _spawn_sample_pickup(pos: Vector2) -> void:
+	var area := Area2D.new()
+	area.position = Vector2(clampf(pos.x, 80.0, level_width - 80.0), get_ground_y(pos.x) - 12.0)
+	area.collision_layer = 0
+	area.collision_mask = 2
+	var shape := CollisionShape2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = 20.0
+	shape.shape = circle
+	area.add_child(shape)
+	var icon := Sprite2D.new()
+	icon.texture = SpriteLibrary.prop_texture("radio")
+	icon.scale = Vector2(0.55, 0.55)
+	icon.modulate = Color(0.6, 1.0, 0.7)
+	area.add_child(icon)
+	area.body_entered.connect(func(body: Node2D) -> void:
+		if body.is_in_group("player") and is_instance_valid(area):
+			var grant_ammo := randf() < 0.5
+			if grant_ammo:
+				var w := GameManager.get_weapon(&"m9")
+				if w != null:
+					player.call("add_reserve", &"m9", 30)
+			else:
+				player.call("heal", 25)
+			EventBus.notify.emit("样本回收：%s" % ("弹药 +30" if grant_ammo else "医疗 +25"))
+			AudioManager.play_sfx(&"pickup")
+			area.queue_free())
+	add_child(area)
+
+
+## P2-14：信号核心吸收尸体（每具 +2% 上限生命），返回是否吸收成功
+func consume_corpse_near(pos: Vector2, radius: float) -> bool:
+	for i in _corpses.size():
+		var corpse: Dictionary = _corpses[i]
+		if corpse["pos"].distance_to(pos) <= radius:
+			_corpses.remove_at(i)
+			return true
+	return false
+
+
+## P2-14：玩家射击命中尸体点 → 销毁尸体
+func destroy_corpse_at(point: Vector2) -> bool:
+	for i in _corpses.size():
+		if _corpses[i]["pos"].distance_to(point) <= 20.0:
+			Fx.blood_decal(fx_layer, _corpses[i]["pos"])
+			_corpses.remove_at(i)
+			return true
+	return false
+
+
+## P1-9：露西亚标记渲染（CanvasLayer 穿墙可见）
+func _tick_markers(delta: float) -> void:
+	if player == null or not is_instance_valid(player):
+		return
+	if _marker_layer == null:
+		_marker_layer = CanvasLayer.new()
+		_marker_layer.layer = 60
+		add_child(_marker_layer)
+		for i in 12:
+			var dot := ColorRect.new()
+			dot.color = Color(1.0, 0.55, 0.1, 0.9)
+			dot.size = Vector2(6, 6)
+			dot.visible = false
+			_marker_layer.add_child(dot)
+			_marker_dots.append(dot)
+	var idx := 0
+	var cam := player.get_viewport().get_camera_2d()
+	for z in get_tree().get_nodes_in_group("zombies"):
+		if z == null or not is_instance_valid(z):
+			continue
+		var mt: float = float(z.get("marked_timer")) if "marked_timer" in z else 0.0
+		if mt <= 0.0 or idx >= _marker_dots.size():
+			continue
+		z.set("marked_timer", mt - delta)
+		if cam != null:
+			var screen_pos: Vector2 = z.global_position + Vector2(-3, -40) - cam.get_screen_center_position() + Vector2(320, 180)
+			_marker_dots[idx].position = screen_pos
+			_marker_dots[idx].visible = true
+			idx += 1
+	for i in range(idx, _marker_dots.size()):
+		_marker_dots[i].visible = false
+
+
+## P2-17：环境叙事道具（寻人启事/涂鸦）——接近时一次性 bark
+func _spawn_lore_prop(text: String, at: float) -> void:
+	var x := _nearest_ground_x(clampf(level_width * at, 120.0, level_width - 120.0))
+	if x < 0.0:
+		return
+	var area := Area2D.new()
+	area.position = Vector2(x, get_ground_y(x) - 16.0)
+	area.collision_layer = 0
+	area.collision_mask = 2
+	var shape := CollisionShape2D.new()
+	var rect := RectangleShape2D.new()
+	rect.size = Vector2(60, 60)
+	shape.shape = rect
+	area.add_child(shape)
+	var board := Sprite2D.new()
+	board.texture = SpriteLibrary.prop_texture("sign")
+	board.scale = Vector2(0.8, 0.8)
+	area.add_child(board)
+	area.body_entered.connect(func(body: Node2D) -> void:
+		if body.is_in_group("player") and is_instance_valid(area):
+			DialogueManager.bark("系统", text)
+			area.queue_free())
+	add_child(area)
+
+
 var _comic_mat: ShaderMaterial
 var _comic_intensity := 0.0
 var _interference := 0.0
@@ -755,7 +897,8 @@ func _spawn_archive_pickup(fragment_id: String, at: float) -> void:
 	add_child(area)
 
 
-func _spawn_humans(faction: StringName, kind: StringName, count: int, at: float) -> void:
+func _spawn_humans(faction: StringName, kind: StringName, count: int, at: float) -> Node:
+	var first: Node = null
 	for i in count:
 		var side := (1 if i % 2 == 0 else -1)
 		var x := _nearest_ground_x(clampf(level_width * at + side * float(60 + i * 70), 100.0, level_width - 100.0))
@@ -767,7 +910,12 @@ func _spawn_humans(faction: StringName, kind: StringName, count: int, at: float)
 		unit.level = self
 		unit.position = Vector2(x, get_ground_y(x) - 2.0)
 		unit.max_health = 70 if faction != &"horizon" else 90
+		if kind == &"agent":
+			unit.max_health = 60
 		actors.add_child(unit)
+		if first == null:
+			first = unit
+	return first
 
 
 func _on_story_choice_made(choice_id: StringName, option: int) -> void:
@@ -845,6 +993,12 @@ func _fire_event(ev: Dictionary) -> void:
 				int(ev.get("count", 3)), float(ev.get("at", _progress)))
 		"broadcast":
 			DialogueManager.bark("广播", String(ev.get("text", "")))
+		"weapon":
+			if player != null and player.has_method("give_weapon"):
+				player.call("give_weapon", StringName(ev.get("kind", "")))
+			EventBus.notify.emit(String(ev.get("text", "获得新武器！")))
+		"lore":
+			_spawn_lore_prop(String(ev.get("text", "")), float(ev.get("at", _progress)))
 		_:
 			EventBus.level_event.emit(String(ev.get("text", "")))
 
@@ -1206,6 +1360,7 @@ func _finish_level() -> void:
 		"hidden_rooms": _hidden_rooms.duplicate(),
 		"codex": _codex.duplicate(),
 		"boomer_bursts": _boomer_bursts,
+		"ending": "destroy" if _ending_choice == 1 else ("decode" if _ending_choice == 2 else ""),
 	}
 	GameManager.complete_level(result)
 
@@ -1281,11 +1436,11 @@ func on_zombie_died(zombie: Node, source: StringName, is_head: bool) -> void:
 	EventBus.score_changed.emit(_score)
 	EventBus.combo_changed.emit(_combo, mult)
 	EventBus.enemy_died.emit(zd.id, zombie.global_position, points)
-	# 维克多被动「生物学家」：击杀特感掉落样本（补给）
-	if GameManager.selected_character == &"victor" and zd.is_special:
-		var sx := clampf(zombie.global_position.x, 80.0, level_width - 80.0)
-		_spawn_director_supply(&"ammo" if randf() < 0.5 else &"medkit")
-		EventBus.notify.emit("维克多收集了生物样本")
+	# P2-14：尸体登记（信号核心吸收 / 玩家可打爆阻止回血）
+	_corpses.append({"pos": zombie.global_position, "t": 8.0})
+	# 维克多被动「生物学家」：击杀特感 30% 掉落样本（P1-8）
+	if GameManager.selected_character == &"victor" and zd.is_special and randf() < 0.3:
+		_spawn_sample_pickup(zombie.global_position)
 	EventBus.enemy_killed.emit(zd.id, source, zombie.global_position)
 	if zombie in _boss_nodes:
 		_boss_nodes.erase(zombie)

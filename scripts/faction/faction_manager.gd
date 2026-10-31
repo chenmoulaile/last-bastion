@@ -62,21 +62,38 @@ func fights_zombies(faction_id: StringName) -> bool:
 	return factions.has(faction_id)
 
 
-## 档案密级驱动：密级越高，地平线与信号局反应越强。
+## 档案密级驱动：密级越高，地平线与信号局反应越强（P1-11）。
 func _on_tier_changed(tier: int) -> void:
 	adjust(&"horizon", 0.05)
 	if tier >= 2:
 		adjust(&"signal_bureau", 0.08)
+	if tier >= 1:
+		EventBus.director_intensity_changed.emit(minf(1.0, 0.5 + 0.15 * float(tier)))
 
 
 func tick_signal_agents(delta: float) -> void:
+	# AI Director 档案密级层（P1-11）：每 30 秒读一次密级
 	_signal_agent_timer += delta
-	if _signal_agent_timer < 30.0:
-		return
-	_signal_agent_timer = 0.0
-	# 第三章起信号局开始干扰；此处只发出请求，由关卡层落地生成。
-	if SaveSystem.has_flag(&"story_ch3_reached") and hostility(&"signal_bureau") >= 0.5:
-		EventBus.director_request_special.emit(&"signal_agent")
+	if _signal_agent_timer >= 30.0:
+		_signal_agent_timer = 0.0
+		var tier := ArchiveManager.current_tier()
+		if tier >= 2 and SaveSystem.has_flag(&"story_ch3_reached") \
+				and hostility(&"signal_bureau") >= 0.5:
+			# 信号局特工：不走僵尸通道，由关卡层以人类单位落地（P1-7）
+			EventBus.signal_agent_requested.emit()
+
+
+## 派系开战关系（P1-10）：人类单位之间的敌对判定。
+static func factions_at_war(a: StringName, b: StringName) -> bool:
+	if a == b:
+		return false
+	if a == &"signal_bureau" or b == &"signal_bureau":
+		return true  # 信号局与所有人敌对
+	if (a == &"rust" and b == &"remnants") or (a == &"remnants" and b == &"rust"):
+		return true  # 锈帮与残警交火
+	if a == &"horizon" or b == &"horizon":
+		return true  # 地平线与所有派系交战
+	return false
 
 
 func debug_state() -> String:

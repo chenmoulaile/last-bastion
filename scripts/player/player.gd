@@ -647,6 +647,10 @@ func _apply_hit(weapon: WeaponData, hit: Dictionary, dir: Vector2) -> void:
 		Fx.spark(level.fx_layer, point)
 	else:
 		Fx.spark(level.fx_layer, point)
+		# P2-14: 命中尸体登记点 → 销毁尸体（阻止信号核心回血）
+		if level != null and level.has_method("destroy_corpse_at"):
+			if level.call("destroy_corpse_at", point):
+				Fx.blood(level.fx_layer, point, dir, 1.6)
 	Fx.tracer(level.fx_layer, global_position + _muzzle_local, point)
 
 
@@ -1070,6 +1074,17 @@ func revive(healer: Node) -> void:
 	AudioManager.play_sfx(&"revive")
 	if level:
 		level.add_rescue(healer)
+
+
+## 补充指定武器备弹（样本拾取用，P1-8）。
+func add_reserve(weapon_id: StringName, amount: int) -> void:
+	if not ammo.has(weapon_id):
+		return
+	var state: Dictionary = ammo[weapon_id]
+	if int(state.get("reserve", 0)) >= 0:
+		state["reserve"] = int(state["reserve"]) + amount
+	ammo[weapon_id] = state
+	EventBus.ammo_changed.emit(int(state["mag"]), int(state["reserve"]))
 
 
 func heal(amount: int) -> void:

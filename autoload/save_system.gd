@@ -28,6 +28,8 @@ const ACHIEVEMENTS: Array[Dictionary] = [
 	{"id": "hunter_interrupter", "name": "老练猎手", "desc": "近战推开打断 Hunter 扑击 25 次", "icon": "ach_hunter"},
 	{"id": "mr_perfect", "name": "满分先生", "desc": "任意关取得 S 评价", "icon": "ach_s_rank"},
 	{"id": "last_bastion", "name": "最后防线", "desc": "通关 L11 最后防线", "icon": "ach_last_stand"},
+	{"id": "ending_destroyed", "name": "切断播放", "desc": "锈蚀频率：摧毁信号核心，1.7 GHz 永远静默", "icon": "ach_last_stand"},
+	{"id": "ending_decoded", "name": "接收回应", "desc": "锈蚀频率：解码信号，撑过 90 秒。回应将在 72 小时内到达。", "icon": "ach_last_stand"},
 ]
 
 const CODEX_SPECIALS := ["hunter", "smoker", "boomer", "charger", "spitter", "jockey", "tank", "witch"]
@@ -232,6 +234,8 @@ func is_weapon_unlocked(id: StringName) -> bool:
 
 
 func set_flag(flag: StringName) -> void:
+	if not data.has("flags"):
+		data["flags"] = []
 	var list: Array = data["flags"]
 	if String(flag) not in list:
 		list.append(String(flag))
@@ -239,6 +243,8 @@ func set_flag(flag: StringName) -> void:
 
 
 func has_flag(flag: StringName) -> bool:
+	if not data.has("flags"):
+		return false
 	return String(flag) in data["flags"]
 
 

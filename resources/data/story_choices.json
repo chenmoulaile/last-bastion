@@ -31,7 +31,7 @@
     ],
     "hostility": {
      "rust": 0.1,
-     "remnants": 0.1
+     "remnants": 0.15
     },
     "resolved_text": "你们数着尸体走过去。两边都没死绝——都记住了你们的袖手旁观。"
    }
@@ -66,7 +66,7 @@
      "chip_copied"
     ],
     "hostility": {
-     "rust": -0.15
+     "rust": -0.1
     },
     "resolved_text": "露西亚把拷贝缝进了袖子：锈帮欠你们一条命。正门那边，雷耶斯拿到了原件。"
    }

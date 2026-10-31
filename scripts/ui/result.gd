@@ -17,11 +17,23 @@ func _build() -> void:
 	add_background("title_bg", 0.62)
 	var accent := UIKit.RED if _failed else UIKit.AMBER
 	var kicker := "MISSION FAILED" if _failed else "MISSION COMPLETE"
-	add_header(kicker, String(_result.get("level_title", "任务结算")), accent)
+	# 「锈蚀频率」结局差异结算（P2-15）
+	var ending := String(_result.get("ending", ""))
+	var heading := String(_result.get("level_title", "任务结算"))
+	var foot := "检查点记录会保留 · 失败不会扣除总分 · 重新部署后 AI Director 会重新计算节奏"
+	if not _failed and ending == "destroy":
+		heading = "结局 A · 切断播放"
+		accent = Color(0.75, 0.32, 0.28)
+		foot = "结局 A · 世界继续活在「自然疫情」的叙事里。档案编号 RH-2019 全部烧毁。"
+	elif not _failed and ending == "decode":
+		heading = "结局 B · 接收回应"
+		accent = Color(0.55, 0.60, 0.85)
+		foot = "结局 B · 信号已接收。回应将在 72 小时内到达。全世界都听见了自己是天线。"
+	add_header(kicker, heading, accent)
 	_build_rank_panel()
 	_build_stats_panel()
 	_build_bottom()
-	add_footer("检查点记录会保留 · 失败不会扣除总分 · 重新部署后 AI Director 会重新计算节奏")
+	add_footer(foot)
 
 
 func _build_rank_panel() -> void:

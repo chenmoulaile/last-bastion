@@ -1,5 +1,8 @@
 extends Node
 ## Renders representative screens to build/screens for visual review.
+## 含「非空白」视觉回归判定（唯一颜色数 > 100）。
+
+var _visual_failures := 0
 ## Run non-headless: Godot --path . res://tests/screenshot.tscn
 
 const OUT := "res://build/screens"
@@ -10,9 +13,16 @@ func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT))
 	await get_tree().process_frame
 	await _capture_screens()
-	await _capture_level("res://scenes/levels/l01.tscn", &"SQUAD", "gameplay_l01")
-	await _capture_level("res://scenes/levels/l07.tscn", &"COMMAND", "gameplay_l07")
+	for spec in [["res://scenes/levels/l01.tscn", &"SQUAD", "gameplay_l01"],
+			["res://scenes/levels/l03.tscn", &"SQUAD", "gameplay_l03"],
+			["res://scenes/levels/l05.tscn", &"SQUAD", "gameplay_l05"],
+			["res://scenes/levels/l07.tscn", &"COMMAND", "gameplay_l07"],
+			["res://scenes/levels/l08.tscn", &"SQUAD", "gameplay_l08"],
+			["res://scenes/levels/l11.tscn", &"SQUAD", "gameplay_l11"]]:
+		await _capture_level(spec[0], spec[1], spec[2])
 	await _capture_result()
+	if _visual_failures > 0:
+		print("[SHOTS] VISUAL REGRESSION FAILURES: %d" % _visual_failures)
 	print("[SHOTS] done")
 	get_tree().quit()
 
@@ -21,7 +31,20 @@ func _snap(name: String) -> void:
 	await RenderingServer.frame_post_draw
 	var image := get_viewport().get_texture().get_image()
 	image.save_png(ProjectSettings.globalize_path(OUT + "/" + name + ".png"))
-	print("[SHOTS] " + name)
+	# 视觉回归（v2 规格 五-6）：唯一颜色数 > 100 判定非空白——防止
+	# 「Shader 编译失败白屏」类缺陷漏网（headless 测不出来）
+	var colors := {}
+	var w := image.get_width()
+	var h := image.get_height()
+	var step := maxi(1, w * h / 8192)
+	for i in range(0, w * h, step * 7):
+		var c := image.get_pixel(i % w, int(i / w))
+		colors[c.r8 * 65536 + c.g8 * 256 + c.b8] = true
+	var unique := colors.size()
+	if name.contains("gameplay") and unique <= 100:
+		push_error("VISUAL REGRESSION: %s looks blank (unique colors = %d)" % [name, unique])
+		_visual_failures += 1
+	print("[SHOTS] %s colors=%d" % [name, unique])
 
 
 func _capture_screens() -> void:

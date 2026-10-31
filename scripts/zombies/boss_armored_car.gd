@@ -8,6 +8,7 @@ var _hits_since_exposed: int = 0
 var _exposed: bool = false
 var _expose_timer: float = 0.0
 var _charge_cd: float = 4.0
+var _weakpoint_cycle: int = 0  # 0=履带 1=油箱
 var _charging: float = 0.0
 
 
@@ -55,5 +56,6 @@ func apply_damage(amount: int, from_dir: Vector2, is_head: bool, source: StringN
 		_hits_since_exposed = 0
 		_exposed = true
 		_expose_timer = 2.5
-		EventBus.notify.emit("履带松了——弱点暴露！")
+		_weakpoint_cycle = (_weakpoint_cycle + 1) % 2
+		EventBus.notify.emit("弱点暴露——打击%s！" % ("油箱" if _weakpoint_cycle == 1 else "履带"))
 	super.apply_damage(int(amount * 0.15), from_dir, is_head, source, damage_type)

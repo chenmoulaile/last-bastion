@@ -65,9 +65,19 @@ func _tint() -> Color:
 	return base
 
 
+var _agent_pulse := 12.0
+
+
 func _physics_process(delta: float) -> void:
 	if dead or GameManager.state != GameManager.State.PLAYING:
 		return
+	if kind == &"agent":
+		_agent_pulse -= delta
+		if _agent_pulse <= 0.0:
+			_agent_pulse = 12.0
+			EventBus.signal_interference.emit(true)
+			var t := get_tree().create_timer(2.0)
+			t.timeout.connect(func() -> void: EventBus.signal_interference.emit(false))
 	hurt_flash = maxf(0.0, hurt_flash - delta)
 	if hurt_flash <= 0.0:
 		sprite.modulate = _tint()
@@ -119,6 +129,21 @@ func _acquire_target() -> void:
 			if d < best_d:
 				best = z
 				best_d = d
+	# 对其他派系人类单位的索敌（P1-10）：优先级低于僵尸
+	if best == null and level != null:
+		var sight := 420.0
+		# P1-11：高密级下地平线单位索敌半径 +50%
+		if faction == &"horizon" and ArchiveManager.current_tier() >= 2:
+			sight = 630.0
+		for h in get_tree().get_nodes_in_group("humans"):
+			if h == null or not is_instance_valid(h) or bool(h.get("dead")) or h == self:
+				continue
+			if not FactionManager.factions_at_war(faction, h.get("faction")):
+				continue
+			var d2: float = global_position.distance_to(h.global_position)
+			if d2 < sight:
+				best = h
+				best_d = d2
 	if best == null and FactionManager.unit_wants_to_attack(faction):
 		var player: Node2D = level.get_player() if level != null else null
 		if player != null and is_instance_valid(player) and not bool(player.get("is_dead")):

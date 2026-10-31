@@ -43,12 +43,16 @@ func _ai_tick(delta: float) -> void:
 	_absorb_cd -= delta
 	if _absorb_cd <= 0.0:
 		_absorb_cd = 3.0
-		# 吸收场景尸体回血（用附近已死亡但未清理的僵尸模拟：伤害吸收 = 场上僵尸密度）
-		if level != null:
-			var around: Array = level.call("get_zombies_near", global_position, 260.0)
-			if around.size() >= 2:
-				health = mini(max_health, health + 20 * _phase)
+		# P2-14: 吸收 260px 内的尸体登记点（每具 +2% 上限生命）；玩家射击尸体点可销毁
+		if level != null and level.has_method("consume_corpse_near"):
+			var consumed: int = 0
+			for i in _phase:
+				if level.call("consume_corpse_near", global_position, 260.0):
+					consumed += 1
+			if consumed > 0:
+				health = mini(max_health, health + int(max_health * 0.02) * consumed)
 				Fx.blood(level.fx_layer if level != null else null, global_position + Vector2(0, -30), Vector2.DOWN, 0.6)
+				EventBus.notify.emit("信号核心吸收了尸体！射击尸体阻止回血")
 	_play_anim("idle")
 
 

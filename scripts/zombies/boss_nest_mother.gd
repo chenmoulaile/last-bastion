@@ -6,6 +6,7 @@ extends ZombieBase
 var _tube_hp: Array[int] = [120, 120, 120, 120]
 var _summon_cd: float = 5.0
 var _marker: Node2D = null
+var _tube_nodes: Array[Sprite2D] = []
 
 
 func _ready() -> void:
@@ -14,6 +15,22 @@ func _ready() -> void:
 	_marker = Node2D.new()
 	_marker.position = Vector2(0, -40)
 	add_child(_marker)
+	# P2-13: 4 个可瞄准发光节点（对应 4 根营养管）
+	_tube_nodes.clear()
+	for i in 4:
+		var glow := Sprite2D.new()
+		var grad := Gradient.new()
+		grad.set_color(0, Color(0.5, 1.0, 0.4, 0.95))
+		grad.set_color(1, Color(0.5, 1.0, 0.4, 0.0))
+		var tex := GradientTexture2D.new()
+		tex.gradient = grad
+		tex.width = 26
+		tex.height = 26
+		tex.fill = GradientTexture2D.FILL_RADIAL
+		glow.texture = tex
+		glow.position = Vector2(-66 + i * 44, -34)
+		add_child(glow)
+		_tube_nodes.append(glow)
 
 
 func _ai_tick(delta: float) -> void:
@@ -45,6 +62,8 @@ func damage_tube(index: int, amount: int) -> void:
 	if index < 0 or index >= _tube_hp.size():
 		return
 	_tube_hp[index] = maxi(0, _tube_hp[index] - amount)
+	if _tube_hp[index] == 0 and index < _tube_nodes.size():
+		_tube_nodes[index].visible = false
 	if _tube_hp[index] == 0:
 		EventBus.notify.emit("营养管断裂！剩余 %d 根" % _tubes_alive())
 		Fx.blood(level.fx_layer if level else null, global_position + Vector2(40 * index - 60, -40), Vector2.UP, 1.6)
@@ -58,6 +77,13 @@ func apply_damage(amount: int, from_dir: Vector2, is_head: bool, source: StringN
 		damage_type: StringName = &"melee") -> void:
 	var alive := _tubes_alive()
 	if alive > 0:
+		# P2-13: 20% 伤害随机分流到一根存活营养管（玩家可针对性打断管）
+		var candidates: Array[int] = []
+		for i in _tube_hp.size():
+			if _tube_hp[i] > 0:
+				candidates.append(i)
+		if not candidates.is_empty():
+			damage_tube(candidates.pick_random(), maxi(1, int(amount * 0.2)))
 		super.apply_damage(int(amount * 0.2), from_dir, is_head, source, damage_type)
 		return
 	super.apply_damage(amount, from_dir, is_head, source, damage_type)
