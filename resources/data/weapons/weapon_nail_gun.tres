@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"nail_gun"
+display_name = "钉枪"
+category = &"primary"
+damage = 22
+rpm = 160.0
+mag_size = 24
+reserve_ammo = 96
+reload_time = 2.0
+spread = 2.0
+effective_range = 300.0
+pierce = 2
+sprite = "m9"
+description = "工地遗留品。钉子能穿透两个目标，把普感钉在墙上 1.5 秒。"
+unlock_score = 60000

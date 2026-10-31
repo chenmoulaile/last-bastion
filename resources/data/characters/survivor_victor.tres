@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/character_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"victor"
+display_name = "维克多·陈"
+callsign = "V.CHEN"
+max_hp = 95
+speed = 215
+skill_id = &"field_medic"
+skill_name = "急救包"
+skill_desc = "治疗一名队友 40% 生命，或自我治疗 25%。"
+skill_cd = 16
+primary_weapon = &"m9"
+secondary_weapon = &"m9"
+melee_weapon = &"axe"
+unlock_score = 0
+portrait = "medic"
+accent = Color(0.40, 0.70, 0.75, 1)
+description = "发现真相的研究员。官方讣告里他死于事故。"
+soldier_role = &"medic"
+codename = "载玻片"
+passive_name = "生物学家"
+passive_desc = "对特殊感染者伤害 +20%；击杀特感掉落样本（可兑换补给）。"
+dialogue_color = Color(0.45, 0.75, 0.80, 1)
+visual_base = "medic"
+archive_types = [&"bio"]
+bio = "32 岁，华裔美国人，生物信息学博士，地平线初级研究员。发现「疫苗」项目实为信号调制项目，试图匿名举报后被「事故死亡」。"
+survivor = true

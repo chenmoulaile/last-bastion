@@ -50,6 +50,7 @@ func _test_screens() -> void:
 		["res://scenes/ui/achievements.tscn", {}],
 		["res://scenes/ui/codex.tscn", {}],
 		["res://scenes/ui/credits.tscn", {}],
+		["res://scenes/ui/archive_menu.tscn", {}],
 	]
 	for row in screens:
 		var path: String = row[0]

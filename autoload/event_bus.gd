@@ -83,3 +83,10 @@ func announce(text: String) -> void:
 
 func shake(amount: float) -> void:
 	screen_shake.emit(amount)
+
+# --- Narrative layer · 锈蚀频率（新增信号，不改既有信号名） ------------------
+signal story_choice_requested(choice_id: StringName)
+signal story_choice_made(choice_id: StringName, option: int)
+signal archive_picked_up(id: StringName)
+signal comic_intensity_spike(strength: float, seconds: float)
+signal signal_interference(active: bool)

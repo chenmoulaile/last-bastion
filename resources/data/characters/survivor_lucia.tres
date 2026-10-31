@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/character_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"lucia"
+display_name = "露西亚·莫雷诺"
+callsign = "LUX"
+max_hp = 85
+speed = 246
+skill_id = &"smoke_bomb"
+skill_name = "烟雾弹"
+skill_desc = "投掷烟雾弹：范围内的感染者失去目标 4 秒。"
+skill_cd = 12
+primary_weapon = &"smg_suppressed"
+secondary_weapon = &"m9"
+melee_weapon = &"katana"
+unlock_score = 0
+portrait = "scout"
+accent = Color(0.85, 0.60, 0.30, 1)
+description = "跑了十年腿的锈帮信使。她不知道自己运过什么。"
+soldier_role = &"rifleman"
+codename = "信鸽"
+passive_name = "街头直觉"
+passive_desc = "靠近掩体时自动标记周围敌人轮廓 3 秒（冷却 10 秒）。"
+dialogue_color = Color(0.90, 0.65, 0.35, 1)
+visual_base = "scout"
+archive_types = [&"logistics"]
+bio = "28 岁，拉丁裔，锈帮信使。她运送的「医疗物资」中混有信号增强剂，她不知情，灭口未遂后逃离。嘴快、重情义。"
+survivor = true

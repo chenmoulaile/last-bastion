@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"riot_shield"
+display_name = "防暴盾"
+category = &"melee"
+damage = 25
+rpm = 90.0
+melee_arc = 70.0
+melee_range = 46.0
+sprite = "m9"
+description = "马库斯从地平线安保身上拆下来的。架设时正面减伤 70%。"
+unlock_score = 0

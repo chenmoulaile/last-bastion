@@ -21,6 +21,9 @@ DirectorSystem="*res://autoload/director_system.gd"
 AudioManager="*res://autoload/audio_manager.gd"
 SaveSystem="*res://autoload/save_system.gd"
 ConfigManager="*res://autoload/config_manager.gd"
+ArchiveManager="*res://scripts/archive/archive_manager.gd"
+DialogueManager="*res://scripts/narrative/dialogue_manager.gd"
+FactionManager="*res://scripts/faction/faction_manager.gd"
 
 [debug]
 

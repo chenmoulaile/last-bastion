@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/character_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"marcus"
+display_name = "马库斯·德尔加多"
+callsign = "DELGADO"
+max_hp = 125
+speed = 205
+skill_id = &"shield_wall"
+skill_name = "架设防暴盾"
+skill_desc = "架设防暴盾：正面减伤 70%，移动减速 40%。"
+skill_cd = 14
+primary_weapon = &"shotgun"
+secondary_weapon = &"m9"
+melee_weapon = &"axe"
+unlock_score = 0
+portrait = "heavy"
+accent = Color(0.45, 0.55, 0.40, 1)
+description = "拒绝执行静默协议的前地平线教官。"
+soldier_role = &"gunner"
+codename = "重锤"
+passive_name = "老兵直觉"
+passive_desc = "受到背后攻击时自动格挡一次（冷却 30 秒）。正面架盾时减伤 70%。"
+dialogue_color = Color(0.55, 0.62, 0.45, 1)
+visual_base = "heavy"
+archive_types = [&"security"]
+bio = "40 岁，墨西哥裔，前海军陆战队、地平线安保前教官。因拒绝执行「静默协议」被除名列「失踪」。嘴硬心软，对地平线的背叛感到愤怒。"
+survivor = true

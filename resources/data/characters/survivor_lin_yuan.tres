@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/character_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"lin_yuan"
+display_name = "林远"
+callsign = "LYNX"
+max_hp = 90
+speed = 232
+skill_id = &"tactical_roll"
+skill_name = "低姿突进"
+skill_desc = "短距离翻滚，翻滚期间无伤，可穿过感染者间隙。"
+skill_cd = 9
+primary_weapon = &"m9"
+secondary_weapon = &"m9"
+melee_weapon = &"katana"
+unlock_score = 0
+portrait = "ninja"
+accent = Color(0.74, 0.72, 0.70, 1)
+description = "沉默的搜索者。他只为一个人来。"
+soldier_role = &""
+codename = "山猫"
+passive_name = "老兵直觉·改：山猫"
+passive_desc = "潜行移动速度 +30%；背后近战处决一击致命且不惊动周围感染者。"
+dialogue_color = Color(0.78, 0.34, 0.30, 1)
+visual_base = "ninja"
+archive_types = [&"terrain", &"security"]
+bio = "38 岁，前中国陆军特种部队。女儿林小满在裂城失联，他辗转入境寻女。极度冷静，话极少，观察力极强。行动前会摸一下左腕的红绳。"
+survivor = true

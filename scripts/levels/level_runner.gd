@@ -19,7 +19,14 @@ const ZOMBIE_SCENES := {
 	&"jockey": preload("res://scenes/zombies/zombie_jockey.tscn"),
 	&"tank": preload("res://scenes/zombies/zombie_tank.tscn"),
 	&"witch": preload("res://scenes/zombies/zombie_witch.tscn"),
+	&"armored_car": preload("res://scenes/zombies/zombie_armored_car.tscn"),
+	&"nest_mother": preload("res://scenes/zombies/zombie_nest_mother.tscn"),
+	&"ironface": preload("res://scenes/zombies/zombie_ironface.tscn"),
+	&"signal_core": preload("res://scenes/zombies/zombie_signal_core.tscn"),
 }
+const HUMAN_SCENE := preload("res://scenes/enemies_human/human_enemy.tscn")
+const BOSS_KINDS := [&"tank", &"armored_car", &"nest_mother", &"ironface", &"signal_core"]
+const ARCHIVE_ICON := "radio"
 
 @export var level_data: LevelData
 
@@ -185,6 +192,11 @@ func _build_background() -> void:
 		var cm := CanvasModulate.new()
 		cm.color = Color(0.17, 0.20, 0.28)
 		add_child(cm)
+	elif data.purifier:
+		var cm2 := CanvasModulate.new()
+		cm2.color = Color(0.78, 0.86, 1.0)  # 净化区冷白/浅蓝
+		add_child(cm2)
+	_build_comic_fx()
 	# A subtle ground-level fog band helps the 360p silhouette read.
 	var fog := ColorRect.new()
 	fog.color = Color(0.55, 0.6, 0.68, 0.05)
@@ -578,6 +590,14 @@ func _process(delta: float) -> void:
 	if player == null or not is_instance_valid(player):
 		return
 	_tick_fall_safety(delta)
+	# 净化区环境叙事：循环广播
+	if data.purifier:
+		_broadcast_timer -= delta
+		if _broadcast_timer <= 0.0:
+			_broadcast_timer = randf_range(14.0, 22.0)
+			DialogueManager.bark("广播", "「请立即放下武器，接受净化。」")
+	FactionManager.tick_signal_agents(delta)
+	_tick_comic(delta)
 	_progress = clampf(player.global_position.x / level_width, 0.0, 1.0)
 	_fire_due_events()
 	_show_tips()
@@ -598,12 +618,171 @@ func _process(delta: float) -> void:
 		_on_extraction_trigger(player)
 
 
+# --- 锈蚀频率：剧情事件 -------------------------------------------------------
+var _broadcast_timer := 6.0
+var _comic_mat: ShaderMaterial
+var _comic_intensity := 0.0
+var _interference := 0.0
+var _signal_noise: AudioStreamPlayer
+
+
+func _build_comic_fx() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 100
+	add_child(layer)
+	var rect := ColorRect.new()
+	rect.size = Vector2(642, 362)
+	rect.position = Vector2(-1, -1)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_comic_mat = ShaderMaterial.new()
+	_comic_mat.shader = load("res://shaders/comic_post_process.gdshader")
+	rect.material = _comic_mat
+	layer.add_child(rect)
+	EventBus.comic_intensity_spike.connect(_on_comic_spike)
+	EventBus.signal_interference.connect(_on_interference)
+	EventBus.enemy_killed.connect(_on_kill_fx)
+	# 1.7 GHz 信号噪声底（剧情关）：随档案密级增强
+	if data.story:
+		_signal_noise = AudioStreamPlayer.new()
+		var stream: AudioStream = load("res://assets/audio/sfx/signal_noise.wav")
+		if stream is AudioStreamWAV:
+			(stream as AudioStreamWAV).loop_mode = AudioStreamWAV.LOOP_FORWARD
+			(stream as AudioStreamWAV).loop_end = int(stream.get_length() * 22050)
+		_signal_noise.stream = stream
+		_signal_noise.volume_db = -30.0
+		add_child(_signal_noise)
+		_signal_noise.play()
+
+
+func _on_kill_fx(kind: StringName, source: StringName, pos: Vector2) -> void:
+	_on_comic_spike(0.7, 0.4)
+
+
+func _on_comic_spike(strength: float, seconds: float) -> void:
+	_comic_intensity = maxf(_comic_intensity, strength)
+
+
+func _on_interference(active: bool) -> void:
+	_interference = 1.0 if active else 0.0
+
+
+func _tick_comic(delta: float) -> void:
+	if _comic_mat == null:
+		return
+	_comic_intensity = move_toward(_comic_intensity, 0.0, delta * 1.75)
+	_comic_mat.set_shader_parameter("intensity", _comic_intensity)
+	_comic_mat.set_shader_parameter("interference", _interference)
+	if _signal_noise != null:
+		_signal_noise.volume_db = -30.0 + float(ArchiveManager.current_tier()) * 3.0
+
+
+func _add_spore_glow(z: Node) -> void:
+	var glow := Sprite2D.new()
+	var grad := Gradient.new()
+	grad.set_color(0, Color(1.0, 0.6, 0.2, 0.85))
+	grad.set_color(1, Color(1.0, 0.6, 0.2, 0.0))
+	var tex := GradientTexture2D.new()
+	tex.gradient = grad
+	tex.width = 20
+	tex.height = 20
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	glow.texture = tex
+	glow.position = Vector2(0, -30)
+	z.add_child(glow)
+
+
+func _spawn_archive_pickup(fragment_id: String, at: float) -> void:
+	if not ArchiveManager.fragments.has(StringName(fragment_id)):
+		return
+	var x := _nearest_ground_x(clampf(level_width * at, 120.0, level_width - 120.0))
+	if x < 0.0:
+		x = clampf(level_width * at, 120.0, level_width - 120.0)
+	var area := Area2D.new()
+	area.position = Vector2(x, get_ground_y(x) - 14.0)
+	area.collision_layer = 0
+	area.collision_mask = 2
+	var shape := CollisionShape2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = 22.0
+	shape.shape = circle
+	area.add_child(shape)
+	var icon := Sprite2D.new()
+	icon.texture = SpriteLibrary.prop_texture(ARCHIVE_ICON)
+	icon.scale = Vector2(0.7, 0.7)
+	icon.position = Vector2(0, -6)
+	area.add_child(icon)
+	var glow := PointLight2D.new()
+	var grad := Gradient.new()
+	grad.set_color(0, Color(1.0, 0.85, 0.4, 0.9))
+	grad.set_color(1, Color(1.0, 0.85, 0.4, 0.0))
+	var tex := GradientTexture2D.new()
+	tex.gradient = grad
+	tex.width = 64
+	tex.height = 64
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	glow.texture = tex
+	glow.energy = 0.8
+	area.add_child(glow)
+	area.body_entered.connect(func(body: Node2D) -> void:
+		if body.is_in_group("player") and is_instance_valid(area):
+			ArchiveManager.collect(StringName(fragment_id))
+			AudioManager.play_sfx(&"pickup")
+			area.queue_free())
+	add_child(area)
+
+
+func _spawn_humans(faction: StringName, kind: StringName, count: int, at: float) -> void:
+	for i in count:
+		var side := (1 if i % 2 == 0 else -1)
+		var x := _nearest_ground_x(clampf(level_width * at + side * float(60 + i * 70), 100.0, level_width - 100.0))
+		if x < 0.0:
+			continue
+		var unit := HUMAN_SCENE.instantiate()
+		unit.faction = faction
+		unit.kind = kind
+		unit.level = self
+		unit.position = Vector2(x, get_ground_y(x) - 2.0)
+		unit.max_health = 70 if faction != &"horizon" else 90
+		actors.add_child(unit)
+
+
+func _on_story_choice_made(choice_id: StringName, option: int) -> void:
+	# 4-2 最终抉择分支（双结局）
+	if choice_id != &"choice_l11_ending" or String(data.id) != "l11" or _ending_running:
+		return
+	_ending_running = true
+	_ending_choice = option
+	if option == 1:
+		_play_ending(&"ending_destroy", &"ending_destroyed")
+	else:
+		_decode_pending = true
+		EventBus.notify.emit("解码开始——守住 90 秒！全裂城的感染者都在过来。")
+		start_defense(90.0, 6, 22)
+
+
+var _decode_pending := false
+var _ending_running := false
+var _ending_choice := 0
+
+
+func _play_ending(convo_id: StringName, achievement: StringName) -> void:
+	DialogueManager.play(convo_id)
+	while DialogueManager.is_playing():
+		await get_tree().process_frame
+	SaveSystem.set_flag(achievement)
+	EventBus.unlock_earned.emit(achievement)
+	_finish_level()
+
 func _fire_due_events() -> void:
 	for i in data.events.size():
 		var key := "ev_%d" % i
 		if _events_fired.has(key):
 			continue
 		var ev: Dictionary = data.events[i]
+		if ev.has("requires_flag") and not SaveSystem.has_flag(StringName(ev["requires_flag"])):
+			continue
+		if ev.has("forbid_flag") and SaveSystem.has_flag(StringName(ev["forbid_flag"])):
+			continue
 		if float(ev.get("at", 0.0)) <= _progress:
 			_events_fired[key] = true
 			_fire_event(ev)
@@ -631,6 +810,17 @@ func _fire_event(ev: Dictionary) -> void:
 		"elevator":
 			EventBus.level_event.emit("电梯警报响起——守住这层楼！")
 			start_horde(14, true)
+		"dialogue":
+			DialogueManager.play(StringName(ev.get("id", "")))
+		"choice":
+			EventBus.story_choice_requested.emit(StringName(ev.get("id", "")))
+		"archive":
+			_spawn_archive_pickup(String(ev.get("id", "")), float(ev.get("at", _progress)))
+		"humans":
+			_spawn_humans(StringName(ev.get("faction", "horizon")), StringName(ev.get("kind", "guard")),
+				int(ev.get("count", 3)), float(ev.get("at", _progress)))
+		"broadcast":
+			DialogueManager.bark("广播", String(ev.get("text", "")))
 		_:
 			EventBus.level_event.emit(String(ev.get("text", "")))
 
@@ -824,9 +1014,11 @@ func _tick_defense(delta: float) -> void:
 	if _defense_left <= 0.0:
 		_defense_active = false
 		add_score(3000)
-		EventBus.objective_changed.emit("推进至撤离点")
 		EventBus.level_event.emit("防线守住了")
 		EventBus.notify.emit("防守成功 +3000")
+		if _decode_pending and not _finishing:
+			EventBus.objective_changed.emit("信号已接收")
+			_play_ending(&"ending_decode", &"ending_decoded")
 
 
 func _tick_extraction(delta: float) -> void:
@@ -1010,8 +1202,10 @@ func _spawn_zombie(kind: StringName, pos: Vector2, alert: bool = false) -> Node:
 		z.target = player
 	if zd.is_special:
 		EventBus.special_spawned.emit(zd.id)
-	if kind == &"tank" or (kind == &"charger" and data.id == &"l08"):
+	if kind in BOSS_KINDS or (kind == &"charger" and data.id in [&"l07", &"l08"]):
 		_register_boss(z, kind)
+	if data.purifier:
+		_add_spore_glow(z)
 	return z
 
 
@@ -1063,6 +1257,11 @@ func on_zombie_died(zombie: Node, source: StringName, is_head: bool) -> void:
 	EventBus.score_changed.emit(_score)
 	EventBus.combo_changed.emit(_combo, mult)
 	EventBus.enemy_died.emit(zd.id, zombie.global_position, points)
+	# 维克多被动「生物学家」：击杀特感掉落样本（补给）
+	if GameManager.selected_character == &"victor" and zd.is_special:
+		var sx := clampf(zombie.global_position.x, 80.0, level_width - 80.0)
+		_spawn_director_supply(&"ammo" if randf() < 0.5 else &"medkit")
+		EventBus.notify.emit("维克多收集了生物样本")
 	EventBus.enemy_killed.emit(zd.id, source, zombie.global_position)
 	if zombie in _boss_nodes:
 		_boss_nodes.erase(zombie)

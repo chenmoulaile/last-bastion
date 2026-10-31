@@ -12,6 +12,7 @@ const SCREENS := {
 	&"codex": "res://scenes/ui/codex.tscn",
 	&"result": "res://scenes/ui/result.tscn",
 	&"credits": "res://scenes/ui/credits.tscn",
+	&"archives": "res://scenes/ui/archive_menu.tscn",
 }
 
 var current_view: Node = null

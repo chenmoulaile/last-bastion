@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="FactionData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/faction/faction_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"rust"
+display_name = "锈帮"
+color = Color(0.85, 0.55, 0.20, 1)
+base_hostility = 0.3
+knowledge = 0
+attitude = "neutral"
+blurb = "港口黑市武装，控制物流与武器。完全不知情，被地平线当运毒骡子用。可交易可交火。"

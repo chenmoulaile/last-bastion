@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="FactionData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/faction/faction_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"signal_bureau"
+display_name = "信号局"
+color = Color(0.55, 0.60, 0.85, 1)
+base_hostility = 0.35
+knowledge = 3
+attitude = "neutral"
+blurb = "隐秘国际机构，监听异常信号。高度知情但选择沉默——信号指向的东西让他们恐惧。第三章后派出特工干扰。"

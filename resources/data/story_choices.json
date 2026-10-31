@@ -1,0 +1,134 @@
+{
+ "choice_l04_standoff": {
+  "prompt": "锈帮和残警在街口交火。帮谁？",
+  "options": [
+   {
+    "text": "帮锈帮（露西亚的老东家）",
+    "set_flags": [
+     "help_rust"
+    ],
+    "hostility": {
+     "remnants": 0.15,
+     "rust": -0.2
+    },
+    "resolved_text": "锈帮记住了这次帮忙。残警则把你们记进了黑名单。"
+   },
+   {
+    "text": "帮残警（还有人在履职）",
+    "set_flags": [
+     "help_remnants"
+    ],
+    "hostility": {
+     "rust": 0.15,
+     "remnants": -0.25
+    },
+    "resolved_text": "残警警长在电台里道了谢。锈帮这边，露西亚沉默了很久。"
+   },
+   {
+    "text": "等两败俱伤再收拾残局",
+    "set_flags": [
+     "waited_out"
+    ],
+    "hostility": {
+     "rust": 0.1,
+     "remnants": 0.1
+    },
+    "resolved_text": "你们数着尸体走过去。两边都没死绝——都记住了你们的袖手旁观。"
+   }
+  ],
+  "resolved_text": ""
+ },
+ "choice_l06_chip": {
+  "prompt": "芯片证据怎么办？雷耶斯在等答复。",
+  "options": [
+   {
+    "text": "上交给雷耶斯（正门路线，可能有无支援风险）",
+    "set_flags": [
+     "chip_given"
+    ],
+    "resolved_text": "雷耶斯敬了个礼：会有人看到的。——后来这条链子断在了上级的碎纸机里。"
+   },
+   {
+    "text": "不上交，自己带着（排水路线）",
+    "set_flags": [
+     "chip_kept",
+     "reyes_angry"
+    ],
+    "hostility": {
+     "remnants": 0.1
+    },
+    "resolved_text": "雷耶斯没有拦你们。只是关灯的时候，说了一句『 smart 』。"
+   },
+   {
+    "text": "复制一份给锈帮渠道再上交",
+    "set_flags": [
+     "chip_given",
+     "chip_copied"
+    ],
+    "hostility": {
+     "rust": -0.15
+    },
+    "resolved_text": "露西亚把拷贝缝进了袖子：锈帮欠你们一条命。正门那边，雷耶斯拿到了原件。"
+   }
+  ],
+  "resolved_text": ""
+ },
+ "choice_l07_branch": {
+  "prompt": "分岔口。走哪边？",
+  "options": [
+   {
+    "text": "排水系统（绕后，狭窄管道）",
+    "set_flags": [
+     "route_drain"
+    ],
+    "resolved_text": "管道里全是「失败品」的脚步声。"
+   },
+   {
+    "text": "正门突破（硬闯，防御塔）",
+    "set_flags": [
+     "route_gate"
+    ],
+    "resolved_text": "正门灯火通明。地平线的探照灯扫过来。"
+   }
+  ],
+  "resolved_text": ""
+ },
+ "choice_release_specimens": {
+  "prompt": "维克多的手放在释放阀上。培养槽里的实验体还在抽搐。",
+  "options": [
+   {
+    "text": "释放实验体（它们会攻击所有人，包括你们）",
+    "set_flags": [
+     "released_specimens"
+    ],
+    "resolved_text": "培养液涌进走廊。实验体醒来的第一件事，是把最近的活物撕成两半——不分阵营。"
+   },
+   {
+    "text": "不释放（少一大波敌人，但它们会变成部署库存）",
+    "set_flags": [],
+    "resolved_text": "维克多收回了手。玻璃后面的一千双眼睛继续看着你们。"
+   }
+  ],
+  "resolved_text": ""
+ },
+ "choice_l11_ending": {
+  "prompt": "最终抉择：1.7 GHz 的源头在你面前。",
+  "options": [
+   {
+    "text": "摧毁信号核心（终止发射，证据一同被毁）",
+    "set_flags": [
+     "ending_destroy"
+    ],
+    "resolved_text": "你举起了燃烧瓶。"
+   },
+   {
+    "text": "解码信号（90 秒防御战，全世界最难的 90 秒）",
+    "set_flags": [
+     "ending_decode"
+    ],
+    "resolved_text": "维克多接上了天线。所有喇叭同时开始啸叫。"
+   }
+  ],
+  "resolved_text": ""
+ }
+}

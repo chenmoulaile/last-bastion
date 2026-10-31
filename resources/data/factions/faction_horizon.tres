@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="FactionData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/faction/faction_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"horizon"
+display_name = "地平线生物"
+color = Color(0.9, 0.94, 0.98, 1)
+base_hostility = 1.0
+knowledge = 3
+attitude = "hostile"
+blurb = "跨国生物科技巨头，净化区实际控制者。完全知情。信号实验的执行方——射杀一切接近净化区的人。"

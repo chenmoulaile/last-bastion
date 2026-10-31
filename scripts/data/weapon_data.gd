@@ -30,3 +30,5 @@ extends Resource
 @export var sprite: String = "m9"
 @export var description: String = ""
 @export var scoped_spread: float = -1.0
+@export var silenced: bool = false        # 消音：枪声引敌半径 900 -> 120
+@export var vs_special_mult: float = 1.0  # 对特殊感染者伤害倍率（维克多被动用）

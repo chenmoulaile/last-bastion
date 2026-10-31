@@ -22,8 +22,8 @@ func _build() -> void:
 	tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(tagline)
 
-	var menu_panel := add_panel(Vector2(24, 154), Vector2(212, 190), Color(0.035, 0.045, 0.058, 0.90), UIKit.LINE)
-	var menu_title := UIKit.label("CAMPAIGN", 7, UIKit.AMBER, UIKit.font_latin())
+	var menu_panel := add_panel(Vector2(24, 146), Vector2(212, 218), Color(0.035, 0.045, 0.058, 0.90), UIKit.LINE)
+	var menu_title := UIKit.label("CAMPAIGN · 锈蚀频率", 7, UIKit.AMBER, UIKit.font_latin())
 	menu_title.position = Vector2(8, 4)
 	menu_panel.add_child(menu_title)
 
@@ -59,6 +59,11 @@ func _build() -> void:
 	credits_button.pressed.connect(func() -> void: go(&"credits"))
 	menu_panel.add_child(credits_button)
 
+	var archive_button := UIKit.button("[6] 档案库", 196, 24)
+	archive_button.position = Vector2(8, 156)
+	archive_button.pressed.connect(func() -> void: go(&"archives"))
+	menu_panel.add_child(archive_button)
+
 	var quit_button := UIKit.button("[Esc] 退出游戏", 196, 24)
 	quit_button.position = Vector2(8, 156)
 	quit_button.pressed.connect(func() -> void: go(&"quit"))
@@ -92,6 +97,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			go(&"settings")
 		KEY_5, KEY_KP_5:
 			go(&"credits")
+		KEY_6, KEY_KP_6:
+			go(&"archives")
 		KEY_ESCAPE:
 			go(&"quit")
 		KEY_F11:

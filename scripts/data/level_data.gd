@@ -36,3 +36,5 @@ extends Resource
 @export var unlocks_weapon: String = ""
 @export var music_theme: StringName = &"suburb"
 @export var escort_vehicle: bool = false
+@export var purifier: bool = false   # 净化区：冷白/浅蓝色调 + 感染者孢子光点
+@export var story: bool = false      # 锈蚀频率剧情关（启用对话/档案/抉择事件）

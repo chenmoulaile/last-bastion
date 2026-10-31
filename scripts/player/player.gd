@@ -125,7 +125,51 @@ func _ready() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
 	if level != null and bool(level.get("dark")):
 		_create_flashlight()
+	DialogueManager.dialogue_active.connect(_on_dialogue_active)
 	call_deferred("_setup_camera")
+
+
+## 「锈蚀频率」被动层（四主角专属，按 character.id 分派）。
+var _dialogue_slow := false
+var _marcus_block_cd := 0.0
+var _lucia_mark_cd := 0.0
+var _stealth_check_timer := 0.0
+var _stealth_ok := true
+
+
+func _on_dialogue_active(active: bool) -> void:
+	_dialogue_slow = active
+
+
+## 林远：附近 420px 内无警觉感染者即为潜行。
+func _stealth_condition() -> bool:
+	_stealth_check_timer -= get_physics_process_delta_time()
+	if _stealth_check_timer > 0.0:
+		return _stealth_ok
+	_stealth_check_timer = 0.4
+	_stealth_ok = true
+	if level == null:
+		return true
+	for z in level.get_zombies_near(global_position, 420.0):
+		if bool(z.get("alerted")):
+			_stealth_ok = false
+			break
+	return _stealth_ok
+
+
+func _tick_passives(delta: float) -> void:
+	_marcus_block_cd = maxf(0.0, _marcus_block_cd - delta)
+	_lucia_mark_cd = maxf(0.0, _lucia_mark_cd - delta)
+	if character == null:
+		return
+	# 露西亚「街头直觉」：敌人接近时自动标记（简化为标记示意 + 减速提示）
+	if character.id == &"lucia" and _lucia_mark_cd <= 0.0 and level != null:
+		var marks: Array = level.get_zombies_near(global_position, 300.0)
+		if marks.size() >= 2:
+			_lucia_mark_cd = 10.0
+			for z in marks:
+				z.set("marked_timer", 3.0)
+			EventBus.notify.emit("街头直觉：已标记 %d 个目标" % marks.size())
 
 
 func _setup_camera() -> void:
@@ -202,6 +246,7 @@ func _physics_process(delta: float) -> void:
 	if is_downed:
 		_tick_downed(delta)
 		return
+	_tick_passives(delta)
 	_update_aim(delta)
 	_tick_actions(delta)
 	_tick_movement(delta)
@@ -290,6 +335,11 @@ func _tick_movement(delta: float) -> void:
 			speed *= 0.85
 		if slow_timer > 0.0:
 			speed *= 0.85
+		# 林远被动「山猫」：潜行（附近无警觉感染者）移速 +30%（P3-2）
+		if character != null and character.id == &"lin_yuan" and _stealth_condition():
+			speed *= 1.3
+		if _dialogue_slow:
+			speed *= 0.7  # 对话期间自动缓速 30%（P3-6）
 		if is_downed:
 			speed = 45.0
 		var target_x := input_x * speed
@@ -532,7 +582,8 @@ func _fire_weapon(weapon: WeaponData) -> void:
 	Fx.shell(level.fx_layer, global_position + Vector2(facing * 4.0, -16.0), -facing)
 	AudioManager.play_sfx(weapon.id)
 	AudioManager.play_sfx(&"gunshot", 1.0, -8.0)
-	EventBus.gunshot.emit(global_position, 900.0)
+	# 消音武器（露西亚「耳语」）：引敌半径 900 -> 120（P4-1）
+	EventBus.gunshot.emit(global_position, 120.0 if weapon.silenced else 900.0)
 	EventBus.shake(0.8 if weapon.id != &"shotgun" else 1.6)
 	shoot_anim_timer = 0.16
 	last_shot_time = Time.get_ticks_msec() / 1000.0
@@ -576,6 +627,11 @@ func _apply_hit(weapon: WeaponData, hit: Dictionary, dir: Vector2) -> void:
 		is_head = bool(collider.is_headshot_point(point))
 	if collider.has_method("apply_damage"):
 		var dmg_type: StringName = &"shotgun" if weapon.id == &"shotgun" else &"bullet"
+		# 维克多被动「生物学家」：对特殊感染者伤害 +20%
+		if character != null and character.id == &"victor" and collider.is_in_group("zombies"):
+			var zd: Variant = collider.get("data")
+			if zd != null and bool(zd.get("is_special")):
+				damage *= 1.2
 		collider.apply_damage(int(round(damage)), -dir, is_head, &"player", dmg_type)
 		Fx.blood(level.fx_layer, point, dir, 1.2 if is_head else 0.9)
 		if is_head:
@@ -632,6 +688,15 @@ func _swing_melee(weapon: WeaponData) -> void:
 	for zombie in level.get_zombies_in_cone(origin, facing, weapon.melee_range, weapon.melee_arc):
 		count += 1
 		var dir: Vector2 = (zombie.global_position - origin).normalized()
+		# 林远被动「山猫」：背后近战处决，一击致命且不惊动周围感染者（P3-2）
+		var zfacing: int = int(zombie.get("facing")) if "facing" in zombie else 1
+		var from_behind := signf(dir.x) == signf(float(zfacing)) and absf(dir.x) > 0.35
+		if character != null and character.id == &"lin_yuan" and from_behind:
+			zombie.apply_damage(9999, -dir, false, &"player", &"execute")
+			Fx.blood(level.fx_layer, zombie.global_position + Vector2(0, -14), dir, 2.0)
+			EventBus.hitstop.emit(0.06)
+			DialogueManager.bark("林远", "没事的。")
+			continue
 		zombie.apply_damage(weapon.damage, -dir, false, &"player", &"melee")
 		zombie.apply_knockback(dir * weapon.knockback)
 		zombie.apply_stagger(0.5)
@@ -891,6 +956,17 @@ func take_damage(amount: int, source_dir: Vector2 = Vector2.ZERO, source: String
 		medkit_channel = 0.0
 		reloading = false
 	var final_amount := float(amount) * GameManager.enemy_damage_mult()
+	# 马库斯被动「老兵直觉」：背后攻击自动格挡一次，冷却 30 秒（P3-2）
+	if character != null and character.id == &"marcus" and _marcus_block_cd <= 0.0 \
+			and source_dir.length() > 0.1 and signf(source_dir.x) == signf(float(facing)) \
+			and absf(source_dir.x) > 0.3:
+		_marcus_block_cd = 30.0
+		Fx.spark(level.fx_layer, global_position + Vector2(0, -16))
+		AudioManager.play_sfx(&"reload_done")
+		EventBus.notify.emit("马库斯：格挡！")
+		return
+	if _dialogue_slow:
+		final_amount *= 0.85
 	if is_downed:
 		bleedout -= final_amount * 0.4
 		if bleedout <= 0.0:

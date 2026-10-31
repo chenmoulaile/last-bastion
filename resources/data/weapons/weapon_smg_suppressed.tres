@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"smg_suppressed"
+display_name = "「耳语」消音冲锋枪"
+category = &"primary"
+damage = 12
+pellets = 1
+rpm = 750.0
+mag_size = 35
+reserve_ammo = 210
+reload_time = 1.6
+spread = 3.5
+effective_range = 320.0
+automatic = true
+sprite = "smg"
+description = "露西亚的吃饭家伙。开枪不惊动感染者——枪声半径只有 120。"
+silenced = true
+unlock_score = 0

@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="FactionData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/faction/faction_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"remnants"
+display_name = "残警"
+color = Color(0.35, 0.50, 0.85, 1)
+base_hostility = 0.15
+knowledge = 1
+attitude = "neutral"
+blurb = "原城市警察残部，退守旧警局。零散知情。第二章起可用补给换委托。"

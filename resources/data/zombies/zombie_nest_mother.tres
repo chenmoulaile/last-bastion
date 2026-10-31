@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="ZombieData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/zombie_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"nest_mother"
+display_name = "巢穴母体"
+max_hp = 2200
+walk_speed_min = 0
+walk_speed_max = 0
+attack_damage = 18
+attack_interval = 1.2
+score_value = 25000
+behavior_id = &"nest_mother"
+tint = Color(1.000, 1.000, 1.000, 1.000)
+size_scale = 1.0
+anim_map = {}
+is_special = true
+is_uncommon = false
+is_boss = true
+head_hittable = false
+head_immune = true
+fire_immune = false
+front_immune = false
+low_profile = false
+control_kind = &""
+special_weight = 0.0
+sprite_prefix = "boomer"
+sprite_size = Vector2i(72, 72)
+collision_size = Vector2(43, 57)
+death_animation = "die"
+codex_category = "special"
+description = "锈蚀频率剧情 Boss。"
+pounce_range = 380
+attack_range = 40
+sight_range = 320
+voice_id = &"zombie_growl"
