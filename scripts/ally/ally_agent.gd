@@ -208,15 +208,15 @@ func _find_enemy() -> Node2D:
 	# Free a controlled teammate first.
 	var player: Node = level.get_player()
 	if player and is_instance_valid(player) and bool(player.get("is_controlled")):
-		var controller: Node = player.get("controller")
-		if controller and is_instance_valid(controller) and controller.has_method("apply_damage"):
+		var controller = player.get("controller")
+		if controller != null and is_instance_valid(controller) and controller.has_method("apply_damage"):
 			return controller
 	for mate in level.get_allies():
 		if mate == self or mate == null or not is_instance_valid(mate):
 			continue
 		if bool(mate.get("is_controlled")):
-			var c: Node = mate.get("controller")
-			if c and is_instance_valid(c) and c.has_method("apply_damage"):
+			var c = mate.get("controller")
+			if c != null and is_instance_valid(c) and c.has_method("apply_damage"):
 				return c
 	var best: Node2D = null
 	var best_dist := 560.0

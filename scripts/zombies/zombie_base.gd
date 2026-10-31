@@ -200,9 +200,15 @@ func _try_jump_for_target(to_target: Vector2) -> void:
 	if not is_on_floor() or jump_cd > 0.0:
 		return
 	var ground_ahead: float = level.get_ground_y(global_position.x + float(facing) * 26.0) if level else 0.0
+	# A gap ahead always triggers a jump — specials chasing from far away were
+	# previously walking straight into pits and vanishing (P1-4).
+	if ground_ahead < 0.0:
+		# Only when actually moving toward the gap.
+		if absf(to_target.x) > 12.0 or absf(velocity.x) > 12.0:
+			velocity.y = -500.0
+			jump_cd = 1.2
+			return
 	var needs_jump := to_target.y < -38.0
-	if ground_ahead < 0.0 and absf(to_target.x) < 260.0:
-		needs_jump = true
 	if is_on_wall() and absf(to_target.x) < 160.0:
 		needs_jump = true
 	if needs_jump:

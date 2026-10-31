@@ -825,6 +825,12 @@ func _update_animation() -> void:
 func _tick_downed(delta: float) -> void:
 	bleedout -= delta
 	var input_x := Input.get_axis("move_left", "move_right")
+	# Downed crawlers cannot save themselves from a gap — stop at the edge
+	# instead of sliding in (P0-1c softlock prevention).
+	if level != null and absf(input_x) > 0.1:
+		var ahead := global_position.x + input_x * 16.0
+		if level.get_ground_y(ahead) < 0.0:
+			input_x = 0.0
 	velocity.x = move_toward(velocity.x, input_x * 45.0, 500.0 * delta)
 	velocity.y += GRAVITY * delta
 	move_and_slide()
@@ -833,8 +839,9 @@ func _tick_downed(delta: float) -> void:
 	sprite.flip_h = facing < 0
 	sprite.play("crouch")
 	_update_aim(delta)
-	if Input.is_action_pressed("fire") and weapon_cooldown <= 0.0:
+	if Input.is_action_pressed("fire") and weapon_cooldown <= 0.0 and _downed_shot_available():
 		weapon_cooldown = 0.35
+		_downed_consume_round()
 		var origin := global_position + _muzzle_local
 		var query := PhysicsRayQueryParameters2D.create(origin, origin + aim_dir * 400.0, 89, [get_rid()])
 		var result := get_world_2d().direct_space_state.intersect_ray(query)
@@ -850,6 +857,29 @@ func _tick_downed(delta: float) -> void:
 		AudioManager.play_sfx(&"m9")
 	if bleedout <= 0.0:
 		die()
+
+
+## Downed pistol fire costs a real M9 round (P1-3): no more free infinite
+## output while waiting for rescue.
+func _downed_shot_available() -> bool:
+	var id := _downed_pistol_id()
+	var state: Dictionary = ammo.get(id, {"mag": 0, "reserve": 0})
+	return int(state.get("mag", 0)) > 0
+
+
+func _downed_consume_round() -> void:
+	var id := _downed_pistol_id()
+	var state: Dictionary = ammo.get(id, {"mag": 0, "reserve": 0})
+	state["mag"] = maxi(0, int(state.get("mag", 0)) - 1)
+	ammo[id] = state
+	EventBus.ammo_changed.emit(int(state["mag"]), int(state.get("reserve", 0)))
+
+
+func _downed_pistol_id() -> StringName:
+	for id in ammo.keys():
+		if String(id) == "m9":
+			return StringName(id)
+	return &"m9"
 
 
 func take_damage(amount: int, source_dir: Vector2 = Vector2.ZERO, source: StringName = &"zombie",

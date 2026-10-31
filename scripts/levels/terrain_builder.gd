@@ -28,6 +28,7 @@ static func build(parent: Node2D, theme: String, width: float, rng: RandomNumber
 
 	var x := 0.0
 	var seg_index := 0
+	var gaps: Array[Dictionary] = []
 	while x < width:
 		var seg_len := rng.randi_range(430, 760)
 		if seg_index == 0:
@@ -39,6 +40,7 @@ static func build(parent: Node2D, theme: String, width: float, rng: RandomNumber
 			var gap_len := float(rng.randi_range(64, 100))
 			# Do not create a gap right before a segment shorter than a jump.
 			if x + gap_len < width - 500.0:
+				gaps.append({"x0": x, "x1": x + gap_len, "warn_x0": x - 150.0})
 				x += gap_len
 				gap = true
 		if x >= width:
@@ -53,9 +55,22 @@ static func build(parent: Node2D, theme: String, width: float, rng: RandomNumber
 		x += seg_len
 		seg_index += 1
 		if gap:
-			# Leave the gap empty; the next loop paints the far bank.
-			pass
-	return {"segments": segments, "platforms": platforms}
+			# Deep pit floor: solid tiles well below ground so nothing ever
+			# falls through the world (P0-1a).
+			_paint_pit_floor(ground_layer, gaps[-1]["x0"], gaps[-1]["x1"], GROUND_Y, rng)
+	return {"segments": segments, "platforms": platforms, "gaps": gaps}
+
+
+static func _paint_pit_floor(layer: TileMapLayer, x0: float, x1: float, ground_y: float,
+		rng: RandomNumberGenerator) -> void:
+	var start_col := int(floor(x0 / float(TILE))) - 1
+	var end_col := int(ceil(x1 / float(TILE))) + 1
+	var floor_y := int((ground_y + 88.0) / float(TILE))
+	for col in range(start_col, end_col):
+		for depth in range(0, 3):
+			var row := 5 if depth >= 1 else 1
+			var variant := rng.randi_range(0, 15)
+			layer.set_cell(Vector2i(col, floor_y + depth), 0, Vector2i(variant, row))
 
 
 static func _paint_ground(layer: TileMapLayer, x0: float, x1: float, y: float,

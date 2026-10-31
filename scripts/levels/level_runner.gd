@@ -216,6 +216,8 @@ func _build_terrain() -> void:
 	var built := TerrainBuilder.build(self, String(data.theme), level_width, _rng, dark)
 	ground_segments = built.get("segments", [])
 	platforms = built.get("platforms", [])
+	_gaps = built.get("gaps", [])
+	_paint_gap_warnings()
 
 
 func _build_bounds() -> void:
@@ -575,6 +577,7 @@ func _process(delta: float) -> void:
 			EventBus.safe_room_entered.emit(false)
 	if player == null or not is_instance_valid(player):
 		return
+	_tick_fall_safety(delta)
 	_progress = clampf(player.global_position.x / level_width, 0.0, 1.0)
 	_fire_due_events()
 	_show_tips()
@@ -1278,6 +1281,67 @@ func get_ground_y(x: float) -> float:
 		if x >= float(seg["x0"]) and x <= float(seg["x1"]):
 			return float(seg["y"])
 	return -1.0
+
+
+# --- fall safety (P0-1) -----------------------------------------------------
+var _gaps: Array = []
+var _gap_tip_shown: bool = false
+const KILL_Y := 480.0
+
+
+## Paints a yellow warning strip on the ground 150 px before each gap (P2-5)
+## and shows a one-time tutorial toast.
+func _paint_gap_warnings() -> void:
+	for gap in _gaps:
+		var warn := ColorRect.new()
+		warn.color = Color(0.85, 0.70, 0.15, 0.55)
+		warn.position = Vector2(float(gap["warn_x0"]), 284.0)
+		warn.size = Vector2(140.0, 4.0)
+		warn.z_index = 3
+		warn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(warn)
+
+
+## Kill-Y floor: nothing may fall out of the world. Survivors are teleported
+## back to the nearest ground segment and damaged; zombies are culled.
+func _tick_fall_safety(_delta: float) -> void:
+	if player != null and is_instance_valid(player) and not bool(player.get("is_dead")):
+		var py := player.global_position.y
+		if py > KILL_Y:
+			var gx := _nearest_ground_x(player.global_position.x)
+			if gx < 0.0:
+				gx = clampf(player.global_position.x, 80.0, level_width - 80.0)
+			if bool(player.get("is_downed")):
+				player.call("die")
+			else:
+				player.set("global_position", Vector2(gx, get_ground_y(gx) - 4.0))
+				player.set("velocity", Vector2.ZERO)
+				player.call("take_damage", int(ceil(float(player.get("max_hp")) * 0.25)),
+					Vector2.ZERO, &"world", &"fall")
+				EventBus.notify.emit("坠落受创！小心深坑。")
+				EventBus.screen_shake.emit(6.0)
+				_show_gap_tip()
+	for ally in allies:
+		if ally == null or not is_instance_valid(ally) or bool(ally.get("is_dead")):
+			continue
+		if ally.global_position.y > KILL_Y:
+			var gx2 := _nearest_ground_x(ally.global_position.x)
+			if gx2 < 0.0:
+				gx2 = clampf(ally.global_position.x, 80.0, level_width - 80.0)
+			ally.set("global_position", Vector2(gx2, get_ground_y(gx2) - 4.0))
+			ally.set("velocity", Vector2.ZERO)
+	for z in get_tree().get_nodes_in_group("zombies"):
+		if z == null or not is_instance_valid(z):
+			continue
+		if z.global_position.y > KILL_Y:
+			z.call("queue_free")
+
+
+func _show_gap_tip() -> void:
+	if _gap_tip_shown:
+		return
+	_gap_tip_shown = true
+	EventBus.level_event.emit("深坑：地面塌陷处有黄色警示涂层，助跑可以跳过。")
 
 
 func _nearest_ground_x(x: float) -> float:
