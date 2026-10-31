@@ -22,7 +22,7 @@ func _build() -> void:
 	tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(tagline)
 
-	var menu_panel := add_panel(Vector2(24, 146), Vector2(212, 218), Color(0.035, 0.045, 0.058, 0.90), UIKit.LINE)
+	var menu_panel := add_panel(Vector2(24, 140), Vector2(212, 208), Color(0.035, 0.045, 0.058, 0.90), UIKit.LINE)
 	var menu_title := UIKit.label("CAMPAIGN · 锈蚀频率", 7, UIKit.AMBER, UIKit.font_latin())
 	menu_title.position = Vector2(8, 4)
 	menu_panel.add_child(menu_title)
@@ -40,32 +40,32 @@ func _build() -> void:
 	menu_panel.add_child(continue_button)
 
 	var level_button := UIKit.button("[2] 章节选择", 196, 24)
-	level_button.position = Vector2(8, 44)
+	level_button.position = Vector2(8, 42)
 	level_button.pressed.connect(func() -> void: go(&"levels"))
 	menu_panel.add_child(level_button)
 
 	var character_button := UIKit.button("[3] 角色档案", 196, 24)
-	character_button.position = Vector2(8, 72)
+	character_button.position = Vector2(8, 68)
 	character_button.pressed.connect(func() -> void: go(&"characters"))
 	menu_panel.add_child(character_button)
 
 	var settings_button := UIKit.button("[4] 设置", 196, 24)
-	settings_button.position = Vector2(8, 100)
+	settings_button.position = Vector2(8, 94)
 	settings_button.pressed.connect(func() -> void: go(&"settings"))
 	menu_panel.add_child(settings_button)
 
 	var credits_button := UIKit.button("[5] 制作人员", 196, 24)
-	credits_button.position = Vector2(8, 128)
+	credits_button.position = Vector2(8, 120)
 	credits_button.pressed.connect(func() -> void: go(&"credits"))
 	menu_panel.add_child(credits_button)
 
 	var archive_button := UIKit.button("[6] 档案库", 196, 24)
-	archive_button.position = Vector2(8, 156)
+	archive_button.position = Vector2(8, 146)
 	archive_button.pressed.connect(func() -> void: go(&"archives"))
 	menu_panel.add_child(archive_button)
 
 	var quit_button := UIKit.button("[Esc] 退出游戏", 196, 24)
-	quit_button.position = Vector2(8, 156)
+	quit_button.position = Vector2(8, 172)
 	quit_button.pressed.connect(func() -> void: go(&"quit"))
 	menu_panel.add_child(quit_button)
 
@@ -170,7 +170,7 @@ func _build_archive() -> void:
 	codex_button.pressed.connect(func() -> void: go(&"codex"))
 	panel.add_child(codex_button)
 
-	var version := UIKit.label("v3.3.0  ·  MIT  ·  ORIGINAL PIXEL ASSETS", 6, UIKit.DIM, UIKit.font_latin())
+	var version := UIKit.label("v3.4.0  ·  MIT  ·  ORIGINAL PIXEL ASSETS", 6, UIKit.DIM, UIKit.font_latin())
 	version.position = Vector2(332, 348)
 	version.size = Vector2(284, 8)
 	version.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT

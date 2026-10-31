@@ -6,7 +6,7 @@ config_version=5
 
 config/name="LAST BASTION · 最后防线"
 config/description="2D pixel side-scrolling zombie action shooter. Original art and audio, inspired by the co-op zombie survival genre."
-config/version="3.3.0"
+config/version="3.4.0"
 run/main_scene="res://scenes/main/main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.png"
