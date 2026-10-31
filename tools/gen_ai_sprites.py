@@ -323,6 +323,17 @@ def rot(img: Image.Image, deg: float) -> Image.Image:
     return img.rotate(deg, resample=Image.NEAREST, expand=True)
 
 
+def rot_fit(img: Image.Image, deg: float) -> Image.Image:
+    """Rotate and re-fit into a FRAME-sized canvas (bottom anchored)."""
+    r = rot(img, deg)
+    if r.width > FRAME or r.height > FRAME:
+        s = min(FRAME / r.width, FRAME / r.height)
+        r = r.resize((max(1, round(r.width * s)), max(1, round(r.height * s))), Image.NEAREST)
+    canvas = Image.new("RGBA", (FRAME, FRAME), (0, 0, 0, 0))
+    canvas.alpha_composite(r, ((FRAME - r.width) // 2, FRAME - r.height))
+    return canvas
+
+
 # ---------------------------------------------------------------------------
 # strip assembly
 # ---------------------------------------------------------------------------
@@ -349,7 +360,7 @@ def assemble(poses: dict[str, Image.Image]) -> dict[str, Image.Image]:
     strips["die"] = strip([collapse, shift(collapse, dy=-2),
                            shift(dead, squash=0.85), dead, shift(dead, dy=-1), dead])
     strips["crouch"] = strip([crouch, shift(crouch, squash=0.94)])
-    strips["slide"] = strip([rot(crouch, -10), rot(crouch, -16)])
+    strips["slide"] = strip([rot_fit(crouch, -10), rot_fit(crouch, -16)])
     strips["jump"] = strip([shift(ra, dy=-2), shift(rb, dy=-2)])
     return strips
 

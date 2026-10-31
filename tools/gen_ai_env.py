@@ -21,11 +21,11 @@ BG_MAP = {
     ("suburb", "far"): "A_wide_horizontal_building_ban_2026-10-31T01-05-55.png",
     ("city", "mid"):   "A_wide_horizontal_building_ban_2026-10-31T01-06-07.png",
     ("city", "far"):   "A_wide_horizontal_building_ban_2026-10-31T01-06-18.png",
-    ("subway", "mid"): "A_wide_horizontal_scenery_band_2026-10-31T01-06-28.png",
+    ("subway", "mid"): "A_wide_horizontal_street_scene_2026-10-31T02-51-16.png",
     ("subway", "far"): "A_wide_horizontal_scenery_band_2026-10-31T01-07-00.png",
     ("military", "mid"): "A_wide_horizontal_scenery_band_2026-10-31T01-07-11.png",
     ("military", "far"): "A_wide_horizontal_scenery_band_2026-10-31T01-07-22.png",
-    ("bridge", "mid"):   "A_wide_horizontal_scenery_band_2026-10-31T01-07-32.png",
+    ("bridge", "mid"):   "A_wide_horizontal_street_scene_2026-10-31T02-51-28.png",
     ("bridge", "far"):   "A_wide_horizontal_scenery_band_2026-10-31T01-07-43.png",
 }
 
@@ -94,15 +94,79 @@ def strip_dark_sky(img: Image.Image) -> Image.Image:
     return Image.fromarray(a, "RGBA")
 
 
+def defringe(img: Image.Image, erode_px: int = 2) -> Image.Image:
+    """Kill white fringes: erode the alpha mask at hi-res, then drop any
+    remaining semi-transparent near-white pixels after downscaling."""
+    a = np.asarray(img).copy()
+    alpha = a[:, :, 3] > 40
+    for _ in range(erode_px):
+        er = alpha.copy()
+        er[1:, :] &= alpha[:-1, :]
+        er[:-1, :] &= alpha[1:, :]
+        er[:, 1:] &= alpha[:, :-1]
+        er[:, :-1] &= alpha[:, 1:]
+        alpha = er
+    a[:, :, 3] = np.where(alpha, a[:, :, 3], 0)
+    img = Image.fromarray(a, "RGBA")
+    # final pass happens after resize in make_bg
+    return img
+
+
+def decontaminate(img: Image.Image) -> Image.Image:
+    a = np.asarray(img).copy()
+    rgb = a[:, :, :3].astype(np.int16)
+    lum = rgb.mean(axis=2)
+    sat = rgb.max(axis=2) - rgb.min(axis=2)
+    semi = (a[:, :, 3] > 0) & (a[:, :, 3] < 250)
+    white = (lum > 185) & (sat < 45)
+    a[semi & white] = (0, 0, 0, 0)
+    # opaque near-white specks touching transparency: bleed neighbour colour in
+    for _ in range(3):
+        aa = a[:, :, 3] > 0
+        lum2 = a[:, :, :3].astype(np.int16).mean(axis=2)
+        sat2 = a[:, :, :3].astype(np.int16).max(axis=2) - a[:, :, :3].astype(np.int16).min(axis=2)
+        is_white = aa & (lum2 > 185) & (sat2 < 45)
+        nb_free = np.zeros(is_white.shape, dtype=bool)
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)):
+            sh = np.zeros_like(aa)
+            sy = slice(max(0, dy), a.shape[0] + min(0, dy))
+            sx = slice(max(0, dx), a.shape[1] + min(0, dx))
+            ty = slice(max(0, -dy), a.shape[0] + min(0, -dy))
+            tx = slice(max(0, -dx), a.shape[1] + min(0, -dx))
+            sh[ty, tx] = ~aa[sy, sx]
+            nb_free |= sh
+        spot = is_white & nb_free
+        if not spot.any():
+            break
+        ys, xs = np.where(spot)
+        for y, x in zip(ys, xs):
+            best = None
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    ny, nx = y + dy, x + dx
+                    if 0 <= ny < a.shape[0] and 0 <= nx < a.shape[1] and aa[ny, nx] and not is_white[ny, nx]:
+                        best = a[ny, nx, :3].copy()
+                        break
+                if best is not None:
+                    break
+            if best is None:
+                a[y, x, 3] = 0
+            else:
+                a[y, x, :3] = best
+    return Image.fromarray(a, "RGBA")
+
+
 def make_bg(src: Path, out: Path, max_h: int, colors: int = 40) -> None:
     img = remove_background(Image.open(src).convert("RGB"))
     img = strip_paper_white(img)
     img = fill_holes(img)
+    img = defringe(img, erode_px=3)
     img = img.crop(img.getbbox())
     scale = min(BG_W / img.width, max_h / img.height)
     nw, nh = max(1, round(img.width * scale)), max(1, round(img.height * scale))
     band = img.resize((nw, nh), Image.LANCZOS).convert("RGB").quantize(colors=colors, method=Image.MEDIANCUT,
                                                                        dither=Image.Dither.NONE).convert("RGBA")
+    band = decontaminate(band)
     band = strip_dark_sky(band)
     # mirror-tile narrow bands to fill the full 960 width (seamless by construction)
     if nw < BG_W:

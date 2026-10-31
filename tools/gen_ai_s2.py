@@ -122,7 +122,10 @@ def process_zombies() -> None:
         for i, prefix in enumerate(prefixes):
             fw, fh = Z_FRAMES[prefix]
             tile = tiles[i]
-            base = place(pixelize(tile, fw - 4, fh - 4, colors=28), anchor_bottom=True)
+            # place into the PER-ZOMBIE frame canvas (place() hardcodes 48x48)
+            px = pixelize(tile, fw - 4, fh - 4, colors=28)
+            base = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+            base.alpha_composite(px, ((fw - px.width) // 2, fh - px.height))
             strips = make_strips(base, prefix)
             for anim, img in strips.items():
                 img.save(ZOUT / f"{prefix}_{anim}.png")
