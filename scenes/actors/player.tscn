@@ -13,7 +13,7 @@ floor_snap_length = 8.0
 script = ExtResource("1_player")
 
 [node name="Sprite" type="AnimatedSprite2D" parent="."]
-position = Vector2(0, -16)
+position = Vector2(0, -24)
 z_index = 5
 
 [node name="Collision" type="CollisionShape2D" parent="."]
