@@ -170,7 +170,7 @@ func _build_archive() -> void:
 	codex_button.pressed.connect(func() -> void: go(&"codex"))
 	panel.add_child(codex_button)
 
-	var version := UIKit.label("v3.4.0  ·  MIT  ·  ORIGINAL PIXEL ASSETS", 6, UIKit.DIM, UIKit.font_latin())
+	var version := UIKit.label("v3.4.1  ·  MIT  ·  ORIGINAL PIXEL ASSETS", 6, UIKit.DIM, UIKit.font_latin())
 	version.position = Vector2(332, 348)
 	version.size = Vector2(284, 8)
 	version.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
