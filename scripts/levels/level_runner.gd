@@ -653,8 +653,8 @@ func _build_comic_fx() -> void:
 	# Godot 4 屏幕纹理必须声明 hint_screen_texture；标记缺失 = 回退到 Godot 3
 	# 宏的已损坏版本，直接关闭后处理而不是用白色盖死整屏。
 	var usable: bool = shader != null \
-		and shader.source_code.contains("hint_screen_texture") \
-		and shader.source_code.contains("shader_type canvas_item")
+		and shader.code.contains("hint_screen_texture") \
+		and shader.code.contains("shader_type canvas_item")
 	if not usable:
 		push_warning("comic shader unusable, post-process disabled (white-screen fuse)")
 	rect.visible = usable
