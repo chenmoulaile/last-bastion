@@ -81,6 +81,9 @@ func _scan_sfx() -> void:
 		return
 	for file_name in dir.get_files():
 		var clean := file_name
+		# Exported builds remap audio to ".ogg.remap"; the editor lists ".ogg.import".
+		if clean.ends_with(".remap"):
+			clean = clean.trim_suffix(".remap")
 		if clean.ends_with(".import"):
 			clean = clean.trim_suffix(".import")
 		if not (clean.ends_with(".ogg") or clean.ends_with(".wav")):

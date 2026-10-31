@@ -33,6 +33,22 @@ func _ready() -> void:
 func _boot() -> void:
 	AudioManager.play_menu_music()
 	_show_screen(&"menu")
+	if OS.get_environment("LB_AUTOCAP") != "":
+		_auto_capture()
+
+
+## Debug helper: LB_AUTOCAP=<seconds> launches, waits, saves a screenshot of the
+## current screen to build/ and quits. Used to verify exported builds headlessly.
+func _auto_capture() -> void:
+	var seconds := maxf(1.0, float(OS.get_environment("LB_AUTOCAP")))
+	await get_tree().create_timer(seconds).timeout
+	await RenderingServer.frame_post_draw
+	var image := get_viewport().get_texture().get_image()
+	var out := ProjectSettings.globalize_path("res://build")
+	DirAccess.make_dir_recursive_absolute(out)
+	image.save_png(out + "/autocap.png")
+	print("[AUTOCAP] saved build/autocap.png")
+	get_tree().quit()
 
 
 func _build_fade() -> void:

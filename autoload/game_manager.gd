@@ -86,9 +86,12 @@ func _load_resources(dir_path: String) -> Dictionary:
 		push_warning("Data directory missing: " + dir_path)
 		return result
 	for file_name in dir.get_files():
-		if not file_name.ends_with(".tres"):
+		# Exported builds remap ".tres" to ".tres.remap" — strip it before filtering,
+		# otherwise every data directory comes back empty in release builds.
+		var base := file_name.trim_suffix(".remap")
+		if not base.ends_with(".tres"):
 			continue
-		var res: Resource = load(dir_path + "/" + file_name)
+		var res: Resource = load(dir_path + "/" + base)
 		if res == null:
 			continue
 		var id_value: Variant = res.get("id")
