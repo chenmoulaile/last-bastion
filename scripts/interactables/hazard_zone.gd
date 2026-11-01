@@ -20,8 +20,8 @@ func _ready() -> void:
 	add_to_group("hazards")
 	collision_layer = 0
 	collision_mask = 2 | 4 | 8 | 16
-	monitoring = true
-	monitorable = false
+	set_deferred("monitoring", true)
+	set_deferred("monitorable", false)
 	life = duration
 	sprite = Sprite2D.new()
 	if kind == "fire":

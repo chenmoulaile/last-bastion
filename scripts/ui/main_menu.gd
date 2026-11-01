@@ -76,8 +76,9 @@ func _build() -> void:
 
 func _build_hotkey_hint() -> void:
 	var hint := UIKit.label("↑↓ 选择  Enter 确认  1-5 快捷  Esc 退出  F11 全屏", 7, UIKit.MUTED)
-	hint.position = Vector2(100, 348)
-	hint.size = Vector2(224, 10)
+	# P0-3：底边必须 ≤358（原 348+23=371 被裁）
+	hint.position = Vector2(100, 336)
+	UIKit.fit_width(hint, 224, 10)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	add_child(hint)
 
@@ -172,8 +173,8 @@ func _build_archive() -> void:
 
 	var ver: String = ProjectSettings.get_setting("application/config/version", "0.0.0")
 	var version := UIKit.label("v%s  ·  MIT  ·  ORIGINAL PIXEL ASSETS" % ver, 6, UIKit.DIM, UIKit.font_latin())
-	version.position = Vector2(332, 348)
-	version.size = Vector2(284, 8)
+	version.position = Vector2(332, 338)
+	UIKit.fit_width(version, 284, 8)
 	version.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	add_child(version)
 

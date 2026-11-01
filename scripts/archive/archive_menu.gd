@@ -22,10 +22,16 @@ func _build() -> void:
 	scroll_hint.position = Vector2(8, 4)
 	left.add_child(scroll_hint)
 
+	# 44 条碎片必须可滚动（P0-3 全屏 UI 越界断言）
+	var scroll := ScrollContainer.new()
+	scroll.position = Vector2(8, 16)
+	scroll.size = Vector2(224, 240)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	left.add_child(scroll)
 	_list_box = VBoxContainer.new()
-	_list_box.position = Vector2(8, 16)
-	_list_box.size = Vector2(224, 240)
-	left.add_child(_list_box)
+	_list_box.custom_minimum_size = Vector2(216, 0)
+	scroll.add_child(_list_box)
 
 	var right := add_panel(Vector2(276, 66), Vector2(340, 268), Color(0.04, 0.045, 0.055, 0.95), UIKit.LINE)
 	_detail_title = UIKit.label("选择一份档案", 11, UIKit.INK)

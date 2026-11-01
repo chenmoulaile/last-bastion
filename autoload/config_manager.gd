@@ -7,7 +7,7 @@ const REMAPPABLE := [
 	{"action": "move_left", "label": "向左移动"},
 	{"action": "move_right", "label": "向右移动"},
 	{"action": "jump", "label": "跳跃"},
-	{"action": "crouch", "label": "蹲下 / 滑铲"},
+	{"action": "crouch", "label": "蹲下 / 滑铲（Ctrl / S）"},
 	{"action": "fire", "label": "开火"},
 	{"action": "melee", "label": "近战推开"},
 	{"action": "reload", "label": "换弹"},
@@ -72,7 +72,8 @@ func _register_all_actions() -> void:
 	_add_key("move_left", DEFAULT_KEYS["move_left"])
 	_add_key("move_right", DEFAULT_KEYS["move_right"])
 	_add_key("jump", DEFAULT_KEYS["jump"])
-	_add_key("crouch", DEFAULT_KEYS["crouch"])
+	_add_key("crouch", KEY_CTRL)          # P2-8：常规 Ctrl
+	_add_key("crouch", DEFAULT_KEYS["crouch"])  # 兼容 S
 	_add_key("aim_up", DEFAULT_KEYS["aim_up"])
 	_add_key("aim_down", DEFAULT_KEYS["aim_down"])
 	_add_key("fire", DEFAULT_KEYS["fire"])

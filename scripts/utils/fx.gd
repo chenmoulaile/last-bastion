@@ -4,7 +4,8 @@ extends RefCounted
 ## that free themselves; blood decals are capped at 64 as required by the spec.
 
 static var _frames_cache: Dictionary = {}
-static var _decals: Array[Sprite2D] = []
+static var _decals: Array = []          # WeakRef 列表：绝不持有已释放场景的强引用
+static var _decals_pruned_at: int = 0
 
 const SHEETS := {
 	"blood": ["res://assets/sprites/fx/blood_burst.png", 32, 32, 6, 18.0, false],
@@ -138,9 +139,13 @@ static func bile(parent: Node, pos: Vector2, scale_value: float = 1.0) -> void:
 static func blood_decal(parent: Node, pos: Vector2) -> void:
 	if parent == null:
 		return
+	_prune_decals()
 	if _decals.size() >= 64:
-		var oldest: Sprite2D = _decals.pop_front()
-		if is_instance_valid(oldest):
+		# 无类型接收再校验：WeakRef 解引用可能为空，类型化赋值会抛
+		# "previously freed instance" SCRIPT ERROR（P0-4）
+		var ref: Variant = _decals.pop_front()
+		var oldest: Variant = ref.get_ref() if ref != null else null
+		if oldest != null and is_instance_valid(oldest):
 			oldest.queue_free()
 	var tex: Texture2D = load("res://assets/sprites/environment/blood_decal_%d.png" % randi_range(0, 2))
 	if tex == null:
@@ -151,14 +156,25 @@ static func blood_decal(parent: Node, pos: Vector2) -> void:
 	decal.z_index = -2
 	decal.flip_h = randf() < 0.5
 	parent.add_child(decal)
-	_decals.append(decal)
+	_decals.append(weakref(decal))
 	var tween := decal.create_tween()
 	tween.tween_property(decal, "modulate:a", 0.0, 2.0).set_delay(8.0)
 	tween.tween_callback(decal.queue_free)
 
 
+## 清理已释放节点的弱引用（场景切换后旧 decal 全部失效）
+static func _prune_decals() -> void:
+	var out: Array = []
+	for ref in _decals:
+		var node: Variant = ref.get_ref() if ref != null else null
+		if node != null and is_instance_valid(node):
+			out.append(ref)
+	_decals = out
+
+
 static func reset() -> void:
-	for decal in _decals:
-		if is_instance_valid(decal):
-			decal.queue_free()
+	for ref in _decals:
+		var node: Variant = ref.get_ref() if ref != null else null
+		if node != null and is_instance_valid(node):
+			node.queue_free()
 	_decals.clear()

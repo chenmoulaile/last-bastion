@@ -7,12 +7,12 @@ static var _cache: Dictionary = {}
 
 const CHAR_ANIMS := {
 	"idle": [4, 6.0, true],
-	"run": [6, 11.0, true],
+	"run": [8, 10.0, true],
 	"shoot": [3, 14.0, false],
 	"melee": [3, 14.0, false],
 	"hurt": [2, 8.0, false],
 	"die": [6, 7.0, false],
-	"crouch": [2, 4.0, true],
+	"crouch": [3, 4.0, true],
 	"slide": [2, 8.0, false],
 	"jump": [2, 5.0, true],
 }

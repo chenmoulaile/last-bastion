@@ -17,8 +17,8 @@ func _ready() -> void:
 	add_to_group("pickups")
 	collision_layer = 64
 	collision_mask = 2
-	monitoring = true
-	monitorable = false
+	set_deferred("monitoring", true)
+	set_deferred("monitorable", false)
 	sprite = Sprite2D.new()
 	sprite.texture = _texture_for_kind()
 	sprite.z_index = 4

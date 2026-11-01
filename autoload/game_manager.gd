@@ -67,6 +67,8 @@ func _boot() -> void:
 
 func change_state(next_state: State) -> void:
 	state = next_state
+	# P0-4：每次状态切换清理静态特效缓存（旧场景节点已随关卡释放）
+	Fx.reset()
 	if state == State.PLAYING:
 		Engine.time_scale = 1.0
 

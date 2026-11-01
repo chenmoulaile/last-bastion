@@ -1,5 +1,6 @@
 class_name AllyAgent
 extends CharacterBody2D
+## P0-1：队友共用无枪身体帧 + 程序化手臂（双手端枪）
 ## Squad member / command-mode soldier. A small behaviour tree selects between
 ## rescuing a downed teammate, engaging infected, and obeying the current order.
 ## Balance values come from CharacterData and WeaponData resources.
@@ -61,6 +62,23 @@ var _delta: float = 0.016
 var sprite: AnimatedSprite2D
 var collision: CollisionShape2D
 var weapon_sprite: Sprite2D
+
+
+func _draw() -> void:
+	# P0-1：队友程序化手臂（与玩家同规则，主武器=双手端枪）
+	var sleeve := Color(0.30, 0.32, 0.36) if data == null else data.accent.darkened(0.35)
+	var f := float(facing)
+	_draw_arm(Vector2(2 * f, -22), Vector2(12 * f, -17), sleeve)
+	_draw_arm(Vector2(4 * f, -20), Vector2(15 * f, -16), sleeve)
+
+
+func _draw_arm(from: Vector2, to: Vector2, color: Color) -> void:
+	var steps := int(maxf(absf(to.x - from.x), absf(to.y - from.y)))
+	steps = maxi(2, steps)
+	for i in steps + 1:
+		var t := float(i) / float(steps)
+		var p := from.lerp(to, t)
+		draw_rect(Rect2(floorf(p.x), floorf(p.y), 2, 2), color)
 
 
 func _ready() -> void:

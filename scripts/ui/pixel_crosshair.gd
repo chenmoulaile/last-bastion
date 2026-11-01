@@ -26,26 +26,50 @@ func _draw() -> void:
 	var gap := spread_px + press_bonus
 	var color := Color(0.91, 0.925, 0.937, a)
 	if gap >= 11:
-		color = Color(1.0, 0.35, 0.24, a)  # 最大扩散警示色
-	var shadow := Color(0.0, 0.0, 0.0, a * 0.5)
-	# 4 条 1px×4px 刻线（上下左右）+ 右下 1px 阴影
+		color = Color(1.0, 0.32, 0.20, a)  # 最大扩散警示色
+	var shadow := Color(0.0, 0.0, 0.0, a * 0.62)
+	var edge := Color(0.03, 0.04, 0.05, a * 0.9)
+	# 4 条 1px×6px 刻线（P2-9 加长）+ 右下 1px 阴影 + 外端 1px 暗色收边
 	for i in 4:
 		var arm := _arm_rect(c, gap, i)
 		draw_rect(Rect2(arm.position + Vector2(1, 1), arm.size), shadow)
 		draw_rect(arm, color)
-	# 中心 1px 点
-	draw_rect(Rect2(c.x, c.y, 1, 1), color)
-	if state == 0 and gap <= 4:
-		pass
+		_draw_outer_tick(c, gap, i, edge)
+	# 中心点在开火瞬间变 2×2 十字亮点
+	if press_bonus > 0:
+		draw_rect(Rect2(c.x - 1, c.y, 2, 1), Color(1, 0.96, 0.9, a))
+		draw_rect(Rect2(c.x, c.y - 1, 1, 2), Color(1, 0.96, 0.9, a))
+	else:
+		draw_rect(Rect2(c.x, c.y, 1, 1), color)
+	# 最大扩散：外圈 4 个 1px 角标（警示更醒目）
+	if gap >= 11:
+		var tick := Color(1.0, 0.32, 0.20, a)
+		var r := gap + 7
+		draw_rect(Rect2(c.x - r, c.y - r, 2, 1), tick)
+		draw_rect(Rect2(c.x + r - 1, c.y - r, 2, 1), tick)
+		draw_rect(Rect2(c.x - r, c.y + r, 2, 1), tick)
+		draw_rect(Rect2(c.x + r - 1, c.y + r, 2, 1), tick)
 
 
-## 第 i 条刻线（0 上 1 下 2 左 3 右）的 1px 线矩形。
+## 第 i 条刻线（0 上 1 下 2 左 3 右）的 1px 线矩形（长 6px）。
+const ARM_LEN := 6
+
+
 func _arm_rect(c: Vector2i, gap: int, i: int) -> Rect2:
 	match i:
-		0: return Rect2(c.x, c.y - gap - 4, 1, 4)
-		1: return Rect2(c.x, c.y + gap, 1, 4)
-		2: return Rect2(c.x - gap - 4, c.y, 4, 1)
-		_: return Rect2(c.x + gap, c.y, 4, 1)
+		0: return Rect2(c.x, c.y - gap - ARM_LEN, 1, ARM_LEN)
+		1: return Rect2(c.x, c.y + gap, 1, ARM_LEN)
+		2: return Rect2(c.x - gap - ARM_LEN, c.y, ARM_LEN, 1)
+		_: return Rect2(c.x + gap, c.y, ARM_LEN, 1)
+
+
+## 刻线外端的 1px 暗色收边（亮背景下保证 ≥3:1 对比）
+func _draw_outer_tick(c: Vector2i, gap: int, i: int, edge: Color) -> void:
+	match i:
+		0: draw_rect(Rect2(c.x, c.y - gap - ARM_LEN - 1, 1, 1), edge)
+		1: draw_rect(Rect2(c.x, c.y + gap + ARM_LEN, 1, 1), edge)
+		2: draw_rect(Rect2(c.x - gap - ARM_LEN - 1, c.y, 1, 1), edge)
+		_: draw_rect(Rect2(c.x + gap + ARM_LEN, c.y, 1, 1), edge)
 
 
 ## 换弹：4 个 1px 点组成的环，按 phase 步进旋转（非平滑）。

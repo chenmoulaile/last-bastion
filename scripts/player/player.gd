@@ -19,6 +19,8 @@ const MAX_THROWABLES := 3
 var level: Node = null
 var character: CharacterData
 var visual_id: String = "assault"
+var arm_category: StringName = &"primary"      # P0-1 手臂姿态类别
+var _arm_facing: float = 1.0
 
 var max_hp: int = 100
 var hp: int = 100
@@ -158,6 +160,30 @@ func _stealth_condition() -> bool:
 	return _stealth_ok
 
 
+var _step_timer := 0.0
+var _last_anim_frame := -1
+
+
+## P1-6：动画速率随移速缩放；脚步声与触地帧同步
+func _tick_gait(delta: float) -> void:
+	if sprite == null or is_dead:
+		return
+	var speed_ratio := clampf(absf(velocity.x) / maxf(1.0, run_speed), 0.0, 1.3)
+	if sprite.animation == "run" and speed_ratio > 0.1:
+		sprite.speed_scale = clampf(0.7 + speed_ratio * 0.55, 0.7, 1.45)
+		# 触地帧（0 与 4）播脚步声
+		var frame := sprite.frame
+		if frame != _last_anim_frame:
+			_last_anim_frame = frame
+			if frame in [0, 4] and is_on_floor():
+				if _step_timer <= 0.0:
+					AudioManager.play_sfx(&"step", 1.0, -14.0)
+					_step_timer = 0.12
+	else:
+		sprite.speed_scale = 1.0
+	_step_timer = maxf(0.0, _step_timer - delta)
+
+
 func _update_flashlight() -> void:
 	# P0-1b：手电锥沿瞄准方向偏移（锥形渐变朝视线方向）
 	if flashlight == null or not flashlight_on:
@@ -245,6 +271,33 @@ func _setup_weapons() -> void:
 		EventBus.weapon_changed.emit(_current_weapon().id, _current_weapon().display_name)
 
 
+## P0-1：程序化手臂——从肩到握把的 2px 线，随武器类别与朝向变化
+func _draw() -> void:
+	if arm_category == &"" or is_dead:
+		return
+	var sleeve := Color(0.32, 0.34, 0.38) if character == null else character.accent.darkened(0.35)
+	var glove := Color(0.22, 0.23, 0.26)
+	var f := float(facing)
+	if arm_category == &"primary":
+		# 双手端枪：后手在肩、前手前伸
+		_draw_arm(Vector2(2 * f, -22), Vector2(12 * f, -17), sleeve)
+		_draw_arm(Vector2(4 * f, -20), Vector2(15 * f, -16), sleeve)
+		draw_rect(Rect2(minf(14 * f, 16 * f), -17, 2, 2), glove)
+	elif arm_category == &"secondary":
+		_draw_arm(Vector2(2 * f, -22), Vector2(9 * f, -18), sleeve)
+		draw_rect(Rect2(minf(8 * f, 10 * f), -19, 2, 2), glove)
+	# melee：徒手（动画自带挥臂），不画叠加
+
+
+func _draw_arm(from: Vector2, to: Vector2, color: Color) -> void:
+	var steps := int(maxf(absf(to.x - from.x), absf(to.y - from.y)))
+	steps = maxi(2, steps)
+	for i in steps + 1:
+		var t := float(i) / float(steps)
+		var p := from.lerp(to, t)
+		draw_rect(Rect2(floorf(p.x), floorf(p.y), 2, 2), color)
+
+
 func _create_flashlight() -> void:
 	var gradient := Gradient.new()
 	gradient.set_color(0, Color(1.0, 0.94, 0.72, 0.85))
@@ -300,6 +353,7 @@ func _physics_process(delta: float) -> void:
 	_tick_passives(delta)
 	_update_aim(delta)
 	_update_flashlight()
+	_tick_gait(delta)
 	_tick_actions(delta)
 	_tick_movement(delta)
 	_update_animation()
@@ -810,9 +864,17 @@ func _update_weapon_visual() -> void:
 	var weapon := _current_weapon()
 	if weapon == null:
 		weapon_sprite.visible = false
+		arm_category = &""
+		queue_redraw()
 		return
 	weapon_sprite.visible = true
 	weapon_sprite.texture = SpriteLibrary.weapon_texture(weapon.sprite)
+	# P0-1：身体帧无枪，手臂姿态按武器类别切换（primary=双手端枪 / secondary=单手持枪 / melee=徒手挥砍）
+	var new_cat: StringName = weapon.category
+	if new_cat != arm_category or float(facing) != _arm_facing:
+		arm_category = new_cat
+		_arm_facing = float(facing)
+		queue_redraw()
 
 
 func _current_weapon() -> WeaponData:

@@ -89,12 +89,18 @@ func _assert_world_brightness(tag: String) -> void:
 ## UI 越界断言（v3.4.2 五-4c）：六屏实例化，可见 Control 的 global rect 必须在视口内，
 ## 子控件不得越出父面板边界（滚动容器内容除外）
 func _assert_ui_bounds() -> void:
+	# P0-3：断言覆盖全部 UI 屏（主菜单溢出正是因未覆盖 main_menu 才漏检）
 	var screens := [
+		["res://scenes/ui/main_menu.tscn", {}],
+		["res://scenes/ui/level_select.tscn", {"level_id": "l01"}],
+		["res://scenes/ui/settings.tscn", {}],
 		["res://scenes/ui/briefing.tscn", {"level_id": "l11", "mode": "SQUAD", "difficulty": "NORMAL"}],
 		["res://scenes/ui/character_select.tscn", {"from": "levels"}],
 		["res://scenes/ui/credits.tscn", {}],
 		["res://scenes/ui/codex.tscn", {}],
 		["res://scenes/ui/achievements.tscn", {}],
+		["res://scenes/ui/archive_menu.tscn", {}],
+		["res://scenes/ui/result.tscn", {}],
 	]
 	for row in screens:
 		var inst = load(row[0]).instantiate()

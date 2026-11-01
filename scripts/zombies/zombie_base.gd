@@ -22,6 +22,16 @@ var last_damage_type: StringName = &"bullet"
 
 var stagger_timer: float = 0.0
 var attack_cooldown: float = 0.0
+# P1-7 个体差异（去同步）
+var _speed_mult: float = 1.0
+var _sniff_timer: float = 0.0
+var _jump_delay: float = 0.0
+var _jump_queued: bool = false
+var _climber: bool = false
+var _flank_offset: float = 0.0
+var _lunge_cd: float = 0.0
+var _lunge_state: int = 0     # 0 无 / 1 前摇 / 2 冲刺
+var _lunge_timer: float = 0.0
 var jump_cd: float = 0.0
 var burn_timer: float = 0.0
 var burn_dps: float = 0.0
@@ -61,6 +71,11 @@ func _ready() -> void:
 		health = max_health
 	spawn_time = Time.get_ticks_msec() / 1000.0
 	attack_cooldown = randf_range(0.2, 0.8)
+	# P1-7：速度三档（±20%）、20% 侧向包抄、25% 攀爬型、跳跃随机延迟
+	_speed_mult = randf_range(0.8, 1.2)
+	_climber = randf() < 0.25
+	_flank_offset = randf_range(60.0, 120.0) * (1.0 if randf() < 0.5 else -1.0) if randf() < 0.2 else 0.0
+	_lunge_cd = randf_range(2.0, 4.0)
 	wander_timer = randf_range(1.0, 4.0)
 	wander_dir = [-1, 1].pick_random()
 	voice_timer = randf_range(2.0, 6.0)
@@ -100,6 +115,7 @@ func _physics_process(delta: float) -> void:
 	stagger_timer = maxf(0.0, stagger_timer - delta)
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
 	jump_cd = maxf(0.0, jump_cd - delta)
+	_lunge_cd = maxf(0.0, _lunge_cd - delta)
 	scream_cd = maxf(0.0, scream_cd - delta)
 	flash_timer = maxf(0.0, flash_timer - delta)
 	voice_timer -= delta
@@ -156,6 +172,39 @@ func _ai_tick(delta: float) -> void:
 	if not alerted:
 		_wander(delta)
 		return
+	# P1-7：冲刺攻击（lunge）状态机优先
+	if _lunge_state == 1:
+		_lunge_timer -= delta
+		velocity.x = move_toward(velocity.x, 0.0, 1200.0 * delta)
+		_play_anim("attack")
+		if _lunge_timer <= 0.0:
+			_lunge_state = 2
+			_lunge_timer = 0.25
+			velocity.x = float(facing) * 520.0
+			AudioManager.play_sfx_2d(&"zombie_attack", global_position, 400.0, -6.0)
+		return
+	if _lunge_state == 2:
+		_lunge_timer -= delta
+		velocity.x = float(facing) * 520.0
+		if dist_x < 30.0 and dist_y < 46.0 and target.has_method("take_damage"):
+			target.take_damage(int(data.attack_damage * 1.3), Vector2(facing, 0), &"zombie", &"melee")
+			if target.has_method("apply_knockback"):
+				target.apply_knockback(Vector2(float(facing) * 160.0, -60.0))
+			_lunge_state = 0
+			_lunge_cd = randf_range(3.0, 5.0)
+		elif _lunge_timer <= 0.0:
+			_lunge_state = 0
+			_lunge_cd = randf_range(3.0, 5.0)
+		return
+	# P1-7：0.2-0.6s 嗅探停顿（群体节奏错开）
+	if _sniff_timer > 0.0:
+		_sniff_timer -= delta
+		velocity.x = move_toward(velocity.x, 0.0, 1200.0 * delta)
+		_play_anim("idle")
+		return
+	if randf() < 0.0015 and _sniff_timer <= 0.0:
+		_sniff_timer = randf_range(0.2, 0.6)
+		return
 	if dist_x < 26.0 and dist_y < 40.0:
 		state_name = "attack"
 		velocity.x = move_toward(velocity.x, 0.0, 900.0 * delta)
@@ -165,12 +214,13 @@ func _ai_tick(delta: float) -> void:
 		return
 	state_name = "chase"
 	facing = 1 if to_target.x > 0.0 else -1
-	var speed := data.walk_speed_max
-	if randf() < 0.15:
-		speed = 220.0
+	var speed := data.walk_speed_max * _speed_mult
 	if slow_timer > 0.0:
 		speed *= 0.7
 	velocity.x = move_toward(velocity.x, speed * float(facing), 900.0 * delta)
+	# 侧向包抄：目标点带 y 偏移的僵尸先绕行
+	if _flank_offset != 0.0 and dist_x > 120.0:
+		position.y += signf(_flank_offset) * 6.0 * delta
 	_try_jump_for_target(to_target)
 	_try_attack_door()
 	_play_anim("run")
@@ -199,21 +249,40 @@ func _wander(delta: float) -> void:
 func _try_jump_for_target(to_target: Vector2) -> void:
 	if not is_on_floor() or jump_cd > 0.0:
 		return
+	# P1-7：起跳排队 0.1-0.5s，避免整群同帧腾空
+	if _jump_queued:
+		_jump_delay -= get_physics_process_delta_time()
+		if _jump_delay <= 0.0:
+			_jump_queued = false
+			_do_jump()
+		return
 	var ground_ahead: float = level.get_ground_y(global_position.x + float(facing) * 26.0) if level else 0.0
-	# A gap ahead always triggers a jump — specials chasing from far away were
-	# previously walking straight into pits and vanishing (P1-4).
 	if ground_ahead < 0.0:
-		# Only when actually moving toward the gap.
 		if absf(to_target.x) > 12.0 or absf(velocity.x) > 12.0:
-			velocity.y = -500.0
-			jump_cd = 1.2
+			# 25% 攀爬/绕行型：在坑边停下，短暂"攀爬"后跨越
+			if _climber:
+				_play_anim("attack")
+				_jump_queued = true
+				_jump_delay = randf_range(0.35, 0.8)
+				jump_cd = 1.6
+				return
+			_jump_queued = true
+			_jump_delay = randf_range(0.1, 0.5)
+			jump_cd = 1.4
 			return
 	var needs_jump := to_target.y < -38.0
 	if is_on_wall() and absf(to_target.x) < 160.0:
 		needs_jump = true
 	if needs_jump:
-		velocity.y = -500.0
-		jump_cd = 1.2
+		_jump_queued = true
+		_jump_delay = randf_range(0.1, 0.5)
+		jump_cd = 1.4
+
+
+## 实际起跳：初速 ±15%、水平位移 ±10%
+func _do_jump() -> void:
+	velocity.y = -500.0 * randf_range(0.85, 1.15)
+	velocity.x *= randf_range(0.9, 1.1)
 
 
 func _try_attack_door() -> void:
@@ -231,6 +300,25 @@ func _try_attack_door() -> void:
 
 
 func _attack_target() -> void:
+	# P1-7：三种攻击随机——抓挠 / 冲刺扑击 / 双手挥打（击退）
+	var roll := randf()
+	if roll < 0.3 and _lunge_cd <= 0.0 and target != null:
+		_lunge_state = 1
+		_lunge_timer = 0.3
+		attack_cooldown = data.attack_interval * 1.4
+		AudioManager.play_sfx_2d(&"zombie_attack", global_position, 500.0, -10.0)
+		return
+	if roll < 0.5 and target != null:
+		# 双手挥打：小伤害 + 位移
+		attack_cooldown = data.attack_interval * 1.2
+		_play_anim("attack")
+		var dir2 := (target.global_position - global_position).normalized()
+		if target.has_method("take_damage"):
+			target.take_damage(int(data.attack_damage * 0.5), dir2, &"zombie", &"shove")
+		if target.has_method("apply_knockback"):
+			target.apply_knockback(Vector2(dir2.x * 220.0, -90.0))
+		AudioManager.play_sfx_2d(&"zombie_attack", global_position, 500.0, -8.0)
+		return
 	attack_cooldown = data.attack_interval
 	_play_anim("attack")
 	if target != null and target.has_method("take_damage"):

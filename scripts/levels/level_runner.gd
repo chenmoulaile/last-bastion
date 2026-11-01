@@ -121,6 +121,7 @@ func _ready() -> void:
 	_build_layers()
 	_build_background()
 	_build_terrain()
+	_build_buildings()
 	if dark:
 		_build_static_lights()
 	_build_bounds()
@@ -354,24 +355,98 @@ func _pick_prop() -> String:
 	return pool.pick_random()
 
 
-func _build_doors() -> void:
-	var door_kind := "wood"
-	if String(data.theme) in ["city", "military", "bridge"]:
-		door_kind = "metal"
-	if String(data.theme) == "subway":
-		door_kind = "metal"
-	for frac in [0.16, 0.36, 0.56, 0.76]:
-		var x := _nearest_ground_x(level_width * frac)
-		if x < 0.0:
+## P1-5：街区建筑体 + 可进入内部房间
+func _build_buildings() -> void:
+	_buildings = BuildingBuilder.build(self, String(data.theme), level_width, _rng)
+	var interior_index := 0
+	for b in _buildings:
+		if not bool(b.get("enterable", false)):
 			continue
+		interior_index += 1
+		var origin := Vector2(level_width + 700.0 + interior_index * 760.0, 288.0)
+		var room: Dictionary = BuildingBuilder.build_interior(self, String(data.theme), origin, _rng)
+		b["interior"] = room
+		# 房间出口
+		var exit_area := Area2D.new()
+		exit_area.position = room["exit"] + Vector2(0, -8)
+		exit_area.collision_layer = 0
+		exit_area.collision_mask = 2
+		var shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = Vector2(24, 40)
+		shape.shape = rect
+		exit_area.add_child(shape)
+		var sign_sprite := Sprite2D.new()
+		sign_sprite.texture = SpriteLibrary.prop_texture("sign")
+		sign_sprite.scale = Vector2(0.7, 0.7)
+		exit_area.add_child(sign_sprite)
+		var back: Vector2 = Vector2(float(b["door_x"]) - 26.0, float(b["ground_y"]) - 2.0)
+		exit_area.body_entered.connect(func(body: Node2D) -> void:
+			if body.is_in_group("player") and is_instance_valid(exit_area):
+				body.global_position = back
+				EventBus.notify.emit("回到街道")
+				AudioManager.play_sfx(&"door_open"))
+		add_child(exit_area)
+		# 房间补给（掩体 + 弹药）
+		var room_x: float = (room["rect"] as Rect2).position.x
+		_spawn_pickup("ammo", Vector2(room_x + 120.0, 288.0 - 24.0), 1)
+		_spawn_pickup("medkit", Vector2(room_x + 200.0, 288.0 - 24.0), 1)
+		var crate := Sprite2D.new()
+		crate.texture = SpriteLibrary.prop_texture("crate")
+		crate.position = Vector2(room_x + 260.0, 288.0 - 18.0)
+		crate.z_index = 2
+		add_child(crate)
+
+
+## 踢破可进入建筑的门 → 传送到内部房间
+func _on_door_enterable(pos: Vector2) -> void:
+	if player == null or not is_instance_valid(player):
+		return
+	for b in _buildings:
+		if not bool(b.get("enterable", false)):
+			continue
+		if absf(float(b["door_x"]) - pos.x) < 24.0:
+			var room: Dictionary = b.get("interior", {})
+			if room.is_empty():
+				return
+			_street_return = Vector2(float(b["door_x"]) - 26.0, float(b["ground_y"]) - 2.0)
+			player.global_position = room["entry"]
+			EventBus.notify.emit("进入建筑内部")
+			EventBus.level_event.emit("室内：掩体与补给")
+			AudioManager.play_sfx(&"door_open")
+			return
+
+
+var _buildings: Array = []
+var _street_return: Vector2 = Vector2.ZERO
+
+
+func _build_doors() -> void:
+	# P1-5：门只出现在建筑门框里，禁止悬空独立的门
+	var door_kind := "metal" if String(data.theme) in ["city", "military", "bridge", "subway"] else "wood"
+	for b in _buildings:
 		var door := LevelDoor.new()
 		door.level = self
 		door.kind = door_kind if _rng.randf() < 0.7 else "glass"
-		door.position = Vector2(x, get_ground_y(x))
+		door.position = Vector2(float(b["door_x"]), float(b["ground_y"]))
+		door.set_meta("building_index", _buildings.find(b))
 		interactables.add_child(door)
+		if bool(b.get("enterable", false)):
+			var room: Dictionary = b.get("interior", {})
+			door.set_meta("interior_entry", room.get("entry", Vector2.ZERO))
+			door.set_meta("street_return", Vector2(float(b["door_x"]) - 26.0, float(b["ground_y"]) - 2.0))
 
 
 func _build_windows() -> void:
+	# P1-5：窗口绳降点挂在建筑真实窗洞上
+	for b in _buildings:
+		for wpos in b.get("windows", []):
+			var window = WINDOW_RAPPEL.new()
+			window.level = self
+			window.position = wpos + Vector2(0, 2)
+			interactables.add_child(window)
+	if not _buildings.is_empty():
+		return
 	var placed := 0
 	for platform in platforms:
 		if float(platform["y"]) > 180.0:
@@ -497,17 +572,62 @@ func _build_hidden_room() -> void:
 	elif data.id in [&"l10", &"l11"]:
 		weapon = "lmg"
 	_spawn_pickup("weapon", Vector2(x - 8, platform_y - 20), 1, weapon)
+	# P1-5：隐藏房间改为真实房间——左右墙体 + 顶板 + 前景遮蔽板，
+	# 玩家接近时遮蔽板滑开（开门/揭露反馈）。
+	var room_top := platform_y - 64.0
+	for wall_x in [x - 62.0, x + 62.0]:
+		var wall := StaticBody2D.new()
+		wall.collision_layer = 1
+		wall.collision_mask = 0
+		wall.position = Vector2(wall_x, platform_y - 30.0)
+		var wshape := CollisionShape2D.new()
+		var wrect := RectangleShape2D.new()
+		wrect.size = Vector2(8, 62.0)
+		wshape.shape = wrect
+		wall.add_child(wshape)
+		interactables.add_child(wall)
+	var roof := StaticBody2D.new()
+	roof.collision_layer = 1
+	roof.collision_mask = 0
+	roof.position = Vector2(x, room_top)
+	var rshape := CollisionShape2D.new()
+	var rrect := RectangleShape2D.new()
+	rrect.size = Vector2(132, 8)
+	rshape.shape = rrect
+	roof.add_child(rshape)
+	interactables.add_child(roof)
+	var cover := ColorRect.new()
+	cover.color = Color(0.16, 0.14, 0.12, 1.0)
+	cover.position = Vector2(x - 62.0, room_top - 4.0)
+	cover.size = Vector2(124.0, 66.0)
+	cover.z_index = 6
+	cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(cover)
+	var seam := ColorRect.new()
+	seam.color = Color(0.85, 0.70, 0.15, 0.5)
+	seam.position = Vector2(x - 62.0, room_top - 4.0)
+	seam.size = Vector2(124.0, 2.0)
+	seam.z_index = 7
+	seam.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(seam)
+
 	# Trigger sits above the stash.
 	var trigger := Area2D.new()
 	trigger.collision_layer = 0
 	trigger.collision_mask = 2
-	trigger.position = Vector2(x, platform_y - 52)
+	trigger.position = Vector2(x, platform_y - 40)
 	var cshape := CollisionShape2D.new()
 	var crect := RectangleShape2D.new()
-	crect.size = Vector2(120, 110)
+	crect.size = Vector2(200, 90)
 	cshape.shape = crect
 	trigger.add_child(cshape)
-	trigger.body_entered.connect(_on_hidden_trigger)
+	trigger.body_entered.connect(func(body: Node2D) -> void:
+		_on_hidden_trigger(body)
+		if is_instance_valid(cover) and cover.position.y < 400.0:
+			var tw := cover.create_tween()
+			tw.tween_property(cover, "position:y", cover.position.y + 90.0, 0.55)
+			EventBus.notify.emit("发现隐藏补给室！")
+			AudioManager.play_sfx(&"door_open"))
 	add_child(trigger)
 
 
@@ -645,6 +765,7 @@ func _connect_events() -> void:
 	# 最终抉择信号（P0-2）：缺了这条 4-2 选完结局没有任何反应
 	EventBus.story_choice_made.connect(_on_story_choice_made)
 	EventBus.signal_agent_requested.connect(_on_signal_agent_requested)
+	EventBus.door_broken.connect(_on_door_broken_enterable)
 
 
 func _exit_tree() -> void:
@@ -983,6 +1104,11 @@ func _spawn_humans(faction: StringName, kind: StringName, count: int, at: float)
 		if first == null:
 			first = unit
 	return first
+
+
+## 门被踢破后：若为可进入建筑的门 → 传送进房间
+func _on_door_broken_enterable(pos: Vector2) -> void:
+	_on_door_enterable(pos)
 
 
 func _on_story_choice_made(choice_id: StringName, option: int) -> void:

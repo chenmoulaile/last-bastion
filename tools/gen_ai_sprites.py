@@ -30,22 +30,24 @@ COLLAPSE_H = 34      # collapsing pose height
 DEAD_W = 44          # lying-dead pose width
 
 # pose sheet cell order (row-major), index -> pose key
-POSE_KEYS = ["idle", "run_a", "run_b", "shoot", "melee", "hurt", "collapse", "dead", "crouch"]
+# 4x3 无枪姿势表（P0-1/P1-6）：12 格 = idle + 4 步态 + aim + melee + hurt + crouch + collapse + dead + jump
+POSE_KEYS = ["idle", "run_a", "run_b", "run_c", "run_d", "aim",
+             "melee", "hurt", "crouch", "collapse", "dead", "jump"]
 
 # frame counts must match SpriteLibrary.CHAR_ANIMS
 CHAR_ANIMS = {
-    "idle": 4, "run": 6, "shoot": 3, "melee": 3, "hurt": 2,
-    "die": 6, "crouch": 2, "slide": 2, "jump": 2,
+    "idle": 4, "run": 8, "shoot": 3, "melee": 3, "hurt": 2,
+    "die": 6, "crouch": 3, "slide": 2, "jump": 2,
 }
 
 SHEETS = {
-    # char_id: source filename in tools/ai_src
-    "assault": "A_3x3_sprite_sheet_grid__9_equ_2026-10-31T00-09-11.png",
-    "heavy":   "A_3x3_sprite_sheet_grid__9_equ_2026-10-31T00-10-54.png",
-    "medic":   "A_3x3_sprite_sheet_grid__9_equ_2026-10-31T00-11-04.png",
-    "ninja":   "A_3x3_sprite_sheet_grid_with_E_2026-10-31T03-33-49.png",
-    "officer": "A_3x3_sprite_sheet_grid_with_E_2026-10-31T00-44-41.png",
-    "scout":   "A_3x3_sprite_sheet_grid__9_equ_2026-10-31T00-11-38.png",
+    # char_id: 4x3 无枪姿势表（P0-1：身体帧不得包含任何枪械）
+    "assault": "A_4x3_sprite_sheet_grid_with_E_2026-11-01T08-27-13.png",
+    "heavy":   "A_4x3_sprite_sheet_grid_with_E_2026-11-01T08-27-41.png",
+    "medic":   "A_4x3_sprite_sheet_grid_with_E_2026-11-01T08-28-05.png",
+    "ninja":   "A_4x3_sprite_sheet_grid_with_E_2026-11-01T08-28-50.png",
+    "officer": "A_4x3_sprite_sheet_grid_with_E_2026-11-01T08-29-17.png",
+    "scout":   "A_4x3_sprite_sheet_grid_with_E_2026-11-01T08-29-43.png",
 }
 
 
@@ -212,7 +214,7 @@ def _band_to_cells(bands: list[tuple[int, int]], span: int, count: int = 3) -> l
     return out
 
 
-def extract_poses(sheet: Image.Image, expected: int = 9, grid: tuple[int, int] = (3, 3)) -> list[Image.Image]:
+def extract_poses(sheet: Image.Image, expected: int = 12, grid: tuple[int, int] = (4, 3)) -> list[Image.Image]:
     """Whole-sheet extraction via projection-profile band splitting.
 
     Split rows by content bands, then columns within each row band — immune to
@@ -339,9 +341,11 @@ def rot_fit(img: Image.Image, deg: float) -> Image.Image:
 # ---------------------------------------------------------------------------
 def assemble(poses: dict[str, Image.Image]) -> dict[str, Image.Image]:
     strips = {}
-    idle, ra, rb = poses["idle"], poses["run_a"], poses["run_b"]
+    idle = poses["idle"]
+    ra, rb, rc, rd = poses["run_a"], poses["run_b"], poses["run_c"], poses["run_d"]
     shoot, melee = poses["shoot"], poses["melee"]
     hurt, collapse, dead, crouch = poses["hurt"], poses["collapse"], poses["dead"], poses["crouch"]
+    jump = poses["jump"]
 
     def strip(frames):
         w = sum(f.width for f in frames)
@@ -352,16 +356,21 @@ def assemble(poses: dict[str, Image.Image]) -> dict[str, Image.Image]:
             x += f.width
         return out
 
-    strips["idle"] = strip([idle, shift(idle, dy=-1), shift(idle, dy=-2), shift(idle, dy=-1)])
-    strips["run"] = strip([ra, shift(ra, dy=-1), rb, shift(rb, dy=-1), shift(ra, dy=-2), shift(rb, dy=-2)])
+    # P1-6：idle 4 帧呼吸（胸腔/头部微动）
+    strips["idle"] = strip([idle, shift(idle, dy=-1), idle, shift(idle, dy=-1)])
+    # P1-6：8 帧完整步态循环（触地→蹬伸→腾空→落地，左右腿交替 + 躯干起伏）
+    strips["run"] = strip([
+        ra, shift(rb, dy=-1), rc, shift(rd, dy=-2),
+        shift(rc, dy=-1), rb, shift(ra, dy=-1), shift(rd, dy=-1),
+    ])
     strips["shoot"] = strip([shoot, shift(shoot, dx=-1, dy=-1), shoot])
     strips["melee"] = strip([melee, shift(melee, dx=2), shift(melee, dx=1, dy=-1)])
     strips["hurt"] = strip([hurt, shift(hurt, dx=-1)])
     strips["die"] = strip([collapse, shift(collapse, dy=-2),
                            shift(dead, squash=0.85), dead, shift(dead, dy=-1), dead])
-    strips["crouch"] = strip([crouch, shift(crouch, squash=0.94)])
+    strips["crouch"] = strip([crouch, shift(crouch, squash=0.96), shift(crouch, dy=-1)])
     strips["slide"] = strip([rot_fit(crouch, -10), rot_fit(crouch, -16)])
-    strips["jump"] = strip([shift(ra, dy=-2), shift(rb, dy=-2)])
+    strips["jump"] = strip([shift(jump, dy=-2), shift(jump, dy=1)])
     return strips
 
 
@@ -396,10 +405,11 @@ def process_character(char_id: str, filename: str) -> None:
 
     # pixelize with per-pose target geometry
     poses = {}
-    for key in ("idle", "run_a", "run_b", "shoot", "melee", "hurt", "crouch"):
+    for key in ("idle", "run_a", "run_b", "run_c", "run_d", "aim", "melee", "hurt", "crouch", "jump"):
         poses[key] = place(pixelize(poses_raw[key], FRAME, BODY_H))
     poses["collapse"] = place(pixelize(poses_raw["collapse"], FRAME, COLLAPSE_H))
     poses["dead"] = place(pixelize(poses_raw["dead"], DEAD_W, FRAME // 2))
+    poses["shoot"] = poses["aim"]  # 瞄准姿势即射击姿势（武器由 WeaponSprite 叠加）
 
     strips = assemble(poses)
     OUT.mkdir(parents=True, exist_ok=True)

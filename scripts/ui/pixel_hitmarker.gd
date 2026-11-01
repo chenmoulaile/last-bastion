@@ -18,12 +18,22 @@ func _ready() -> void:
 	visible = false
 
 
+var _flash := false
+
+
 func show_hit(color: Color) -> void:
 	_color = color
 	_timer = LIFETIME
 	_shown = true
 	_scale_big = true
 	visible = true
+	# P2-9：击杀/爆头首帧白色 flash（1 个物理帧）
+	if color.r > 0.9 and color.g < 0.8:
+		_flash = true
+		await get_tree().physics_frame
+		_flash = false
+		if is_instance_valid(self):
+			queue_redraw()
 	queue_redraw()
 	# 收到小一档（阶梯，无插值）
 	get_tree().create_timer(0.04).timeout.connect(func() -> void:
@@ -50,6 +60,8 @@ func _draw() -> void:
 	var arm := 4 if _scale_big else 3
 	var a := clampf(_timer / LIFETIME, 0.0, 1.0)
 	var color := Color(_color.r, _color.g, _color.b, a)
+	if _flash:
+		color = Color(1, 1, 1, a)
 	var shadow := Color(0, 0, 0, a * 0.5)
 	# 45° 斜线像素表：x+y=-arm..arm 的对角点
 	for i in range(-arm, arm + 1):
