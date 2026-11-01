@@ -423,11 +423,16 @@ func _test_signal_agent() -> void:
 		agent.set("_agent_pulse", 0.05)
 		agent.set("_summon_cd", 0.05)
 		var zombies_before := get_tree().get_nodes_in_group("zombies").size()
-		await get_tree().create_timer(0.6, true, false, true).timeout
+		# 召出的僵尸落在玩家 ±110px 内，可能被小队火力在等待窗内击杀；
+		# 因此改为 0.6s 内逐帧采样峰值增量（wp8 修复：原实现等 0.6s 后计数，稳定漏计为 0）。
+		var peak_delta := 0
+		for _i in 36:
+			await get_tree().process_frame
+			peak_delta = maxi(peak_delta,
+				get_tree().get_nodes_in_group("zombies").size() - zombies_before)
 		check(float(scene.get("_interference")) == 1.0 and bool(hud.get("_interference_active")),
 			"[wp6] 干扰触发：特工脉冲置位关卡干扰且 HUD 消费生效")
-		var delta := get_tree().get_nodes_in_group("zombies").size() - zombies_before
-		check(delta >= 1 and delta <= 2, "[wp6] 特工诱导 1-2 只普通僵尸 (实际 +%d)" % delta)
+		check(peak_delta >= 1 and peak_delta <= 2, "[wp6] 特工诱导 1-2 只普通僵尸 (实际 +%d)" % peak_delta)
 		# 死亡反制爆发：击杀后应再次发出 signal_interference(true) 且关卡干扰保持置位
 		var burst := [0]
 		var counter := func(_active: bool) -> void:

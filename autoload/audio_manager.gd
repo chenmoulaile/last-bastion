@@ -167,6 +167,23 @@ func stop_level_music() -> void:
 	_music_started = false
 
 
+## 退出前停掉本自治里的全部发声节点（音乐层/菜单/结算/环境/三组 SFX 池）。
+## wp8 加固：本机 Intel Arc 驱动在引擎拆除阶段偶发访问违例（exit=0xC0000005，
+## 无 Godot 崩溃回溯输出，推断非主线程拆除竞态）；让拆除期没有活跃音频流。
+func stop_all_for_exit() -> void:
+	stop_level_music()
+	for p: Node in [_menu_player, _result_player, _ambience_player]:
+		if p != null and is_instance_valid(p) and p is AudioStreamPlayer:
+			(p as AudioStreamPlayer).stop()
+	for pool: Array in [_sfx_players, _voice_players]:
+		for p in pool:
+			if is_instance_valid(p):
+				p.stop()
+	for p in _sfx2d_players:
+		if is_instance_valid(p):
+			p.stop()
+
+
 func set_intensity(value: float) -> void:
 	_intensity = clampf(value, 0.0, 1.0)
 	if not _music_started or _tank_active:

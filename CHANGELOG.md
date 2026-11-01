@@ -1,5 +1,25 @@
 # LAST BASTION 更新日志
 
+## v3.4.4（本轮 · 建筑覆盖/动画/AI 强化合并版）
+
+### 建筑与关卡
+- **wp1 全主题建筑覆盖**：`building_builder.gd` 放开主题门槛，subway/military 新增矮楼/营房立面变体并修复开窗死代码；11 关全部 `_buildings=4 enterable=2 cells>0`（l05/l06/l08/l10/l11 不再为 0），门与绳降点随建筑自动出现。
+- **wp2 程序化立面**：新增 `tools/gen_facade_tiles.py` 生成 5 主题立面图集 `facade_{theme}.png`（砖墙/抹灰/檐口/门楣立柱/地板），窗芯叠窗框并加 1/3 亮窗变体、门旁挂门牌，摆脱「立面=路面砖」观感。
+- **wp5 内部房间加固**：传送制内部房间链路验证+断言固化+真实窗口截图；过程中修复相机右界把远端房间挡在画外的缺陷（仅改 `level_runner.gd` 8 行）。
+
+### 角色与动画
+- **wp3 手臂随枪旋转**：`player.gd` 的 `_draw()` 改为肩点→握把的随 `aim_angle` 连续旋转手臂线（primary 前后手 / secondary 单臂 / melee 不画）；`ally_agent.gd` 新增 `_update_arm_visual` 保人枪同角。
+- **wp4 僵尸攻击 4 真姿势条带**：生成端 `tools/gen_ai_s2.py` 新增 `pose_attack()`（预备→前挥→接触+爪痕→收回），重生成 18 张 `*_attack.png` 与 2 张 `*_punch.png`；普攻伤害经 `_defer_contact_hit` 延迟到接触帧结算。
+- **wp7 步态 8 姿势**：`tools/gen_ai_sprites.py` 新增 `mirror_legs()`（仅水平翻转髋线以下腿带、镜像轴取腿带不透明像素重心），run 条带改为前半程原腿+后半程镜像腿，6 角色 `{char}_run.png` 重生成。
+
+### 敌人 AI
+- **wp6 信号局特工战术化**：受击瞬移换位（5s 冷却+残影+微屏震）、周期诱导尸群（玩家 500px 内每 18s 召 1-2 只）、死亡反制爆发（4s 大范围干扰+屏震）；干扰消费端 `hud.gd` 准星抖动+全屏静电噪点层。
+
+### 测试与发布（wp8）
+- 全量验收门：smoke `33/0`、campaign `209/0`、narrative `149/0`、integration `96/0`（连跑 3 轮）、performance PASS（avg 196.7 FPS / min 39.1 / commons 117 / peak 85.9MB）。
+- narrative 特工召喚断言由「等 0.6s 后计数」改为「0.6s 逐帧峰值采样」（召出僵尸可能被小队火力在窗口内击杀导致稳定漏计）；integration 绳降测试改为取第一个脚下有真实地面的窗（随机地形下 `windows[0]` 可能悬在坑洞上方的偶发加固）。
+- 版本号递增 v3.4.4：`project.godot` `config/version`，Windows 导出元数据 `file_version/product_version`，macOS `short_version/version`。
+
 ## v3.4.3（本轮 · 缺陷修复与体验升级合并版）
 
 ### P0

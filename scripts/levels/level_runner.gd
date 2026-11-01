@@ -777,6 +777,7 @@ func _connect_events() -> void:
 
 
 func _exit_tree() -> void:
+	_zgrid.clear()  # 桶里持有僵尸裸引用，退出树即释放，防止拆除阶段悬垂（wp8）
 	# _swap_view 重建关卡时会新建实例，必须断开防止悬挂回调（P0-2b）
 	if EventBus.story_choice_made.is_connected(_on_story_choice_made):
 		EventBus.story_choice_made.disconnect(_on_story_choice_made)
@@ -1568,6 +1569,7 @@ func _finish_level() -> void:
 
 # ------------------------------------------------------------------ combat ----
 func _spawn_zombie(kind: StringName, pos: Vector2, alert: bool = false) -> Node:
+	_zgrid_frame = -1  # 新僵尸须进入下一轮空间网格重建，同帧爆炸/惊动查询不可漏
 	var zd := GameManager.get_zombie(kind)
 	if zd == null:
 		zd = GameManager.get_zombie(&"common")
@@ -1942,13 +1944,56 @@ func _ground_pos(x: float) -> Vector2:
 	return Vector2(gx, get_ground_y(gx))
 
 
-func get_zombies_near(pos: Vector2, radius: float) -> Array:
-	var out: Array = []
+## 僵尸空间网格（wp8 性能修复）：原先 get_zombies_near 每次全组 O(n) 扫描，
+## 而 _apply_separation 让 120 只僵尸各自每 0.12s 查询一次 → O(n²)。
+## 网格按物理帧惰性重建（每帧一次 O(n)），小半径查询只触碰邻近桶；
+## 大半径（>160px）直接回退全组扫描，避免桶枚举反超收益。
+const ZGRID_CELL := 64.0
+const ZGRID_MAX_RADIUS := 160.0
+var _zgrid: Dictionary = {}
+var _zgrid_frame: int = -1
+
+
+func _rebuild_zgrid() -> void:
+	_zgrid.clear()
 	for z in get_tree().get_nodes_in_group("zombies"):
 		if z == null or not is_instance_valid(z) or bool(z.get("dead")):
 			continue
-		if z.global_position.distance_to(pos) <= radius:
-			out.append(z)
+		var key := Vector2i(int(floor(z.global_position.x / ZGRID_CELL)),
+			int(floor(z.global_position.y / ZGRID_CELL)))
+		if not _zgrid.has(key):
+			_zgrid[key] = []
+		_zgrid[key].append(z)
+
+
+func get_zombies_near(pos: Vector2, radius: float) -> Array:
+	var out: Array = []
+	var r := maxf(radius, 0.0)
+	if r > ZGRID_MAX_RADIUS:
+		for z in get_tree().get_nodes_in_group("zombies"):
+			if z == null or not is_instance_valid(z) or bool(z.get("dead")):
+				continue
+			if z.global_position.distance_to(pos) <= r:
+				out.append(z)
+		return out
+	var frame := Engine.get_physics_frames()
+	if frame != _zgrid_frame:
+		_rebuild_zgrid()
+		_zgrid_frame = frame
+	var cells := int(ceil(r / ZGRID_CELL))
+	var cx := int(floor(pos.x / ZGRID_CELL))
+	var cy := int(floor(pos.y / ZGRID_CELL))
+	for ix in range(cx - cells, cx + cells + 1):
+		for iy in range(cy - cells, cy + cells + 1):
+			var bucket: Variant = _zgrid.get(Vector2i(ix, iy))
+			if bucket == null:
+				continue
+			for z in bucket:
+				# 有效性与 dead 双重校验：僵尸可能在网格重建后死亡/释放
+				if z == null or not is_instance_valid(z) or bool(z.get("dead")):
+					continue
+				if z.global_position.distance_to(pos) <= r:
+					out.append(z)
 	return out
 
 

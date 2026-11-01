@@ -26,8 +26,9 @@ func _ready() -> void:
 	# v3.4.2：UI 越界断言（六屏）
 	await _assert_ui_bounds()
 	await _capture_result()
-	if _visual_failures > 0:
-		print("[SHOTS] VISUAL REGRESSION FAILURES: %d" % _visual_failures)
+	# 无论成败都打印汇总行：验收门以 stdout 中的 `FAILURES: 0` 判定全绿
+	# （wp8 修复：原实现只在失败时打印，干净运行永远不含 FAILURES 行，门必败）
+	print("[SHOTS] VISUAL REGRESSION FAILURES: %d" % _visual_failures)
 	print("[SHOTS] done")
 	get_tree().quit()
 

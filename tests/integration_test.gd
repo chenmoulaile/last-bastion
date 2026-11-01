@@ -324,15 +324,25 @@ func _test_window_rappel() -> void:
 	var windows := get_tree().get_nodes_in_group("windows")
 	_check(windows.size() >= 1, "window rappel: window spawned")
 	if windows.size() > 0:
-		var window = windows[0]
-		var player: Node2D = scene.get_player()
-		player.global_position = Vector2(window.global_position.x, window.global_position.y - 2.0)
-		var ground_y: float = scene.get_ground_y(window.global_position.x)
-		window.interact(player)
-		_check(bool(player.get("rappelling")), "window rappel: descent starts")
-		await _wait(0.6)
-		_check(not bool(player.get("rappelling")), "window rappel: descent finishes")
-		_check(absf(player.global_position.y - ground_y) < 4.0, "window rappel: lands on street")
+		# 建筑窗洞随地形随机生成，可能悬在坑洞上方（get_ground_y<0 时 interact 静默跳过）；
+		# 取第一个脚下有真实地面的窗（wp8 加固：原实现固定取 windows[0]，随机偶发失败）。
+		var window: Node2D = null
+		var ground_y := -1.0
+		for w in windows:
+			var gy: float = scene.get_ground_y(w.global_position.x)
+			if gy >= 0.0:
+				window = w
+				ground_y = gy
+				break
+		_check(window != null, "window rappel: window above ground")
+		if window != null:
+			var player: Node2D = scene.get_player()
+			player.global_position = Vector2(window.global_position.x, window.global_position.y - 2.0)
+			window.interact(player)
+			_check(bool(player.get("rappelling")), "window rappel: descent starts")
+			await _wait(0.6)
+			_check(not bool(player.get("rappelling")), "window rappel: descent finishes")
+			_check(absf(player.global_position.y - ground_y) < 4.0, "window rappel: lands on street")
 	await _close_level(scene)
 	print("[INTEGRATION] window rappel ok")
 
