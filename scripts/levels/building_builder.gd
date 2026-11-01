@@ -27,18 +27,24 @@ static func _theme_params(theme: String) -> Dictionary:
 			return {"facade_rows": FACADE_ROWS, "wall_row_hi": 1, "wall_row_lo": 5, "win_depths": [2, 4]}
 
 
-## 无碰撞 tileset：立面是"贴在街道后景上的建筑体"，玩家从前景走过
+## 无碰撞 tileset：立面是"贴在街道后景上的建筑体"，玩家从前景走过。
+## wp2：优先用专用立面图集 facade_{theme}.png（砖墙/抹灰/檐口/地板），
+## 缺失时回退 facade_suburb.png，再回退旧的道路图集。
 static func _make_visual_tileset(theme: String) -> TileSet:
 	var tile_set := TileSet.new()
 	tile_set.tile_size = Vector2i(TILE, TILE)
 	var source := TileSetAtlasSource.new()
-	var path := "res://assets/sprites/environment/tiles_%s.png" % theme
+	var path := "res://assets/sprites/environment/facade_%s.png" % theme
+	if not ResourceLoader.exists(path):
+		path = "res://assets/sprites/environment/facade_suburb.png"
+	if not ResourceLoader.exists(path):
+		path = "res://assets/sprites/environment/tiles_%s.png" % theme
 	if not ResourceLoader.exists(path):
 		path = "res://assets/sprites/environment/tiles_suburb.png"
 	source.texture = load(path)
 	source.texture_region_size = Vector2i(TILE, TILE)
 	tile_set.add_source(source, 0)
-	for row in [0, 1, 3, 5]:
+	for row in 6:
 		for col in 16:
 			source.create_tile(Vector2i(col, row))
 	return tile_set
@@ -74,6 +80,8 @@ static func build(parent: Node2D, theme: String, width: float, rng: RandomNumber
 		var door_x := x0 + BUILDING_W * 0.5
 		# 门框：左右立柱 + 门楣（压在前景层，形成"嵌在墙里"的观感）
 		_paint_door_frame(front, door_x, ground_y)
+		# wp2：门旁挂 sign 门牌（临街店铺观感）
+		_paint_door_sign(front, door_x, ground_y)
 		out.append({
 			"x0": x0, "x1": x1, "door_x": door_x,
 			"windows": windows, "enterable": enterable, "ground_y": ground_y,
@@ -103,17 +111,29 @@ static func _paint_facade(layer: TileMapLayer, front: TileMapLayer, x0: float, x
 			var tile_row := row_hi if depth >= split_depth else row_lo
 			var variant := rng.randi_range(0, 15)
 			layer.set_cell(Vector2i(col, row), 0, Vector2i(variant, tile_row))
-	# 窗洞内芯（深色）+ 窗台
+	# 窗洞内芯（深色/亮窗）+ 窗框叠加 + 窗台
+	var frame_tex := SpriteLibrary.prop_texture("window_frame")
 	for wdepth in win_depths:
 		for col in range(start_col, end_col):
 			var col_off := (col - start_col) % 6
 			if col_off in [2, 3]:
 				var hole := ColorRect.new()
-				hole.color = Color(0.05, 0.06, 0.08, 1.0)
+				# wp2：约 1/3 的窗为"亮窗"（室内透出暖光），其余盲窗深色
+				hole.color = Color(0.86, 0.68, 0.36, 1.0) if rng.randf() < 0.33 \
+						else Color(0.05, 0.06, 0.08, 1.0)
 				hole.position = Vector2(col * TILE, (base_row - wdepth) * TILE)
 				hole.size = Vector2(TILE, TILE)
 				hole.z_index = 1
 				front.add_child(hole)
+				# wp2：窗芯处叠加专用窗框贴图（32x31 缩到 16px，盖住窗洞四缘）
+				if frame_tex != null:
+					var frame := Sprite2D.new()
+					frame.texture = frame_tex
+					frame.centered = false
+					frame.scale = Vector2(0.5, 0.5)
+					frame.position = hole.position
+					frame.z_index = 2
+					front.add_child(frame)
 				if wdepth == int(win_depths[0]) and col_off == 2:
 					windows.append(Vector2(col * TILE + TILE, (base_row - wdepth) * TILE))
 	# 屋顶（前景）
@@ -133,6 +153,21 @@ static func _paint_door_frame(front: TileMapLayer, door_x: float, ground_y: floa
 	for row in range(base_row - 2, base_row):
 		front.set_cell(Vector2i(col - 2, row), 0, Vector2i(5, 5))
 		front.set_cell(Vector2i(col + 1, row), 0, Vector2i(5, 5))
+
+
+## wp2：门旁挂 sign 门牌（右立柱外侧，悬在门楣下方）
+static func _paint_door_sign(front: TileMapLayer, door_x: float, ground_y: float) -> void:
+	var tex := SpriteLibrary.prop_texture("sign")
+	if tex == null:
+		return
+	var base_row := int(ground_y / TILE)
+	var col := int(door_x / TILE)
+	var sign := Sprite2D.new()
+	sign.texture = tex
+	sign.centered = false
+	sign.position = Vector2((col + 2) * TILE + 1.0, (base_row - 3) * TILE + 12.0)
+	sign.z_index = 2
+	front.add_child(sign)
 
 
 ## 可进入房间：独立区域（远离关卡主路径），有地板/墙/平台/掩体/补给/出口。
@@ -192,11 +227,13 @@ static func build_interior(parent: Node2D, theme: String, origin: Vector2, rng: 
 	parent.add_child(plat)
 	for col in range(base_col, base_col + room_w):
 		for depth in range(1, 5):
-			layer.set_cell(Vector2i(col, base_row + depth), 0, Vector2i(rng.randi_range(0, 15), 5))
+			# wp2：立面图集 row 2 = 楼板填充（原 row 5 现在是外墙砖）
+			layer.set_cell(Vector2i(col, base_row + depth), 0, Vector2i(rng.randi_range(0, 15), 2))
 		layer.set_cell(Vector2i(col, base_row), 0, Vector2i(rng.randi_range(0, 15), 0))
 	for row in range(base_row - room_h, base_row):
-		layer.set_cell(Vector2i(base_col, row), 0, Vector2i(4, 5))
-		layer.set_cell(Vector2i(base_col + room_w - 1, row), 0, Vector2i(4, 5))
+		# wp2：立面图集 (4,4) = 内部侧墙深砖（原 (4,5) 现在是外墙砖/立柱）
+		layer.set_cell(Vector2i(base_col, row), 0, Vector2i(4, 4))
+		layer.set_cell(Vector2i(base_col + room_w - 1, row), 0, Vector2i(4, 4))
 	for col in range(base_col, base_col + room_w):
 		layer.set_cell(Vector2i(col, base_row - room_h), 0, Vector2i(rng.randi_range(0, 15), 3))
 	# 二层平台
