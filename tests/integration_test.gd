@@ -23,6 +23,7 @@ func _ready() -> void:
 	await _test_debug_tools()
 	await _test_command_mode()
 	await _test_window_rappel()
+	await _test_interior_rooms()
 	await _test_scoring()
 	await _test_audio_layers()
 	await _test_save_persistence()
@@ -334,6 +335,52 @@ func _test_window_rappel() -> void:
 		_check(absf(player.global_position.y - ground_y) < 4.0, "window rappel: lands on street")
 	await _close_level(scene)
 	print("[INTEGRATION] window rappel ok")
+
+
+## wp5-interior-rooms-harden：踢门→传送进远端房间→出口回街道（level_runner.gd:359-417）。
+func _test_interior_rooms() -> void:
+	var scene := await _open_level(&"l01")
+	var player: Node2D = scene.get_player()
+	var level_width := float(scene.get("level_width"))
+	var buildings: Array = scene.get("_buildings")
+	var enterable: Array = buildings.filter(func(b): return bool(b.get("enterable", false)))
+	var room_idx := 0
+	for b in enterable:
+		room_idx += 1
+		var room: Dictionary = b.get("interior", {})
+		# 断言1：房间建在 level_width+700+idx*760 的远端实例区（level_runner.gd:366）。
+		_check(not room.is_empty() and (room["rect"] as Rect2).position.x > level_width,
+			"interior: room#%d built at remote origin beyond level_width" % room_idx)
+	if enterable.is_empty():
+		_check(false, "interior: l01 has enterable buildings")
+	var b0: Dictionary = enterable[0] if not enterable.is_empty() else {}
+	var room0: Dictionary = b0.get("interior", {})
+	if not room0.is_empty():
+		var door_x := float(b0["door_x"])
+		var ground_y := float(b0["ground_y"])
+		var back := Vector2(door_x - 26.0, ground_y - 2.0)
+		# 断言2：踢门传送把玩家放到 room["entry"]，并记录 _street_return（:402-417）。
+		scene.call("_on_door_enterable", Vector2(door_x, ground_y))
+		_check(player.global_position.distance_to(room0["entry"]) < 0.5
+				and (scene.get("_street_return") as Vector2).distance_to(back) < 0.5,
+			"interior: door teleport to entry and street return recorded")
+		# 断言3：走进出口 Area2D 被传回街道 back 点（:370-389）。
+		var exit_area: Area2D = null
+		for child in scene.get_children():
+			if child is Area2D and (child as Area2D).position.distance_to(
+					(room0["exit"] as Vector2) + Vector2(0, -8)) < 1.0:
+				exit_area = child
+				break
+		if exit_area != null:
+			player.global_position = exit_area.global_position
+			for _i in 4:
+				await get_tree().physics_frame
+			_check(player.global_position.distance_to(back) < 8.0,
+				"interior: exit area returns player to street")
+		else:
+			_check(false, "interior: exit area returns player to street")
+	await _close_level(scene)
+	print("[INTEGRATION] interior rooms ok")
 
 
 func _test_scoring() -> void:

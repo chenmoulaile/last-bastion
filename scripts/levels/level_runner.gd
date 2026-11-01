@@ -384,6 +384,10 @@ func _build_buildings() -> void:
 		exit_area.body_entered.connect(func(body: Node2D) -> void:
 			if body.is_in_group("player") and is_instance_valid(exit_area):
 				body.global_position = back
+				# wp5：回到街道后相机右界还原到关卡宽度（房间远端实例区不再可见）
+				var cam := body.get_viewport().get_camera_2d()
+				if cam != null:
+					cam.limit_right = int(level_width)
 				EventBus.notify.emit("回到街道")
 				AudioManager.play_sfx(&"door_open"))
 		add_child(exit_area)
@@ -411,6 +415,10 @@ func _on_door_enterable(pos: Vector2) -> void:
 				return
 			_street_return = Vector2(float(b["door_x"]) - 26.0, float(b["ground_y"]) - 2.0)
 			player.global_position = room["entry"]
+			# wp5：房间建在 level_width+700 远端实例区，进门后放宽相机右界让房间可见
+			var cam := player.get_viewport().get_camera_2d()
+			if cam != null:
+				cam.limit_right = int((room["rect"] as Rect2).end.x) + 64
 			EventBus.notify.emit("进入建筑内部")
 			EventBus.level_event.emit("室内：掩体与补给")
 			AudioManager.play_sfx(&"door_open")
