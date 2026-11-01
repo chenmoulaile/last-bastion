@@ -7,6 +7,9 @@ extends CharacterBody2D
 signal died(kind: StringName, pos: Vector2, source: StringName)
 
 const GRAVITY := 1500.0
+# wp4：普攻伤害延迟到 attack 动画的接触帧（第 3 帧，index 2）——
+# ZOMBIE_ANIMS attack 为 9fps 非循环 4 帧，接触帧出现在 2/9s
+const ATTACK_CONTACT_DELAY := 2.0 / 9.0
 
 var data: ZombieData
 var level: Node = null
@@ -46,6 +49,12 @@ var separation_timer: float = 0.0
 var state_name: String = "idle"
 var pinning: bool = false
 var _retarget_timer: float = 0.0
+# wp4：接触帧伤害待结算槽（_defer_contact_hit 排入，_physics_process 计时结算）
+var _contact_hit_damage: int = 0
+var _contact_hit_dir := Vector2.ZERO
+var _contact_hit_type: StringName = &""
+var _contact_hit_knock := Vector2.ZERO
+var _contact_hit_timer: float = -1.0
 
 var sprite: AnimatedSprite2D
 var collision: CollisionShape2D
@@ -122,6 +131,10 @@ func _physics_process(delta: float) -> void:
 	slow_timer = maxf(0.0, slow_timer - delta)
 	if flash_timer <= 0.0 and sprite:
 		sprite.modulate = _base_tint
+	if _contact_hit_timer >= 0.0:
+		_contact_hit_timer -= delta
+		if _contact_hit_timer < 0.0:
+			_settle_contact_hit()
 	if burn_timer > 0.0:
 		burn_timer -= delta
 		_take_raw_damage(burn_dps * delta, &"fire", &"fire", false)
@@ -309,22 +322,41 @@ func _attack_target() -> void:
 		AudioManager.play_sfx_2d(&"zombie_attack", global_position, 500.0, -10.0)
 		return
 	if roll < 0.5 and target != null:
-		# 双手挥打：小伤害 + 位移
+		# 双手挥打：小伤害 + 位移（伤害在接触帧结算）
 		attack_cooldown = data.attack_interval * 1.2
 		_play_anim("attack")
 		var dir2 := (target.global_position - global_position).normalized()
-		if target.has_method("take_damage"):
-			target.take_damage(int(data.attack_damage * 0.5), dir2, &"zombie", &"shove")
-		if target.has_method("apply_knockback"):
-			target.apply_knockback(Vector2(dir2.x * 220.0, -90.0))
+		_defer_contact_hit(int(data.attack_damage * 0.5), dir2, &"shove", Vector2(dir2.x * 220.0, -90.0))
 		AudioManager.play_sfx_2d(&"zombie_attack", global_position, 500.0, -8.0)
 		return
 	attack_cooldown = data.attack_interval
 	_play_anim("attack")
-	if target != null and target.has_method("take_damage"):
+	if target != null:
 		var dir := (target.global_position - global_position).normalized()
-		target.take_damage(data.attack_damage, dir, &"zombie", &"melee")
+		_defer_contact_hit(data.attack_damage, dir, &"melee", Vector2.ZERO)
 	AudioManager.play_sfx_2d(&"zombie_attack", global_position, 500.0, -8.0)
+
+
+## wp4：把普攻伤害排到 attack 动画接触帧（第 3 帧）结算，与姿势前挥同步。
+## 用自身的 _physics_process 计时而非 SceneTreeTimer，僵尸死亡/场景释放时
+## 待结算自然随节点消失，不留下跨对象回调。冲刺扑击（lunge）是运动接触
+## 判定，不走这里。
+func _defer_contact_hit(damage: int, dir: Vector2, type: StringName, knock: Vector2) -> void:
+	_contact_hit_damage = damage
+	_contact_hit_dir = dir
+	_contact_hit_type = type
+	_contact_hit_knock = knock
+	_contact_hit_timer = ATTACK_CONTACT_DELAY
+
+
+func _settle_contact_hit() -> void:
+	_contact_hit_timer = -1.0
+	if dead or target == null or not is_instance_valid(target):
+		return
+	if target.has_method("take_damage"):
+		target.take_damage(_contact_hit_damage, _contact_hit_dir, &"zombie", _contact_hit_type)
+	if _contact_hit_knock != Vector2.ZERO and target.has_method("apply_knockback"):
+		target.apply_knockback(_contact_hit_knock)
 
 
 func _can_see_target() -> bool:

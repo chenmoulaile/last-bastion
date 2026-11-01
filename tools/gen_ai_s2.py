@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from gen_ai_sprites import (  # noqa: E402
@@ -70,6 +70,45 @@ def anchored(base: Image.Image, deg: float = 0.0, dx: int = 0, dy: int = 0,
     return canvas
 
 
+def pose_attack(base: Image.Image, lean: float = 0.0, dx: int = 0, dy: int = 0,
+                stretch: float = 1.0, swipe: bool = False) -> Image.Image:
+    """True attack pose instead of a shifted copy of the idle frame: the legs
+    stay planted while the upper body leans / reaches toward the target.
+    Source art faces right, so a forward lean is a clockwise rotation (negative
+    PIL angle) plus a positive dx shift. Used for attack frames 0-3 and punch.
+    """
+    fw, fh = base.size
+    legs_h = max(4, fh // 3)
+    legs = base.crop((0, fh - legs_h, fw, fh))
+    body = base.crop((0, 0, fw, fh - legs_h))
+    if lean != 0.0:
+        # rotate with expand, then centre-crop back to the original upper-body
+        # box so pixels stay 1:1 (a resize refit squashed big frames like tank)
+        r = rot(body, lean)
+        cx, cy = r.width // 2, r.height // 2
+        x0 = cx - body.width // 2
+        y0 = cy - body.height // 2
+        body = r.crop((x0, y0, x0 + body.width, y0 + body.height))
+    if stretch != 1.0:
+        body = body.resize((max(1, round(body.width * stretch)), body.height), Image.NEAREST)
+    cv = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+    cv.alpha_composite(legs, (0, fh - legs_h))
+    bx = (fw - body.width) // 2 + dx
+    by = (fh - legs_h) - body.height + dy
+    if bx >= 0 and by >= 0:
+        cv.alpha_composite(body, (bx, by))
+    else:
+        cv.paste(body, (bx, by), body)  # paste tolerates negative offsets
+    if swipe:
+        # short diagonal claw streaks ahead of the contact pose (right-facing art)
+        d = ImageDraw.Draw(cv)
+        col = (168, 34, 38, 120)
+        for i in range(3):
+            yy = fh // 3 + i * (fh // 10)
+            d.line([(fw - 16, yy), (fw - 4, yy + 4)], fill=col, width=2)
+    return cv
+
+
 def make_strips(base: Image.Image, prefix: str) -> dict[str, Image.Image]:
     fw, fh = base.size
     strips: dict[str, list[Image.Image]] = {}
@@ -77,7 +116,11 @@ def make_strips(base: Image.Image, prefix: str) -> dict[str, Image.Image]:
     strips["idle"] = [base, shift(base, dy=-1), shift(base, dy=-2), shift(base, dy=-1)]
     strips["run"] = [anchored(base, 5), anchored(base, 0, dy=-1), anchored(base, -5),
                      anchored(base, 0, dy=-1), anchored(base, 6, dy=-2), anchored(base, -6, dy=-2)]
-    strips["attack"] = [base, anchored(base, 8, dx=2), anchored(base, 10, dx=4), anchored(base, 5, dx=2)]
+    # attack: wind-up -> swing -> contact -> recover (syncs with damage frame 2)
+    strips["attack"] = [pose_attack(base, lean=7, dx=-2),
+                        pose_attack(base, lean=-5, dx=2, dy=-1),
+                        pose_attack(base, lean=-10, dx=4, stretch=1.07, swipe=True),
+                        pose_attack(base, lean=-3, dx=1)]
     strips["hurt"] = [shift(base, dx=-1), shift(base, dx=-2)]
     lying = anchored(base, 90)
     strips["die"] = [anchored(base, 15), anchored(base, 40, dy=-1), anchored(base, 70, dy=-2),
@@ -89,7 +132,10 @@ def make_strips(base: Image.Image, prefix: str) -> dict[str, Image.Image]:
             strips[extra] = [anchored(base, -8, dx=1), anchored(base, -12, dx=3, dy=-1),
                              anchored(base, -8, dx=2), anchored(base, -4, dx=1)]
         elif extra == "punch":
-            strips[extra] = [base, anchored(base, 8, dx=3), anchored(base, 5, dx=2)]
+            # charger/tank melee: wind-up -> contact -> recover
+            strips[extra] = [pose_attack(base, lean=7, dx=-1),
+                             pose_attack(base, lean=-10, dx=4, stretch=1.08, swipe=True),
+                             pose_attack(base, lean=-3, dx=1)]
         elif extra == "spit":
             strips[extra] = [anchored(base, -6), anchored(base, -10, dy=-1), anchored(base, -4)]
         elif extra == "ride":
