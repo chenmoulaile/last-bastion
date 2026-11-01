@@ -20,7 +20,8 @@ var level: Node = null
 var character: CharacterData
 var visual_id: String = "assault"
 var arm_category: StringName = &"primary"      # P0-1 手臂姿态类别
-var _arm_facing: float = 1.0
+var _drawn_angle: float = 99.0                 # wp3：上次手臂绘制角度（rad），防抖重绘
+var _drawn_facing: int = 0                     # wp3：上次手臂绘制朝向
 
 var max_hp: int = 100
 var hp: int = 100
@@ -271,21 +272,29 @@ func _setup_weapons() -> void:
 		EventBus.weapon_changed.emit(_current_weapon().id, _current_weapon().display_name)
 
 
-## P0-1：程序化手臂——从肩到握把的 2px 线，随武器类别与朝向变化
+## P0-1 + wp3：程序化手臂——肩→握把的 2px 线，随 aim_angle 连续旋转
+## （肩点固定角色本地 (2f,-22)；握把端点对齐 WeaponSprite 位置，即
+## _update_aim 里的 hand+aim_dir*4，保证手贴合枪身）
 func _draw() -> void:
 	if arm_category == &"" or is_dead:
 		return
 	var sleeve := Color(0.32, 0.34, 0.38) if character == null else character.accent.darkened(0.35)
 	var glove := Color(0.22, 0.23, 0.26)
 	var f := float(facing)
+	var shoulder := Vector2(2.0 * f, -22.0)
+	var grip := weapon_sprite.position
+	var line := grip - shoulder
+	var along := line.normalized() if line.length_squared() > 1.0 else Vector2(f, 0.0)
 	if arm_category == &"primary":
-		# 双手端枪：后手在肩、前手前伸
-		_draw_arm(Vector2(2 * f, -22), Vector2(12 * f, -17), sleeve)
-		_draw_arm(Vector2(4 * f, -20), Vector2(15 * f, -16), sleeve)
-		draw_rect(Rect2(minf(14 * f, 16 * f), -17, 2, 2), glove)
+		# 双手端枪：后手/前手沿肩→握把线 ±3px 区分
+		_draw_arm(shoulder, grip - along * 3.0, sleeve)
+		_draw_arm(shoulder + Vector2(2.0 * f, 1.0), grip + along * 3.0, sleeve)
+		draw_rect(Rect2(grip - along * 3.0 - Vector2(1, 1), Vector2(2, 2)), glove)
+		draw_rect(Rect2(grip + along * 3.0 - Vector2(1, 1), Vector2(2, 2)), glove)
 	elif arm_category == &"secondary":
-		_draw_arm(Vector2(2 * f, -22), Vector2(9 * f, -18), sleeve)
-		draw_rect(Rect2(minf(8 * f, 10 * f), -19, 2, 2), glove)
+		# 单手持枪：一条肩→握把线
+		_draw_arm(shoulder, grip, sleeve)
+		draw_rect(Rect2(grip - Vector2(1, 1), Vector2(2, 2)), glove)
 	# melee：徒手（动画自带挥臂），不画叠加
 
 
@@ -568,6 +577,11 @@ func _update_aim(delta: float) -> void:
 	weapon_sprite.z_index = 6 if facing > 0 else 4
 	_muzzle_local = hand + aim_dir * 20.0
 	muzzle.position = _muzzle_local
+	# wp3：手臂随瞄准角连续旋转——与上次绘制角度差超过 0.15 rad 或朝向翻转才重绘
+	if absf(wrapf(aim_angle - _drawn_angle, -PI, PI)) > 0.15 or _drawn_facing != facing:
+		_drawn_angle = aim_angle
+		_drawn_facing = facing
+		queue_redraw()
 
 
 func _tick_actions(delta: float) -> void:
@@ -870,10 +884,10 @@ func _update_weapon_visual() -> void:
 	weapon_sprite.visible = true
 	weapon_sprite.texture = SpriteLibrary.weapon_texture(weapon.sprite)
 	# P0-1：身体帧无枪，手臂姿态按武器类别切换（primary=双手端枪 / secondary=单手持枪 / melee=徒手挥砍）
+	# wp3：瞄准角/朝向引起的重绘统一收敛到 _update_aim 末尾，此处只管类别切换
 	var new_cat: StringName = weapon.category
-	if new_cat != arm_category or float(facing) != _arm_facing:
+	if new_cat != arm_category:
 		arm_category = new_cat
-		_arm_facing = float(facing)
 		queue_redraw()
 
 

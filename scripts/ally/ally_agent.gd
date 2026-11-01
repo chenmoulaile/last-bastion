@@ -58,6 +58,9 @@ var bile_timer: float = 0.0
 var _bt: BT.BTNode = null
 var _last_ground_y: float = 0.0
 var _delta: float = 0.016
+var _arm_angle: float = 0.0        # wp3：手臂绘制角（rad），随 target/移动方向推进
+var _drawn_angle: float = 99.0     # wp3：上次手臂绘制角度，防抖重绘
+var _drawn_facing: int = 0         # wp3：上次手臂绘制朝向
 
 var sprite: AnimatedSprite2D
 var collision: CollisionShape2D
@@ -65,11 +68,41 @@ var weapon_sprite: Sprite2D
 
 
 func _draw() -> void:
-	# P0-1：队友程序化手臂（与玩家同规则，主武器=双手端枪）
+	# P0-1 + wp3：队友程序化手臂（与玩家同规则，主武器=双手端枪）
+	# 肩点固定角色本地 (2f,-22)，握把端点对齐 weapon_sprite 位置（交战时=aim_dir，
+	# 移动时=velocity 方向，由 _update_arm_visual 推进 _arm_angle 并触发重绘）
 	var sleeve := Color(0.30, 0.32, 0.36) if data == null else data.accent.darkened(0.35)
 	var f := float(facing)
-	_draw_arm(Vector2(2 * f, -22), Vector2(12 * f, -17), sleeve)
-	_draw_arm(Vector2(4 * f, -20), Vector2(15 * f, -16), sleeve)
+	var shoulder := Vector2(2.0 * f, -22.0)
+	var grip := weapon_sprite.position if weapon_sprite != null else Vector2(8.0 * f, -18.0)
+	var line := grip - shoulder
+	var along := line.normalized() if line.length_squared() > 1.0 else Vector2(f, 0.0)
+	# 后手/前手沿肩→握把线 ±3px 区分
+	_draw_arm(shoulder, grip - along * 3.0, sleeve)
+	_draw_arm(shoulder + Vector2(2.0 * f, 1.0), grip + along * 3.0, sleeve)
+
+
+## wp3：队友没有 aim_angle——交战用 aim_dir（目标方向），移动用 velocity 方向，
+## 静止用 facing；角度或朝向变化超过 0.15 rad 才 queue_redraw。
+## 非交战时同步回写 aim_dir，让 WeaponSprite 与手臂同角（人枪一致）。
+func _update_arm_visual() -> void:
+	var dir: Vector2
+	if enemy != null and is_instance_valid(enemy):
+		dir = aim_dir
+	elif velocity.length_squared() > 100.0:
+		dir = velocity.normalized()
+		aim_dir = dir
+	else:
+		dir = Vector2(float(facing), 0.0)
+		aim_dir = dir
+	if dir.length_squared() < 0.01:
+		dir = Vector2(float(facing), 0.0)
+		aim_dir = dir
+	_arm_angle = dir.angle()
+	if absf(wrapf(_arm_angle - _drawn_angle, -PI, PI)) > 0.15 or _drawn_facing != facing:
+		_drawn_angle = _arm_angle
+		_drawn_facing = facing
+		queue_redraw()
 
 
 func _draw_arm(from: Vector2, to: Vector2, color: Color) -> void:
@@ -163,6 +196,7 @@ func _physics_process(delta: float) -> void:
 	_bt.tick(self, delta)
 	move_and_slide()
 	_update_animation()
+	_update_arm_visual()
 	_update_weapon_visual()
 	_catch_up_if_lost(delta)
 	if global_position.y > 460.0:
