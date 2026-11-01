@@ -56,15 +56,22 @@ func _assert_world_brightness(tag: String) -> void:
 	var img := get_viewport().get_texture().get_image()
 	var w := img.get_width()
 	var h := img.get_height()
-	# 上半屏世界区域（行 0..45%，排除 HUD 底部；采样网格）
-	var rows := int(h * 0.45)
+	var scale := float(w) / 640.0
+	# 世界区域（逻辑 0..300 行），排除 HUD 矩形：
+	# 左上小队面板 (0..190, 0..160)、顶部目标条 (190..450, 0..36)、
+	# 右上计分板 (480..640, 0..110)、底部 HUD 带 (0..640, 300..360)
 	var step_x := maxi(1, w / 96)
-	var step_y := maxi(1, rows / 40)
+	var step_y := maxi(1, int(300.0 * scale) / 60)
 	var total := 0.0
 	var count := 0
 	var near_black := 0
-	for y in range(0, rows, step_y):
+	for y in range(0, int(300.0 * scale), step_y):
 		for x in range(0, w, step_x):
+			var xl := float(x) / scale
+			var yl := float(y) / scale
+			if (xl < 190.0 and yl < 160.0) or (xl >= 190.0 and xl <= 450.0 and yl < 36.0) \
+					or (xl > 480.0 and yl < 110.0) or yl >= 300.0:
+				continue
 			var c := img.get_pixel(x, y)
 			var lum := 0.299 * c.r + 0.587 * c.g + 0.114 * c.b
 			total += lum
