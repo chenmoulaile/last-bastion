@@ -24,7 +24,7 @@ func _build() -> void:
 		left.add_child(key)
 		var value := UIKit.label(lines[i][1], 9, UIKit.INK)
 		value.position = Vector2(10, 19 + i * 30)
-		value.size = Vector2(320, 11)
+		UIKit.fit_width(value, 324, 11)
 		left.add_child(value)
 
 	var right := add_panel(Vector2(380, 62), Vector2(236, 232), UIKit.PANEL, UIKit.LINE)

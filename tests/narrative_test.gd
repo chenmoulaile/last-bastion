@@ -17,6 +17,7 @@ func _ready() -> void:
 	_test_weapons()
 	_test_endings()
 	await _test_wiring()
+	await _test_ui_wiring()
 	print("[NARR] checks=%d failures=%d" % [_passed + _failed, _failed])
 	print("[NARR] RESULT: %s" % ("PASS" if _failed == 0 else "FAIL"))
 	get_tree().quit()
@@ -321,3 +322,84 @@ func _test_wiring() -> void:
 			has_sledge = true
 	check(has_sledge, "[wiring] 大锤接入 l02 事件")
 	check(String(GameManager.get_level(&"l03").unlocks_weapon) == "riot_shield", "[wiring] 防暴盾经 l03 结算发放")
+
+
+# --- v3.4.2 接线断言：HUD 武器名 / 简报立绘尺寸 / 角色档案滚动 / 制作人员文本宽 ---
+func _test_ui_wiring() -> void:
+	# 1) HUD 出生武器名 = 角色 .tres 主武器
+	GameManager.selected_character = &"victor"
+	GameManager.selected_squad = []
+	GameManager.start_level(&"l01", &"SQUAD", &"NORMAL")
+	var scene: Node = load("res://scenes/levels/l01.tscn").instantiate()
+	add_child(scene)
+	await get_tree().create_timer(0.8, true, false, true).timeout
+	var hud = scene.get("hud")
+	var player: Node = scene.get("player")
+	check(hud != null and player != null, "[ui] l01 HUD/玩家存在")
+	if hud != null and player != null:
+		var st: Dictionary = player.call("get_weapon_state")
+		var weapon_name_label: Label = hud.get("_weapon_name")
+		check(weapon_name_label != null, "[ui] HUD 武器名 Label 存在")
+		if weapon_name_label != null:
+			check(weapon_name_label.text == String(st.get("display_name", "")),
+				"[ui] HUD 武器名与玩家当前武器一致（%s vs %s）" % [weapon_name_label.text, st.get("display_name", "")])
+		var expect_primary := GameManager.get_character(&"victor").primary_weapon
+		check(StringName(st.get("id", &"")) == expect_primary,
+			"[ui] 出生武器 = .tres 主武器")
+	if is_instance_valid(scene):
+		scene.queue_free()
+	await get_tree().process_frame
+
+	# 2) 简报立绘 rect = 232x130 且不越出面板
+	var brief: Node = load("res://scenes/ui/briefing.tscn").instantiate()
+	brief.setup({"level_id": "l11", "mode": "SQUAD", "difficulty": "NORMAL"})
+	add_child(brief)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var found_art := false
+	var stack: Array[Node] = [brief]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		for ch in n.get_children():
+			stack.append(ch)
+		var tr := n as TextureRect
+		if tr != null and tr.texture != null and String(tr.texture.resource_path).contains("/ui/ch"):
+			found_art = true
+			check(tr.size == Vector2(232, 130), "[ui] 简报立绘 rect = 232x130 (实际 %s)" % str(tr.size))
+			check(tr.get_global_rect().end.x <= 640.0 and tr.get_global_rect().end.y <= 360.0,
+				"[ui] 简报立绘不越出窗口")
+	check(found_art, "[ui] 找到简报仇章节立绘")
+	if is_instance_valid(brief):
+		brief.queue_free()
+	await get_tree().process_frame
+
+	# 3) 角色档案存在 ScrollContainer 且卡片数 = 10
+	var cs: Node = load("res://scenes/ui/character_select.tscn").instantiate()
+	add_child(cs)
+	await get_tree().process_frame
+	var scroll: ScrollContainer = cs.get("_scroll")
+	check(scroll != null, "[ui] 角色档案使用 ScrollContainer")
+	check((cs.get("_cards") as Dictionary).size() == 10, "[ui] 角色卡片数 = 10")
+	if is_instance_valid(cs):
+		cs.queue_free()
+	await get_tree().process_frame
+
+	# 4) 制作人员长文本宽度 ≤ 面板宽
+	var credits: Node = load("res://scenes/ui/credits.tscn").instantiate()
+	add_child(credits)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var wide_ok := true
+	var stack2: Array[Node] = [credits]
+	while not stack2.is_empty():
+		var n: Node = stack2.pop_back()
+		for ch in n.get_children():
+			stack2.append(ch)
+		var lbl := n as Label
+		if lbl != null and lbl.text.length() > 40 and (lbl.size.x > 344.0 or lbl.get_global_rect().end.x > 640.0):
+			wide_ok = false
+			print("[ui] credits wide label: %s %.0f" % [lbl.text.substr(0, 12), lbl.size.x])
+	check(wide_ok, "[ui] 制作人员长文本宽度不超过面板宽")
+	if is_instance_valid(credits):
+		credits.queue_free()
+	await get_tree().process_frame

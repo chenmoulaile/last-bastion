@@ -47,7 +47,7 @@ func _draw() -> void:
 	if not _shown:
 		return
 	var c := Vector2i(int(size.x * 0.5), int(size.y * 0.5))
-	var arm := 3 if _scale_big else 2
+	var arm := 4 if _scale_big else 3
 	var a := clampf(_timer / LIFETIME, 0.0, 1.0)
 	var color := Color(_color.r, _color.g, _color.b, a)
 	var shadow := Color(0, 0, 0, a * 0.5)

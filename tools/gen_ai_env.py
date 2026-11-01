@@ -168,14 +168,11 @@ def make_bg(src: Path, out: Path, max_h: int, colors: int = 40) -> None:
                                                                        dither=Image.Dither.NONE).convert("RGBA")
     band = decontaminate(band)
     band = strip_dark_sky(band)
-    # mirror-tile narrow bands to fill the full 960 width (seamless by construction)
+    # repeat-tile narrow bands (no mirroring: mirrored shop signs read as broken text)
     if nw < BG_W:
         pieces = [band]
-        flip = True
         while sum(p.width for p in pieces) < BG_W:
-            last = pieces[-1]
-            pieces.append(last.transpose(Image.FLIP_LEFT_RIGHT) if flip else last)
-            flip = not flip
+            pieces.append(band)
         tiled = Image.new("RGBA", (sum(p.width for p in pieces), nh), (0, 0, 0, 0))
         x = 0
         for p in pieces:
