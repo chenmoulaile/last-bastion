@@ -54,8 +54,9 @@ func add_header(kicker: String, heading: String, accent: Color = UIKit.AMBER) ->
 
 func add_footer(text: String) -> void:
 	var footer := UIKit.label(text, 7, UIKit.DIM, UIKit.font_latin())
-	footer.position = Vector2(24, 340)
-	footer.size = Vector2(592, 9)
+	footer.position = Vector2(24, 332)
+	footer.clip_text = true
+	UIKit.fit_width(footer, 592, 9)
 	add_child(footer)
 
 

@@ -121,6 +121,8 @@ func _ready() -> void:
 	_build_layers()
 	_build_background()
 	_build_terrain()
+	if dark:
+		_build_static_lights()
 	_build_bounds()
 	_build_props()
 	_build_doors()
@@ -190,8 +192,10 @@ func _build_background() -> void:
 	_add_parallax(bg, "bg_%s_mid" % theme, 0.34, 960.0, true)
 	if dark:
 		var cm := CanvasModulate.new()
-		cm.color = Color(0.17, 0.20, 0.28)
+		# P0-1a：暗关是可读的「有光池的黑暗」，不是均匀压死的黑（原 0.17,0.20,0.28 过暗）
+		cm.color = Color(0.52, 0.56, 0.68)
 		add_child(cm)
+		_add_dark_horizon_glow()
 	elif data.purifier:
 		var cm2 := CanvasModulate.new()
 		cm2.color = Color(0.78, 0.86, 1.0)  # 净化区冷白/浅蓝
@@ -220,8 +224,71 @@ func _add_parallax(parent: ParallaxBackground, texture_name: String, scale_value
 	sprite.texture = tex
 	sprite.centered = false
 	sprite.position = Vector2(0, 0)
+	# P0-1c：暗关视差提亮（ParallaxBackground 不受 CanvasModulate 影响，素材本身是深夜景）
+	if dark:
+		sprite.modulate = Color(1.35, 1.40, 1.55)
 	layer.add_child(sprite)
 	parent.add_child(layer)
+
+
+## P0-1c：地平线微光渐变（暗关可读层次）
+func _add_dark_horizon_glow() -> void:
+	var grad := Gradient.new()
+	grad.set_color(0, Color(0.30, 0.36, 0.52, 0.0))
+	grad.set_color(1, Color(0.42, 0.48, 0.62, 0.55))
+	var tex := GradientTexture2D.new()
+	tex.gradient = grad
+	tex.width = 8
+	tex.height = 64
+	tex.fill_from = Vector2(0, 0)
+	tex.fill_to = Vector2(0, 1)
+	var band := TextureRect.new()
+	band.texture = tex
+	band.position = Vector2(0, 168)
+	band.size = Vector2(640, 96)
+	band.stretch_mode = TextureRect.STRETCH_SCALE
+	band.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	band.z_index = 1
+	add_child(band)
+
+
+## P0-1b：暗关静态光源（路灯/霓虹），同屏 ≤8 保证软渲染性能
+func _build_static_lights() -> void:
+	var lamp_tex := SpriteLibrary.prop_texture("streetlight")
+	var warm := String(data.theme) in ["suburb", "city", "bridge"]
+	var color := Color(1.0, 0.82, 0.55) if warm else Color(0.65, 0.85, 1.0)
+	var step := 900.0
+	var count := 0
+	var x := 420.0
+	while x < level_width - 200.0 and count < 8:
+		var gx := _nearest_ground_x(x)
+		if gx > 0.0:
+			var light := PointLight2D.new()
+			var grad := Gradient.new()
+			grad.set_color(0, Color(1, 1, 1, 0.9))
+			grad.set_color(1, Color(1, 1, 1, 0.0))
+			var tex := GradientTexture2D.new()
+			tex.gradient = grad
+			tex.width = 128
+			tex.height = 128
+			tex.fill = GradientTexture2D.FILL_RADIAL
+			tex.fill_to = Vector2(1.0, 0.6)
+			light.texture = tex
+			light.energy = 1.05
+			light.texture_scale = 2.2
+			light.color = color
+			light.position = Vector2(gx, get_ground_y(gx) - 52.0)
+			add_child(light)
+			count += 1
+			if lamp_tex != null:
+				var lamp := Sprite2D.new()
+				lamp.texture = lamp_tex
+				lamp.position = Vector2(gx, get_ground_y(gx) - 38.0)
+				lamp.modulate = Color(1.2, 1.15, 1.05)
+				lamp.z_index = 3
+				add_child(lamp)
+		x += step
 
 
 func _build_terrain() -> void:
@@ -845,12 +912,12 @@ func _tick_comic(delta: float) -> void:
 func _add_spore_glow(z: Node) -> void:
 	var glow := Sprite2D.new()
 	var grad := Gradient.new()
-	grad.set_color(0, Color(1.0, 0.6, 0.2, 0.85))
+	grad.set_color(0, Color(1.0, 0.72, 0.30, 1.0))
 	grad.set_color(1, Color(1.0, 0.6, 0.2, 0.0))
 	var tex := GradientTexture2D.new()
 	tex.gradient = grad
-	tex.width = 20
-	tex.height = 20
+	tex.width = 24
+	tex.height = 24
 	tex.fill = GradientTexture2D.FILL_RADIAL
 	glow.texture = tex
 	glow.position = Vector2(0, -30)

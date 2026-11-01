@@ -1,5 +1,8 @@
 extends UIScreen
-## 20 achievements with icons, unlock state and counter progress.
+## 成就墙：图标、解锁状态与计数进度（v3.4.2 起卡片网格可滚动）。
+
+var _scroll: ScrollContainer
+var _grid: Control
 
 
 func _build() -> void:
@@ -9,16 +12,28 @@ func _build() -> void:
 	add_back_button(&"menu", "主菜单")
 	add_footer("成就跨存档永久记录 · 计数器成就会显示当前进度 · 全部成就是完整战役的最终目标")
 
+	# v3.4.2：22 条成就超出 360 高度，网格放入滚动容器
 	var rows := SaveSystem.ACHIEVEMENTS
+	_scroll = ScrollContainer.new()
+	_scroll.position = Vector2(24, 60)
+	_scroll.size = Vector2(592, 262)
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	add_child(_scroll)
+	var grid := Control.new()
+	grid.custom_minimum_size = Vector2(576, int(ceil(rows.size() / 4.0)) * 54 + 4)
+	grid.size = grid.custom_minimum_size
+	_scroll.add_child(grid)
+	_grid = grid
 	for i in rows.size():
 		var ach: Dictionary = rows[i]
 		var col := i % 4
 		var row := int(i / 4)
-		var pos := Vector2(24 + col * 148, 60 + row * 54)
+		var pos := Vector2(col * 148, row * 54)
 		_make_card(ach, pos)
 	var count := UIKit.label("%d / %d UNLOCKED" % [unlocked, rows.size()], 8, UIKit.AMBER, UIKit.font_latin())
-	count.position = Vector2(500, 50)
-	count.size = Vector2(116, 9)
+	count.position = Vector2(470, 50)
+	UIKit.fit_width(count, 146, 9)
 	count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	add_child(count)
 
@@ -30,7 +45,10 @@ func _make_card(ach: Dictionary, pos: Vector2) -> void:
 	card.position = pos
 	card.size = Vector2(142, 50)
 	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(card)
+	if _grid != null:
+		_grid.add_child(card)
+	else:
+		add_child(card)
 
 	var bg := Panel.new()
 	bg.size = Vector2(142, 50)

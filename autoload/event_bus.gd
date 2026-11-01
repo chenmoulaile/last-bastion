@@ -91,3 +91,4 @@ signal archive_picked_up(id: StringName)
 signal comic_intensity_spike(strength: float, seconds: float)
 signal signal_interference(active: bool)
 signal signal_agent_requested
+signal hitmarker_requested(kind: StringName)  # hit / kill / headshot

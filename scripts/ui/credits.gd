@@ -34,8 +34,7 @@ func _build() -> void:
 	right.add_child(note_head)
 	var note := UIKit.label("所有角色、感染者、场景、图标与音频均为本项目原创程序化生成资产。Left 4 Dead 2 仅作为合作丧尸生存玩法与剪影色彩语言的参考；本作不包含任何 Valve 的素材、商标或音频。", 8, UIKit.MUTED)
 	note.position = Vector2(8, 20)
-	note.size = Vector2(220, 86)
-	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	UIKit.fit_width(note, 220, 86)
 	right.add_child(note)
 
 	var font_head := UIKit.label("FONT LICENSE", 7, UIKit.AMBER, UIKit.font_latin())
@@ -44,17 +43,16 @@ func _build() -> void:
 	right.add_child(font_head)
 	var font_note := UIKit.label("Silkscreen, ZCOOL QingKe HuangYou and Noto Sans SC are distributed under the SIL Open Font License 1.1. A copy is included at assets/licenses/OFL.txt.", 7, UIKit.MUTED)
 	font_note.position = Vector2(8, 126)
-	font_note.size = Vector2(220, 58)
-	font_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	UIKit.fit_width(font_note, 220, 58)
 	right.add_child(font_note)
 
 	var thanks := UIKit.label("感谢每一位在最后防线前没有后退的人。", 9, UIKit.INK)
 	thanks.position = Vector2(8, 196)
-	thanks.size = Vector2(220, 20)
-	thanks.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	UIKit.fit_width(thanks, 220, 20)
 	right.add_child(thanks)
 
-	var footer := UIKit.label("LAST BASTION · 最后防线  ·  v1.0.0  ·  MIT", 8, UIKit.DIM, UIKit.font_latin())
+	var ver: String = ProjectSettings.get_setting("application/config/version", "0.0.0")
+	var footer := UIKit.label("LAST BASTION · 最后防线  ·  v%s  ·  MIT" % ver, 8, UIKit.DIM, UIKit.font_latin())
 	footer.position = Vector2(24, 308)
 	footer.size = Vector2(592, 10)
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

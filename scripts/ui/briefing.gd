@@ -37,7 +37,12 @@ func _build() -> void:
 
 
 func _build_left() -> void:
-	var panel := add_panel(Vector2(24, 62), Vector2(336, 226), UIKit.PANEL, UIKit.LINE)
+	# P0-6：高度按内容动态计算（最坏情况 4 目标 + 5 威胁行）
+	var obj_count := _objectives().size()
+	var threat_lines := _threat_line_count()
+	var threats_y := 129 + obj_count * 12 + 10
+	var panel_h := minf(238.0, threats_y + threat_lines * 11.0 + 8.0)
+	var panel := add_panel(Vector2(24, 62), Vector2(336, panel_h), UIKit.PANEL, UIKit.LINE)
 	var chapter := UIKit.label(UIKit.chapter_subtitle(_level.chapter), 7, UIKit.chapter_color(_level.chapter), UIKit.font_latin())
 	chapter.position = Vector2(8, 5)
 	chapter.size = Vector2(320, 8)
@@ -67,8 +72,7 @@ func _build_left() -> void:
 
 	var brief := UIKit.label(_level.briefing, 9, UIKit.INK)
 	brief.position = Vector2(8, 70)
-	brief.size = Vector2(320, 48)
-	brief.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	UIKit.fit_width(brief, 320, 48)
 	panel.add_child(brief)
 
 	var obj_head := UIKit.label("OBJECTIVES  任务目标", 7, UIKit.AMBER, UIKit.font_latin())
@@ -83,24 +87,26 @@ func _build_left() -> void:
 		panel.add_child(bullet)
 
 	var threat_head := UIKit.label("THREATS  威胁情报", 7, UIKit.RED, UIKit.font_latin())
-	threat_head.position = Vector2(8, 187)
+	threat_head.position = Vector2(8, threats_y - 10)
 	threat_head.size = Vector2(320, 8)
 	panel.add_child(threat_head)
 	var threats := UIKit.label(_threat_text(), 8, UIKit.MUTED)
-	threats.position = Vector2(8, 197)
-	threats.size = Vector2(320, 24)
-	threats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	threats.position = Vector2(8, threats_y)
+	UIKit.fit_width(threats, 320, threat_lines * 11.0)
 	panel.add_child(threats)
 
 
 func _build_right() -> void:
 	var panel := add_panel(Vector2(368, 62), Vector2(248, 226), UIKit.PANEL, UIKit.LINE)
 	var art := TextureRect.new()
-	art.texture = UIKit.texture("res://assets/sprites/ui/ch%d.png" % _level.chapter)
-	art.position = Vector2(8, 8)
-	art.size = Vector2(232, 130)
+	# P0-3：先设 expand/stretch 再设 size——否则 320×180 原生纹理构成最小尺寸，
+	# rect 被钳制到 320×180，越过面板压住下方信息并溢出窗口。
 	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	art.texture = UIKit.texture("res://assets/sprites/ui/ch%d.png" % _level.chapter)
+	art.clip_contents = true
+	art.position = Vector2(8, 8)
+	art.size = Vector2(232, 130)
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(art)
 
@@ -152,12 +158,11 @@ func _build_bottom() -> void:
 	panel.add_child(name_label)
 	var loadout := UIKit.label(_loadout_text(character), 7, UIKit.MUTED)
 	loadout.position = Vector2(40, 15)
-	loadout.size = Vector2(270, 20)
-	loadout.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	UIKit.fit_width(loadout, 270, 20)
 	panel.add_child(loadout)
 	var tip := UIKit.label("ENTER 开始任务", 7, UIKit.DIM, UIKit.font_latin())
-	tip.position = Vector2(320, 16)
-	tip.size = Vector2(140, 9)
+	tip.position = Vector2(312, 16)
+	tip.size = Vector2(126, 9)
 	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	panel.add_child(tip)
 	var start := UIKit.button("开始任务  →", 140, 30, true)
@@ -218,6 +223,12 @@ func _objectives() -> Array[String]:
 			break
 	out.append("搜索隐藏补给点（1 处）")
 	return out
+
+
+func _threat_line_count() -> int:
+	var text := _threat_text()
+	var explicit := text.split("\n").size()
+	return maxi(explicit, 1)
 
 
 func _threat_text() -> String:

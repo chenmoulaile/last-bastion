@@ -169,6 +169,15 @@ static func label(text: String, size: int = 10, color: Color = INK, font: Font =
 	return out
 
 
+## v3.4.2 UI 铁律②：长文本显式设定宽度（先开 autowrap，再两次设宽——
+## Label 的最小尺寸在设置文本时缓存，同一帧内设 size 会被钳制；延迟一帧再设即稳定）
+static func fit_width(label: Label, width: float, height: float = 0.0) -> void:
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.custom_minimum_size = Vector2(width, 0)
+	label.size = Vector2(width, height if height > 0.0 else label.size.y)
+	label.call_deferred("set_size", Vector2(width, height if height > 0.0 else label.get_rect().size.y))
+
+
 static func title(text: String, size: int = 28, color: Color = INK) -> Label:
 	var out := label(text, size, color, font_latin_bold())
 	out.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))

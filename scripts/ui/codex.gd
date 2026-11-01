@@ -75,8 +75,7 @@ func _make_entry(kind: StringName, pos: Vector2, uncommon: bool) -> void:
 
 	var desc := UIKit.label(zd.description, 7, UIKit.MUTED if recorded else Color("7e8784"))
 	desc.position = Vector2(38, 13)
-	desc.size = Vector2(248, 18)
-	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	UIKit.fit_width(desc, 248, 18)
 	card.add_child(desc)
 	if not recorded:
 		desc.text = "尚未记录 · 击杀后解锁档案"

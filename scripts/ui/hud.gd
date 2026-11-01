@@ -43,6 +43,7 @@ var _player_name: Label
 var _status_text: Label
 var _downs_text: Label
 var _weapon_name: Label
+var _reload_label: Label
 var _ammo_text: Label
 var _weapon_state: Label
 var _skill_icon: TextureRect
@@ -72,8 +73,8 @@ var _downed_label: Label
 var _event_label: Label
 var _notify_box: VBoxContainer
 
-var _crosshair: TextureRect
-var _hitmarker: TextureRect
+var _crosshair: PixelCrosshair
+var _hitmarker: PixelHitmarker
 var _hitmarker_tween: Tween
 var _damage_flash: ColorRect
 var _damage_tween: Tween
@@ -128,6 +129,9 @@ func _ready() -> void:
 	_setup_rain()
 	_apply_visibility()
 	EventBus.interact_prompt.emit("")
+	# P0-2：LevelRunner 先 spawn 玩家再建 HUD，weapon_changed 在连接前已丢失——
+	# 这里延后一帧主动向玩家拉取武器/弹药/生命/道具的全量状态。
+	call_deferred("_pull_player_state")
 
 
 func _exit_tree() -> void:
@@ -672,24 +676,30 @@ func _build_threat_arrows() -> void:
 	_root.add_child(_threat_arrows)
 
 
-func _build_crosshair() -> void:
-	_crosshair = TextureRect.new()
-	_crosshair.texture = UIKit.icon("crosshair")
-	_crosshair.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_crosshair.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_crosshair.size = Vector2(20, 20)
-	_crosshair.modulate = Color(1, 1, 1, 0.85)
-	_crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(_crosshair)
+func _on_hitmarker_requested(kind: StringName) -> void:
+	if _hitmarker == null:
+		return
+	match kind:
+		&"headshot":
+			_hitmarker.show_hit(Color(1.0, 0.62, 0.20))
+		&"kill":
+			_hitmarker.show_hit(Color(1.0, 0.32, 0.28))
+		_:
+			_hitmarker.show_hit(Color(0.95, 0.96, 0.97))
 
-	_hitmarker = TextureRect.new()
-	_hitmarker.texture = UIKit.icon("hitmarker")
-	_hitmarker.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_hitmarker.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_hitmarker.size = Vector2(16, 16)
-	_hitmarker.modulate = Color(1, 1, 1, 0)
-	_hitmarker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+func _build_crosshair() -> void:
+	# P1-7：像素准星全部程序化 _draw()，不再使用位图放大
+	_crosshair = PixelCrosshair.new()
+	_root.add_child(_crosshair)
+	_hitmarker = PixelHitmarker.new()
 	_root.add_child(_hitmarker)
+	EventBus.hitmarker_requested.connect(_on_hitmarker_requested)
+	_reload_label = UIKit.label("装填中", 7, UIKit.AMBER)
+	_reload_label.size = Vector2(40, 9)
+	_reload_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_reload_label.visible = false
+	_root.add_child(_reload_label)
 
 
 func _build_pause() -> void:
@@ -829,6 +839,25 @@ func _on_ammo_changed(mag: int, reserve: int) -> void:
 	_refresh_ammo()
 
 
+## P0-2 / P2-9：HUD 出生状态主动拉取
+func _pull_player_state() -> void:
+	var player = level.get("player") if level != null else null
+	if player == null or not is_instance_valid(player) or not player.has_method("get_weapon_state"):
+		return
+	var st: Dictionary = player.call("get_weapon_state")
+	if st.is_empty():
+		return
+	_weapon_id = StringName(st.get("id", &"m9"))
+	_weapon_name.text = String(st.get("display_name", ""))
+	_weapon_state.text = String(st.get("category", "")).to_upper()
+	_weapon_mag = int(st.get("mag", 0))
+	_weapon_reserve = int(st.get("reserve", -1))
+	_refresh_ammo()
+	_refresh_player(true)
+	_refresh_team()
+	_refresh_weapon()
+
+
 func _on_weapon_changed(id: StringName, display_name: String) -> void:
 	_weapon_id = id
 	_weapon_name.text = display_name
@@ -909,14 +938,9 @@ func _on_level_event(text: String) -> void:
 
 
 func _on_enemy_died(_kind: StringName, _pos: Vector2, _score: int) -> void:
-	if _hitmarker_tween != null and _hitmarker_tween.is_valid():
-		_hitmarker_tween.kill()
-	_hitmarker.modulate = Color(1, 0.9, 0.6, 1)
-	_hitmarker.scale = Vector2(1.6, 1.6)
-	_hitmarker_tween = create_tween()
-	_hitmarker_tween.set_parallel(true)
-	_hitmarker_tween.tween_property(_hitmarker, "modulate:a", 0.0, 0.22)
-	_hitmarker_tween.tween_property(_hitmarker, "scale", Vector2.ONE, 0.22)
+	# 击杀：红色 X（P1-7 三色反馈）
+	if _hitmarker != null:
+		_hitmarker.show_hit(Color(1.0, 0.32, 0.28))
 
 
 func _on_damage_flash() -> void:
@@ -1084,17 +1108,34 @@ func _update_crosshair() -> void:
 	if _pause_open:
 		_crosshair.visible = false
 		_hitmarker.visible = false
+		if _reload_label != null:
+			_reload_label.visible = false
 		return
 	var mouse := _root.get_local_mouse_position()
 	_crosshair.visible = true
-	_hitmarker.visible = true
-	_crosshair.position = mouse - Vector2(10, 10)
-	_hitmarker.position = mouse - Vector2(8, 8)
+	_crosshair.position = (mouse - Vector2(16, 16)).floor()
+	_hitmarker.position = (mouse - Vector2(12, 12)).floor()
 	var player = level.get("player") if level != null else null
-	if player != null and is_instance_valid(player):
-		var spread: float = 1.0 + clampf(float(player.get("spread_heat")), 0.0, 4.0) * 0.5
-		_crosshair.scale = Vector2(spread, spread)
-		_crosshair.modulate.a = 0.9 if not bool(player.get("is_downed")) else 0.25
+	if player == null or not is_instance_valid(player):
+		return
+	var heat: float = clampf(float(player.get("spread_heat")), 0.0, 6.0)
+	# 扩散只改间距：基础 3px + heat×1.5px，上限 12px
+	_crosshair.spread_px = clampi(3 + int(round(heat * 1.5)), 3, 12)
+	var reloading: bool = bool(player.get("reloading"))
+	_crosshair.state = 1 if reloading else 0
+	if reloading:
+		# 6FPS 步进旋转
+		_crosshair.reload_phase = int(Time.get_ticks_msec() / 166.0) % 8
+	var a := 0.9
+	if bool(player.get("is_downed")):
+		a = 0.25
+	elif DialogueManager.is_playing():
+		a = 0.45
+	_crosshair.effective_alpha = a
+	_crosshair.queue_redraw()
+	if _reload_label != null:
+		_reload_label.visible = reloading
+		_reload_label.position = (mouse + Vector2(-20, 16)).floor()
 
 
 func _update_hitmarker() -> void:

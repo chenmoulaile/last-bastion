@@ -93,6 +93,7 @@ var burn_timer: float = 0.0
 var burn_dps: float = 0.0
 var flashlight_on: bool = false
 var flashlight: PointLight2D = null
+var _flashlight_tex: GradientTexture2D = null
 var revive_target: Node = null
 var revive_progress: float = 0.0
 var interact_target: Node = null
@@ -157,6 +158,36 @@ func _stealth_condition() -> bool:
 	return _stealth_ok
 
 
+func _update_flashlight() -> void:
+	# P0-1b：手电锥沿瞄准方向偏移（锥形渐变朝视线方向）
+	if flashlight == null or not flashlight_on:
+		return
+	flashlight.position = Vector2(6.0 + aim_dir.x * 10.0, -20.0 + aim_dir.y * 8.0)
+	flashlight.rotation = aim_angle
+
+
+func _spawn_muzzle_light(origin: Vector2) -> void:
+	# P0-1b：开枪瞬间 60ms 小范围补光
+	var light := PointLight2D.new()
+	var grad := Gradient.new()
+	grad.set_color(0, Color(1.0, 0.9, 0.6, 0.95))
+	grad.set_color(1, Color(1.0, 0.9, 0.6, 0.0))
+	var tex := GradientTexture2D.new()
+	tex.gradient = grad
+	tex.width = 64
+	tex.height = 64
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	light.texture = tex
+	light.energy = 1.4
+	light.texture_scale = 1.3
+	light.position = origin
+	light.z_index = 20
+	add_child(light)
+	var tw := create_tween()
+	tw.tween_property(light, "energy", 0.0, 0.06)
+	tw.tween_callback(light.queue_free)
+
+
 func _tick_passives(delta: float) -> void:
 	_marcus_block_cd = maxf(0.0, _marcus_block_cd - delta)
 	_lucia_mark_cd = maxf(0.0, _lucia_mark_cd - delta)
@@ -181,6 +212,22 @@ func _setup_camera() -> void:
 	camera.limit_bottom = 360
 	camera.limit_smoothed = true
 	camera.position = Vector2(0, -80)
+
+
+## P0-2：HUD 主动拉取用的武器状态快照（id/名称/类别/弹匣/备弹）
+func get_weapon_state() -> Dictionary:
+	var w := _current_weapon()
+	if w == null:
+		return {}
+	var state: Dictionary = ammo.get(w.id, {})
+	return {
+		"id": w.id,
+		"display_name": w.display_name,
+		"category": String(w.category),
+		"mag": int(state.get("mag", 0)),
+		"reserve": int(state.get("reserve", -1)),
+		"automatic": w.automatic,
+	}
 
 
 func _setup_weapons() -> void:
@@ -214,9 +261,10 @@ func _create_flashlight() -> void:
 	flashlight.energy = 1.1
 	flashlight.texture_scale = 1.7
 	flashlight.color = Color(1.0, 0.93, 0.72)
-	flashlight.position = Vector2(0, -20)
+	flashlight.position = Vector2(10, -20)
 	flashlight.enabled = false
 	add_child(flashlight)
+	_flashlight_tex = tex
 
 
 func _input(event: InputEvent) -> void:
@@ -251,6 +299,7 @@ func _physics_process(delta: float) -> void:
 		return
 	_tick_passives(delta)
 	_update_aim(delta)
+	_update_flashlight()
 	_tick_actions(delta)
 	_tick_movement(delta)
 	_update_animation()
@@ -587,6 +636,7 @@ func _fire_weapon(weapon: WeaponData) -> void:
 	AudioManager.play_sfx(&"gunshot", 1.0, -8.0)
 	# 消音武器（露西亚「耳语」）：引敌半径 900 -> 120（P4-1）
 	EventBus.gunshot.emit(global_position, 120.0 if weapon.silenced else 900.0)
+	_spawn_muzzle_light(origin)
 	EventBus.shake(0.8 if weapon.id != &"shotgun" else 1.6)
 	shoot_anim_timer = 0.16
 	last_shot_time = Time.get_ticks_msec() / 1000.0
@@ -636,6 +686,8 @@ func _apply_hit(weapon: WeaponData, hit: Dictionary, dir: Vector2) -> void:
 			if zd != null and bool(zd.get("is_special")):
 				damage *= 1.2
 		collider.apply_damage(int(round(damage)), -dir, is_head, &"player", dmg_type)
+		if collider.is_in_group("zombies"):
+			EventBus.hitmarker_requested.emit(&"headshot" if is_head else &"hit")
 		Fx.blood(level.fx_layer, point, dir, 1.2 if is_head else 0.9)
 		if is_head:
 			EventBus.hitstop.emit(0.03)

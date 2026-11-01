@@ -7,6 +7,7 @@ var _selected: StringName = &"assault"
 var _bottom_portrait: TextureRect
 var _bottom_name: Label
 var _bottom_skill: Label
+var _scroll: ScrollContainer
 
 
 func setup(payload: Dictionary) -> void:
@@ -20,14 +21,29 @@ func _build() -> void:
 	add_back_button(_back_target, "返回")
 	add_footer("点击卡片设为出战角色 · 每名角色拥有独立主武器与主动技能 · 队友由 AI 自动补齐")
 
+	# P0-4：10 张卡超出 360 逻辑高度，放入滚动容器（滚轮 + 拖动），
+	# 选中详情面板固定在滚动区之外。
 	var characters := GameManager.get_playable_characters()
+	_scroll = ScrollContainer.new()
+	_scroll.position = Vector2(24, 62)
+	_scroll.size = Vector2(592, 230)
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	_scroll.mouse_filter = Control.MOUSE_FILTER_PASS
+	add_child(_scroll)
+	var grid := Control.new()
+	grid.name = "CardGrid"
+	var rows := int(ceil(characters.size() / 3.0))
+	grid.custom_minimum_size = Vector2(576, rows * 118 + 4)
+	grid.size = grid.custom_minimum_size
+	_scroll.add_child(grid)
 	for i in characters.size():
 		var c: CharacterData = characters[i]
 		var col := i % 3
 		var row := int(i / 3)
-		var pos := Vector2(24 + col * 198, 62 + row * 118)
+		var pos := Vector2(col * 194, row * 118)
 		var card := _make_card(c, pos)
-		add_child(card)
+		grid.add_child(card)
 		_cards[String(c.id)] = card
 	_refresh_cards()
 	_build_bottom()
