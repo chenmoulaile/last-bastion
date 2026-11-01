@@ -10,12 +10,29 @@ const FACADE_ROWS := 6          # 建筑高度（6 × 16 = 96px）
 const BUILDING_W := 300.0
 
 
+## 无碰撞 tileset：立面是"贴在街道后景上的建筑体"，玩家从前景走过
+static func _make_visual_tileset(theme: String) -> TileSet:
+	var tile_set := TileSet.new()
+	tile_set.tile_size = Vector2i(TILE, TILE)
+	var source := TileSetAtlasSource.new()
+	var path := "res://assets/sprites/environment/tiles_%s.png" % theme
+	if not ResourceLoader.exists(path):
+		path = "res://assets/sprites/environment/tiles_suburb.png"
+	source.texture = load(path)
+	source.texture_region_size = Vector2i(TILE, TILE)
+	tile_set.add_source(source, 0)
+	for row in [0, 1, 3, 5]:
+		for col in 16:
+			source.create_tile(Vector2i(col, row))
+	return tile_set
+
+
 ## 返回 [{"x0","x1","door_x","windows":[x...],"enterable":bool}]
 static func build(parent: Node2D, theme: String, width: float, rng: RandomNumberGenerator) -> Array:
 	if theme not in ["suburb", "city", "bridge"]:
 		return []
 	var out: Array = []
-	var tile_set := TerrainBuilder._make_tileset(theme)
+	var tile_set := _make_visual_tileset(theme)
 	var layer := TileMapLayer.new()
 	layer.name = "Buildings"
 	layer.tile_set = tile_set
@@ -102,7 +119,7 @@ static func _paint_door_frame(front: TileMapLayer, door_x: float, ground_y: floa
 ## 可进入房间：独立区域（远离关卡主路径），有地板/墙/平台/掩体/补给/出口。
 ## 返回 {"entry": Vector2, "exit": Vector2}
 static func build_interior(parent: Node2D, theme: String, origin: Vector2, rng: RandomNumberGenerator) -> Dictionary:
-	var tile_set := TerrainBuilder._make_tileset(theme)
+	var tile_set := _make_visual_tileset(theme)
 	var layer := TileMapLayer.new()
 	layer.tile_set = tile_set
 	layer.z_index = 0
@@ -112,6 +129,48 @@ static func build_interior(parent: Node2D, theme: String, origin: Vector2, rng: 
 	var room_h := 9
 	var base_col := int(origin.x / TILE)
 	var base_row := int(origin.y / TILE)
+	# 房间实体：地板/左右墙/顶板（内部空间必须有碰撞）
+	var body := StaticBody2D.new()
+	body.collision_layer = 1
+	body.collision_mask = 0
+	body.position = Vector2(base_col * TILE + room_w * TILE * 0.5, base_row * TILE + 2.5 * TILE)
+	var shape := CollisionShape2D.new()
+	var rect := RectangleShape2D.new()
+	rect.size = Vector2(room_w * TILE, 5 * TILE)
+	shape.shape = rect
+	body.add_child(shape)
+	parent.add_child(body)
+	var left_wall := StaticBody2D.new()
+	left_wall.collision_layer = 1
+	left_wall.collision_mask = 0
+	left_wall.position = Vector2(base_col * TILE + 4.0, base_row * TILE - room_h * TILE * 0.5)
+	var lshape := CollisionShape2D.new()
+	var lrect := RectangleShape2D.new()
+	lrect.size = Vector2(8, room_h * TILE)
+	lshape.shape = lrect
+	left_wall.add_child(lshape)
+	parent.add_child(left_wall)
+	var right_wall := StaticBody2D.new()
+	right_wall.collision_layer = 1
+	right_wall.collision_mask = 0
+	right_wall.position = Vector2(base_col * TILE + room_w * TILE - 4.0, base_row * TILE - room_h * TILE * 0.5)
+	var rshape := CollisionShape2D.new()
+	var rrect := RectangleShape2D.new()
+	rrect.size = Vector2(8, room_h * TILE)
+	rshape.shape = rrect
+	right_wall.add_child(rshape)
+	parent.add_child(right_wall)
+	var plat := StaticBody2D.new()
+	plat.collision_layer = 1
+	plat.collision_mask = 0
+	plat.position = Vector2(base_col * TILE + room_w * TILE * 0.5, (base_row - 4) * TILE)
+	var pshape := CollisionShape2D.new()
+	var prect := RectangleShape2D.new()
+	prect.size = Vector2((room_w - 8) * TILE, 6)
+	pshape.shape = prect
+	pshape.one_way_collision = true
+	plat.add_child(pshape)
+	parent.add_child(plat)
 	for col in range(base_col, base_col + room_w):
 		for depth in range(1, 5):
 			layer.set_cell(Vector2i(col, base_row + depth), 0, Vector2i(rng.randi_range(0, 15), 5))
