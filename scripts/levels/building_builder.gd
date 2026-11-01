@@ -2,12 +2,29 @@ class_name BuildingBuilder
 extends RefCounted
 ## P1-5 街区建筑：带外墙/门框/窗洞的 2 层建筑体，门嵌在门框里；
 ## 部分建筑可进入（独立房间实例 + 出口），窗洞用于绳降点。
-## 仅在 suburb / city / bridge 主题生成，其余主题保持原样。
+## wp1：所有主题都生成——subway 为地铁站口/票房矮楼，military 为营房/工事，
+## suburb / city / bridge 维持原临街楼参数（见 _theme_params）。
 
 const TILE := 16
 
-const FACADE_ROWS := 6          # 建筑高度（6 × 16 = 96px）
+const FACADE_ROWS := 6          # 默认建筑高度（6 × 16 = 96px）
 const BUILDING_W := 300.0
+
+
+## 按主题取立面参数：
+## facade_rows 建筑高度（tile 行数）；wall_row_hi/lo 上/下段墙体 tile 行；
+## win_depths 开窗的 depth 层（0 = 最底层）。build() 骨架（4 幢、前 2 幢可进入）各主题一致。
+static func _theme_params(theme: String) -> Dictionary:
+	match theme:
+		"subway":
+			# 地铁站口/票房矮楼：4 层高，上下两层开窗
+			return {"facade_rows": 4, "wall_row_hi": 1, "wall_row_lo": 5, "win_depths": [1, 3]}
+		"military":
+			# 营房/沙袋工事：5 层高，上下两层开窗
+			return {"facade_rows": 5, "wall_row_hi": 1, "wall_row_lo": 5, "win_depths": [1, 3]}
+		_:
+			# 临街楼：6 层高，depth 2/4 两层开窗（原参数）
+			return {"facade_rows": FACADE_ROWS, "wall_row_hi": 1, "wall_row_lo": 5, "win_depths": [2, 4]}
 
 
 ## 无碰撞 tileset：立面是"贴在街道后景上的建筑体"，玩家从前景走过
@@ -29,9 +46,8 @@ static func _make_visual_tileset(theme: String) -> TileSet:
 
 ## 返回 [{"x0","x1","door_x","windows":[x...],"enterable":bool}]
 static func build(parent: Node2D, theme: String, width: float, rng: RandomNumberGenerator) -> Array:
-	if theme not in ["suburb", "city", "bridge"]:
-		return []
 	var out: Array = []
+	var params := _theme_params(theme)
 	var tile_set := _make_visual_tileset(theme)
 	var layer := TileMapLayer.new()
 	layer.name = "Buildings"
@@ -54,7 +70,7 @@ static func build(parent: Node2D, theme: String, width: float, rng: RandomNumber
 		var enterable := enterable_left > 0
 		if enterable:
 			enterable_left -= 1
-		var windows := _paint_facade(layer, front, x0, x1, ground_y, rng)
+		var windows := _paint_facade(layer, front, x0, x1, ground_y, rng, params)
 		var door_x := x0 + BUILDING_W * 0.5
 		# 门框：左右立柱 + 门楣（压在前景层，形成"嵌在墙里"的观感）
 		_paint_door_frame(front, door_x, ground_y)
@@ -66,41 +82,44 @@ static func build(parent: Node2D, theme: String, width: float, rng: RandomNumber
 
 
 static func _paint_facade(layer: TileMapLayer, front: TileMapLayer, x0: float, x1: float,
-		ground_y: float, rng: RandomNumberGenerator) -> Array:
+		ground_y: float, rng: RandomNumberGenerator, params: Dictionary) -> Array:
+	var facade_rows := int(params["facade_rows"])
+	var row_hi := int(params["wall_row_hi"])
+	var row_lo := int(params["wall_row_lo"])
+	var win_depths: Array = params["win_depths"]
+	var split_depth := int(ceil(facade_rows / 2.0))   # 此 depth 以上用上段行，以下用下段行
 	var start_col := int(x0 / TILE)
 	var end_col := int(ceil(x1 / TILE))
 	var base_row := int(ground_y / TILE)   # 18
 	var windows: Array = []
 	for col in range(start_col, end_col):
-		for depth in range(0, FACADE_ROWS):
+		for depth in range(0, facade_rows):
 			var row := base_row - depth
-			# 窗洞：上两层每隔 5 列留 2 格空
-			var is_window_row := depth == 2 or depth == 4
+			# 窗洞：窗行（win_depths）每隔 5 列留 2 格空；两窗层都正确开窗
+			var is_window_row := depth in win_depths
 			var col_off := (col - start_col) % 6
-			if is_window_row and col_off in [2, 3] and depth == 3:
-				continue
 			if is_window_row and col_off in [2, 3]:
 				continue
-			var tile_row := 1 if depth >= 3 else 5
+			var tile_row := row_hi if depth >= split_depth else row_lo
 			var variant := rng.randi_range(0, 15)
 			layer.set_cell(Vector2i(col, row), 0, Vector2i(variant, tile_row))
 	# 窗洞内芯（深色）+ 窗台
-	for depth in [2, 4]:
+	for wdepth in win_depths:
 		for col in range(start_col, end_col):
 			var col_off := (col - start_col) % 6
 			if col_off in [2, 3]:
 				var hole := ColorRect.new()
 				hole.color = Color(0.05, 0.06, 0.08, 1.0)
-				hole.position = Vector2(col * TILE, (base_row - depth) * TILE)
+				hole.position = Vector2(col * TILE, (base_row - wdepth) * TILE)
 				hole.size = Vector2(TILE, TILE)
 				hole.z_index = 1
 				front.add_child(hole)
-				if depth == 2 and col_off == 2:
-					windows.append(Vector2(col * TILE + TILE, (base_row - depth) * TILE))
+				if wdepth == int(win_depths[0]) and col_off == 2:
+					windows.append(Vector2(col * TILE + TILE, (base_row - wdepth) * TILE))
 	# 屋顶（前景）
 	for col in range(start_col - 1, end_col + 1):
-		front.set_cell(Vector2i(col, base_row - FACADE_ROWS), 0, Vector2i(rng.randi_range(0, 15), 3))
-		front.set_cell(Vector2i(col, base_row - FACADE_ROWS - 1), 0, Vector2i(rng.randi_range(0, 15), 3))
+		front.set_cell(Vector2i(col, base_row - facade_rows), 0, Vector2i(rng.randi_range(0, 15), 3))
+		front.set_cell(Vector2i(col, base_row - facade_rows - 1), 0, Vector2i(rng.randi_range(0, 15), 3))
 	return windows
 
 
