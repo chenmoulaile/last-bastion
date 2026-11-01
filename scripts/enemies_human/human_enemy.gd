@@ -66,18 +66,16 @@ func _tint() -> Color:
 
 
 var _agent_pulse := 12.0
+# wp6：信号局特工专属招式状态（仅 kind==agent 使用）
+var _blink_cd := 0.0        # 受击瞬移冷却
+var _summon_cd := 10.0      # 诱导尸群冷却（首次接敌后 10s）
 
 
 func _physics_process(delta: float) -> void:
 	if dead or GameManager.state != GameManager.State.PLAYING:
 		return
 	if kind == &"agent":
-		_agent_pulse -= delta
-		if _agent_pulse <= 0.0:
-			_agent_pulse = 12.0
-			EventBus.signal_interference.emit(true)
-			var t := get_tree().create_timer(2.0)
-			t.timeout.connect(func() -> void: EventBus.signal_interference.emit(false))
+		_tick_agent(delta)
 	hurt_flash = maxf(0.0, hurt_flash - delta)
 	if hurt_flash <= 0.0:
 		sprite.modulate = _tint()
@@ -117,6 +115,71 @@ func _physics_process(delta: float) -> void:
 	velocity.x = move_toward(velocity.x, move * 130.0, 900.0 * delta)
 	move_and_slide()
 	_play_anim()
+
+
+# --- wp6：信号局特工（kind==agent）专属战术 ---------------------------------
+## 脉冲干扰：每 12s 一次 2s 干扰（原 P1-7 行为，改由统一窗口发出）；
+## 诱导尸群：玩家进入 500px 后每 18s 在玩家身边召出 1-2 只普通僵尸。
+func _tick_agent(delta: float) -> void:
+	_agent_pulse -= delta
+	if _agent_pulse <= 0.0:
+		_agent_pulse = 12.0
+		_agent_interference(2.0)
+	_blink_cd = maxf(0.0, _blink_cd - delta)
+	_summon_cd = maxf(0.0, _summon_cd - delta)
+	if _summon_cd <= 0.0 and level != null:
+		var p: Node2D = level.get_player()
+		if p != null and is_instance_valid(p) and not bool(p.get("is_dead")) \
+				and global_position.distance_to(p.global_position) < 500.0:
+			_summon_zombie_wave()
+
+
+## 发出一段干扰窗口：置 true 后 `seconds` 秒再置 false（计时器独立于本节点存活）。
+func _agent_interference(seconds: float) -> void:
+	EventBus.signal_interference.emit(true)
+	var t := get_tree().create_timer(seconds)
+	t.timeout.connect(func() -> void: EventBus.signal_interference.emit(false))
+
+
+## 受击瞬移换位：from_dir 语义为「受害者→攻击者」，逃逸方向取其反向。
+func _agent_blink(from_dir: Vector2) -> void:
+	_blink_cd = 5.0
+	var side := -signf(from_dir.x) if absf(from_dir.x) > 0.05 else float(-facing)
+	var width: float = level.level_width
+	var new_x := clampf(global_position.x + side * randf_range(110.0, 150.0),
+		80.0, maxf(100.0, width - 80.0))
+	var gy: float = level.get_ground_y(new_x)
+	if gy < 0.0:
+		return
+	var fx_parent: Node = level.fx_layer if level.fx_layer != null else level
+	Fx.smoke(fx_parent, global_position + Vector2(0, -20))
+	global_position = Vector2(new_x, gy - 2.0)
+	Fx.smoke(fx_parent, global_position + Vector2(0, -20))
+	EventBus.screen_shake.emit(1.5)
+
+
+## 诱导尸群：在玩家身边 ±110px 落地 1-2 只普通僵尸（alert 直接锁定玩家）。
+func _summon_zombie_wave() -> void:
+	_summon_cd = 18.0
+	if level == null:
+		return
+	var player: Node2D = level.get_player()
+	if player == null or not is_instance_valid(player):
+		return
+	var count := 1 + (randi() % 2)
+	var width: float = level.level_width
+	var spawned := 0
+	for i in count:
+		var x := clampf(player.global_position.x + randf_range(-110.0, 110.0),
+			80.0, maxf(100.0, width - 80.0))
+		var gy: float = level.get_ground_y(x)
+		if gy < 0.0:
+			continue
+		level._spawn_zombie(&"common", Vector2(x, gy - 2.0), true)
+		spawned += 1
+	if spawned > 0:
+		EventBus.notify.emit("信号局特工：诱导尸群！")
+		EventBus.zombie_scream.emit(global_position, 300.0)
 
 
 func _acquire_target() -> void:
@@ -230,6 +293,9 @@ func apply_damage(amount: int, from_dir: Vector2, is_head: bool, source: StringN
 	if seeking_cover <= 0.0 and level != null:
 		seeking_cover = 2.0
 		cover_point = global_position - Vector2(signf(from_dir.x) * 90.0, 0)
+	# wp6：特工受击瞬移换位（仅存活时）
+	if health > 0 and kind == &"agent" and _blink_cd <= 0.0 and level != null:
+		_agent_blink(from_dir)
 	if health <= 0:
 		dead = true
 		_play_die()
@@ -243,3 +309,8 @@ func _play_die() -> void:
 	tw.tween_property(sprite, "modulate:a", 0.0, 1.2)
 	tw.tween_callback(queue_free)
 	EventBus.enemy_died.emit(kind, global_position, 400)
+	# wp6：特工死亡反制——一次大范围干扰爆发（4s）+ 屏幕震动
+	if kind == &"agent":
+		EventBus.notify.emit("信号局特工：信号反制爆发！")
+		EventBus.screen_shake.emit(4.0)
+		_agent_interference(4.0)

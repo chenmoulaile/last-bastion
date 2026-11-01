@@ -18,6 +18,7 @@ func _ready() -> void:
 	_test_endings()
 	await _test_wiring()
 	await _test_ui_wiring()
+	await _test_signal_agent()
 	print("[NARR] checks=%d failures=%d" % [_passed + _failed, _failed])
 	print("[NARR] RESULT: %s" % ("PASS" if _failed == 0 else "FAIL"))
 	get_tree().quit()
@@ -402,4 +403,42 @@ func _test_ui_wiring() -> void:
 	check(wide_ok, "[ui] 制作人员长文本宽度不超过面板宽")
 	if is_instance_valid(credits):
 		credits.queue_free()
+	await get_tree().process_frame
+
+
+# --- wp6 信号局特工：干扰触发 / 召唤数量 / 死亡反制爆发 -----------------------
+func _test_signal_agent() -> void:
+	GameManager.start_level(&"l01", &"SQUAD", &"NORMAL")
+	var scene: Node = load("res://scenes/levels/l01.tscn").instantiate()
+	add_child(scene)
+	await get_tree().create_timer(0.8, true, false, true).timeout
+	var hud = scene.get("hud")
+	var agent: Node = scene.call("_spawn_humans", &"signal_bureau", &"agent", 1, 0.5)
+	check(agent != null and hud != null, "[wp6] l01 HUD 与特工生成")
+	if agent != null and hud != null:
+		var player: Node2D = scene.get_player()
+		if player != null:
+			agent.global_position = player.global_position + Vector2(160, 0)  # 进入诱导射程
+		agent.set("health", 60)
+		agent.set("_agent_pulse", 0.05)
+		agent.set("_summon_cd", 0.05)
+		var zombies_before := get_tree().get_nodes_in_group("zombies").size()
+		await get_tree().create_timer(0.6, true, false, true).timeout
+		check(float(scene.get("_interference")) == 1.0 and bool(hud.get("_interference_active")),
+			"[wp6] 干扰触发：特工脉冲置位关卡干扰且 HUD 消费生效")
+		var delta := get_tree().get_nodes_in_group("zombies").size() - zombies_before
+		check(delta >= 1 and delta <= 2, "[wp6] 特工诱导 1-2 只普通僵尸 (实际 +%d)" % delta)
+		# 死亡反制爆发：击杀后应再次发出 signal_interference(true) 且关卡干扰保持置位
+		var burst := [0]
+		var counter := func(_active: bool) -> void:
+			if _active:
+				burst[0] += 1
+		EventBus.signal_interference.connect(counter)
+		agent.call("apply_damage", 9999, Vector2.RIGHT, false, &"player", &"bullet")
+		await get_tree().create_timer(0.3, true, false, true).timeout
+		check(burst[0] >= 1 and float(scene.get("_interference")) == 1.0,
+			"[wp6] 死亡反制：特工阵亡触发大范围干扰爆发")
+		EventBus.signal_interference.disconnect(counter)
+	if is_instance_valid(scene):
+		scene.queue_free()
 	await get_tree().process_frame

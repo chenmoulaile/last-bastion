@@ -83,6 +83,8 @@ var _bile: TextureRect
 var _rain_a: TextureRect
 var _rain_b: TextureRect
 var _grain: TextureRect
+var _static_rect: TextureRect
+var _interference_active := false   # wp6：signal_interference 生效（准星抖动 + 静电噪点）
 
 var _pause_root: Control
 var _pause_open: bool = false
@@ -160,6 +162,18 @@ func _build_overlays() -> void:
 	_grain.modulate = Color(1, 1, 1, 0.055)
 	_grain.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_grain)
+
+	# wp6：干扰静电噪点层（signal_interference 生效期间每帧闪烁）
+	_static_rect = TextureRect.new()
+	_static_rect.texture = UIKit.icon("grain")
+	_static_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_static_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_static_rect.stretch_mode = TextureRect.STRETCH_TILE
+	_static_rect.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	_static_rect.modulate = Color(0.65, 0.85, 1.0, 0.0)
+	_static_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_static_rect.visible = false
+	_root.add_child(_static_rect)
 
 	_rain_a = _make_rain_rect(0.55, 0.34)
 	_rain_b = _make_rain_rect(0.92, 0.20)
@@ -825,6 +839,14 @@ func _connect_events() -> void:
 	EventBus.achievement_unlocked.connect(_on_achievement)
 	EventBus.unlock_earned.connect(_on_unlock)
 	EventBus.toast.connect(_on_toast)
+	EventBus.signal_interference.connect(_on_signal_interference)
+
+
+## wp6：信号干扰消费——准星抖动 + 静电噪点层的总开关。
+func _on_signal_interference(active: bool) -> void:
+	_interference_active = active
+	if not active and _static_rect != null:
+		_static_rect.visible = false
 
 
 func _on_health_changed(hp: int, temp_hp: int, max_hp: int) -> void:
@@ -1114,6 +1136,11 @@ func _update_crosshair() -> void:
 	var mouse := _root.get_local_mouse_position()
 	_crosshair.visible = true
 	_crosshair.position = (mouse - Vector2(16, 16)).floor()
+	# wp6：干扰生效——准星随机抖动 ±2px（整数像素，保持颗粒感）
+	if _interference_active:
+		_crosshair.position += Vector2(randi_range(-2, 2), randi_range(-2, 2))
+		_static_rect.visible = true
+		_static_rect.modulate.a = randf_range(0.05, 0.16)
 	_hitmarker.position = (mouse - Vector2(12, 12)).floor()
 	var player = level.get("player") if level != null else null
 	if player == null or not is_instance_valid(player):
@@ -1540,6 +1567,8 @@ func _open_pause() -> void:
 		return
 	_pause_open = true
 	_pause_root.visible = true
+	if _static_rect != null:
+		_static_rect.visible = false  # wp6：暂停时冻结静电层
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	GameManager.pause_game(true)
 	var resume: Button = _pause_root.get_meta("resume")
