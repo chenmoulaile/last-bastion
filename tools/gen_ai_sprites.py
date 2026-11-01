@@ -321,6 +321,32 @@ def shift(img: Image.Image, dy: int = 0, dx: int = 0, squash: float = 1.0) -> Im
     return out
 
 
+def mirror_legs(img: Image.Image, hip_y: int = 28) -> Image.Image:
+    """镜像腿变体（wp7 路线 A）：仅水平翻转髋线以下的腿带，躯干/手臂保持原朝向。
+
+    侧视条带的朝向由游戏端 flip_h 统一控制（player.gd sprite.flip_h），
+    整帧翻转会让条带内朝向左右乱跳；只翻腿带可安全交换前后腿站位，
+    把 4 源姿势扩成 8 个可辨识步态帧。
+    镜像轴取腿带不透明像素的 x 重心而非帧中心：躯干前倾时髋部重心偏前，
+    绕重心反射使大腿根（近轴处）几乎不动、两脚（远端）互换站位，
+    避免绕帧中心镜像造成的「大腿留在原位 + 小腿甩开」四腿撕裂感。
+    """
+    a = np.asarray(img).copy()
+    hip_y = min(max(0, hip_y), a.shape[0])
+    band = a[hip_y:, :, :]
+    ys, xs = np.nonzero(band[:, :, 3] > 10)
+    if len(xs) == 0:
+        return img.copy()
+    cx = float(xs.mean())
+    w = band.shape[1]
+    src = np.round(2 * cx - np.arange(w)).astype(int)
+    valid = (src >= 0) & (src < w)
+    out = np.zeros_like(band)
+    out[:, valid, :] = band[:, src[valid], :]
+    a[hip_y:, :, :] = out
+    return Image.fromarray(a)
+
+
 def rot(img: Image.Image, deg: float) -> Image.Image:
     return img.rotate(deg, resample=Image.NEAREST, expand=True)
 
@@ -358,10 +384,13 @@ def assemble(poses: dict[str, Image.Image]) -> dict[str, Image.Image]:
 
     # P1-6：idle 4 帧呼吸（胸腔/头部微动）
     strips["idle"] = strip([idle, shift(idle, dy=-1), idle, shift(idle, dy=-1)])
-    # P1-6：8 帧完整步态循环（触地→蹬伸→腾空→落地，左右腿交替 + 躯干起伏）
+    # P1-6 / wp7 路线 A：8 帧完整步态循环（触地→蹬伸→腾空→落地，左右腿交替 + 躯干起伏）。
+    # 前半程 ra..rd 原腿，后半程同节奏换镜像腿（mirror_legs 只翻髋线下腿带），
+    # 8 帧两两不全等；AI 真 8 姿势源图放入 tools/ai_src/ 登记 POSE_KEYS 后即可无损替换。
     strips["run"] = strip([
         ra, shift(rb, dy=-1), rc, shift(rd, dy=-2),
-        shift(rc, dy=-1), rb, shift(ra, dy=-1), shift(rd, dy=-1),
+        shift(mirror_legs(rc), dy=-1), mirror_legs(rb),
+        shift(mirror_legs(ra), dy=-1), shift(mirror_legs(rd), dy=-1),
     ])
     strips["shoot"] = strip([shoot, shift(shoot, dx=-1, dy=-1), shoot])
     strips["melee"] = strip([melee, shift(melee, dx=2), shift(melee, dx=1, dy=-1)])
