@@ -71,11 +71,12 @@ def anchored(base: Image.Image, deg: float = 0.0, dx: int = 0, dy: int = 0,
 
 
 def pose_attack(base: Image.Image, lean: float = 0.0, dx: int = 0, dy: int = 0,
-                stretch: float = 1.0, swipe: bool = False) -> Image.Image:
+                stretch: float = 1.0, swipe: bool = False, arc: bool = False) -> Image.Image:
     """True attack pose instead of a shifted copy of the idle frame: the legs
     stay planted while the upper body leans / reaches toward the target.
     Source art faces right, so a forward lean is a clockwise rotation (negative
-    PIL angle) plus a positive dx shift. Used for attack frames 0-3 and punch.
+    PIL angle) plus a positive dx shift. Used for attack frames 0-3, punch and
+    the wp6 atk_scratch / atk_lunge / atk_smash segments.
     """
     fw, fh = base.size
     legs_h = max(4, fh // 3)
@@ -106,6 +107,12 @@ def pose_attack(base: Image.Image, lean: float = 0.0, dx: int = 0, dy: int = 0,
         for i in range(3):
             yy = fh // 3 + i * (fh // 10)
             d.line([(fw - 16, yy), (fw - 4, yy + 4)], fill=col, width=2)
+    if arc:
+        # wp6 atk_smash: single-arm roundhouse trail, a wide arc sweeping from
+        # behind-over-the-head down in front (PIL angles: clockwise from 3 o'clock)
+        d = ImageDraw.Draw(cv)
+        d.arc([fw - 30, fh // 8, fw + 8, fh // 2 + 8], start=200, end=340,
+              fill=(196, 148, 42, 110), width=3)
     return cv
 
 
@@ -121,6 +128,19 @@ def make_strips(base: Image.Image, prefix: str) -> dict[str, Image.Image]:
                         pose_attack(base, lean=-5, dx=2, dy=-1),
                         pose_attack(base, lean=-10, dx=4, stretch=1.07, swipe=True),
                         pose_attack(base, lean=-3, dx=1)]
+    # wp6 (P1-6) 三种普攻独立段：
+    #   atk_scratch 抓挠 = 快速双前伸（两次前扑抓击，接触帧 = 第 3 帧）
+    #   atk_lunge  扑击 = 压低身体蓄力 -> 前扑拉伸（0.3s 前摇 @10fps，接触为冲刺运动判定）
+    #   atk_smash  挥打 = 单臂大回环（高举 -> 挥下，接触帧 = 第 3 帧）
+    strips["atk_scratch"] = [pose_attack(base, lean=6, dx=-1),
+                             pose_attack(base, lean=-9, dx=4, dy=-1, swipe=True),
+                             pose_attack(base, lean=-12, dx=5, dy=-1, stretch=1.05, swipe=True)]
+    strips["atk_lunge"] = [anchored(base, 8, dx=-1, squash_y=0.9),
+                           anchored(base, 11, dx=-2, dy=1, squash_y=0.8),
+                           pose_attack(base, lean=-14, dx=6, stretch=1.15)]
+    strips["atk_smash"] = [pose_attack(base, lean=10, dx=-2, dy=-1),
+                           pose_attack(base, lean=-4, dx=1),
+                           pose_attack(base, lean=-13, dx=5, stretch=1.06, arc=True)]
     strips["hurt"] = [shift(base, dx=-1), shift(base, dx=-2)]
     lying = anchored(base, 90)
     strips["die"] = [anchored(base, 15), anchored(base, 40, dy=-1), anchored(base, 70, dy=-2),

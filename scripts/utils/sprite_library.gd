@@ -21,6 +21,11 @@ const ZOMBIE_ANIMS := {
 	"idle": [4, 4.0, true],
 	"run": [6, 8.5, true],
 	"attack": [4, 9.0, false],
+	# wp6 (P1-6)：三种普攻独立段——抓挠（快速双前伸）/ 扑击（压低+前扑拉伸，0.3s 前摇）/ 挥打（单臂大回环）
+	# 接触帧均取 index 2（atk_lunge 的接触是冲刺运动判定），zombie_base.ATK_CONTACT_FRAMES 与此表对应
+	"atk_scratch": [3, 12.0, false],
+	"atk_lunge": [3, 10.0, false],
+	"atk_smash": [3, 9.0, false],
 	"hurt": [2, 8.0, false],
 	"die": [6, 6.0, false],
 	"inflate": [3, 4.0, false],

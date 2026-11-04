@@ -7,9 +7,17 @@ extends CharacterBody2D
 signal died(kind: StringName, pos: Vector2, source: StringName)
 
 const GRAVITY := 1500.0
-# wp4：普攻伤害延迟到 attack 动画的接触帧（第 3 帧，index 2）——
-# ZOMBIE_ANIMS attack 为 9fps 非循环 4 帧，接触帧出现在 2/9s
-const ATTACK_CONTACT_DELAY := 2.0 / 9.0
+# wp4/wp6：普攻伤害延迟到攻击动画的接触帧结算——值 = [接触帧 index, 动画 fps]，
+# 与 SpriteLibrary.ZOMBIE_ANIMS 对应动画的前挥帧同帧。wp6 起按所播攻击段查表：
+# attack/atk_smash 9fps 接触帧 2 -> 2/9s；atk_scratch 12fps 接触帧 2 -> 2/12s；
+# 冲刺扑击（atk_lunge）是运动接触判定，不走这里。
+const ATK_CONTACT_FRAMES := {
+	&"attack": [2, 9.0],
+	&"atk_scratch": [2, 12.0],
+	&"atk_smash": [2, 9.0],
+}
+# 判定"当前是否在攻击动画段里"（在射程内冷却期间保持姿势不回跑/idle）
+const ATK_ANIMS: Array[StringName] = [&"attack", &"punch", &"atk_scratch", &"atk_lunge", &"atk_smash"]
 
 var data: ZombieData
 var level: Node = null
@@ -185,11 +193,11 @@ func _ai_tick(delta: float) -> void:
 	if not alerted:
 		_wander(delta)
 		return
-	# P1-7：冲刺攻击（lunge）状态机优先
+	# P1-7：冲刺攻击（lunge）状态机优先——前摇播独立段 atk_lunge（压低+前扑拉伸）
 	if _lunge_state == 1:
 		_lunge_timer -= delta
 		velocity.x = move_toward(velocity.x, 0.0, 1200.0 * delta)
-		_play_anim("attack")
+		_play_anim("atk_lunge")
 		if _lunge_timer <= 0.0:
 			_lunge_state = 2
 			_lunge_timer = 0.25
@@ -222,8 +230,10 @@ func _ai_tick(delta: float) -> void:
 		state_name = "attack"
 		velocity.x = move_toward(velocity.x, 0.0, 900.0 * delta)
 		if attack_cooldown <= 0.0:
+			# wp6：_attack_target 内部按攻击类型 force 重播 atk_* 段（含接触帧结算）
 			_attack_target()
-		_play_anim("attack")
+		elif not _is_attack_anim(StringName(sprite.animation)):
+			_play_anim("atk_scratch")
 		return
 	state_name = "chase"
 	facing = 1 if to_target.x > 0.0 else -1
@@ -309,44 +319,57 @@ func _try_attack_door() -> void:
 		if collider.has_method("zombie_scratch"):
 			collider.zombie_scratch(self)
 			velocity.x = 0.0
-			_play_anim("attack")
+			_play_anim("atk_scratch")
+
+
+func _is_attack_anim(anim: StringName) -> bool:
+	return anim in ATK_ANIMS
 
 
 func _attack_target() -> void:
-	# P1-7：三种攻击随机——抓挠 / 冲刺扑击 / 双手挥打（击退）
+	# wp6：三种攻击随机——抓挠 atk_scratch（快速双前伸）/ 扑击 atk_lunge（0.3s 前摇冲刺）/
+	# 挥打 atk_smash（单臂大回环）。均 force 重播对应段，保证接触帧与伤害结算同帧。
 	var roll := randf()
 	if roll < 0.3 and _lunge_cd <= 0.0 and target != null:
 		_lunge_state = 1
 		_lunge_timer = 0.3
 		attack_cooldown = data.attack_interval * 1.4
+		_play_anim("atk_lunge", true)
 		AudioManager.play_sfx_2d(&"zombie_attack", global_position, 500.0, -10.0)
 		return
 	if roll < 0.5 and target != null:
-		# 双手挥打：小伤害 + 位移（伤害在接触帧结算）
+		# 挥打：小伤害 + 位移（伤害在接触帧结算）
 		attack_cooldown = data.attack_interval * 1.2
-		_play_anim("attack")
+		_play_anim("atk_smash", true)
 		var dir2 := (target.global_position - global_position).normalized()
-		_defer_contact_hit(int(data.attack_damage * 0.5), dir2, &"shove", Vector2(dir2.x * 220.0, -90.0))
+		_defer_contact_hit(int(data.attack_damage * 0.5), dir2, &"shove", Vector2(dir2.x * 220.0, -90.0), &"atk_smash")
 		AudioManager.play_sfx_2d(&"zombie_attack", global_position, 500.0, -8.0)
 		return
 	attack_cooldown = data.attack_interval
-	_play_anim("attack")
+	_play_anim("atk_scratch", true)
 	if target != null:
 		var dir := (target.global_position - global_position).normalized()
-		_defer_contact_hit(data.attack_damage, dir, &"melee", Vector2.ZERO)
+		_defer_contact_hit(data.attack_damage, dir, &"melee", Vector2.ZERO, &"atk_scratch")
 	AudioManager.play_sfx_2d(&"zombie_attack", global_position, 500.0, -8.0)
 
 
-## wp4：把普攻伤害排到 attack 动画接触帧（第 3 帧）结算，与姿势前挥同步。
+## wp4/wp6：把普攻伤害排到所播攻击段的接触帧结算，与姿势前挥同帧。
+## anim 决定接触时刻（ATK_CONTACT_FRAMES 查表：接触帧 index / fps）。
 ## 用自身的 _physics_process 计时而非 SceneTreeTimer，僵尸死亡/场景释放时
-## 待结算自然随节点消失，不留下跨对象回调。冲刺扑击（lunge）是运动接触
+## 待结算自然随节点消失，不留下跨对象回调。冲刺扑击（atk_lunge）是运动接触
 ## 判定，不走这里。
-func _defer_contact_hit(damage: int, dir: Vector2, type: StringName, knock: Vector2) -> void:
+func _defer_contact_hit(damage: int, dir: Vector2, type: StringName, knock: Vector2,
+		anim: StringName = &"attack") -> void:
 	_contact_hit_damage = damage
 	_contact_hit_dir = dir
 	_contact_hit_type = type
 	_contact_hit_knock = knock
-	_contact_hit_timer = ATTACK_CONTACT_DELAY
+	_contact_hit_timer = _contact_delay(anim)
+
+
+func _contact_delay(anim: StringName) -> float:
+	var spec: Array = ATK_CONTACT_FRAMES.get(anim, ATK_CONTACT_FRAMES[&"attack"])
+	return float(spec[0]) / float(spec[1])
 
 
 func _settle_contact_hit() -> void:
@@ -514,7 +537,10 @@ func _apply_separation(delta: float) -> void:
 		velocity.x += clampf(push, -30.0, 30.0)
 
 
-func _play_anim(anim: String) -> void:
+## force = true 时无条件从第 0 帧重播（wp6：每次攻击触发都重放攻击段，
+## 否则非循环动画停帧后 sprite.animation 不变、_play_anim 会跳过重播，
+## 接触帧与 _defer_contact_hit 的计时就无法对齐）。
+func _play_anim(anim: String, force: bool = false) -> void:
 	if sprite == null or sprite.sprite_frames == null:
 		return
 	var resolved := anim
@@ -525,7 +551,8 @@ func _play_anim(anim: String) -> void:
 			resolved = "idle"
 		else:
 			return
-	if sprite.animation != resolved:
+	if force or sprite.animation != resolved:
+		sprite.frame = 0
 		sprite.play(resolved)
 
 
