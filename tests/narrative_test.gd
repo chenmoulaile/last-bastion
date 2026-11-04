@@ -19,6 +19,7 @@ func _ready() -> void:
 	await _test_wiring()
 	await _test_ui_wiring()
 	await _test_signal_agent()
+	await _test_agent_bands()
 	print("[NARR] checks=%d failures=%d" % [_passed + _failed, _failed])
 	print("[NARR] RESULT: %s" % ("PASS" if _failed == 0 else "FAIL"))
 	get_tree().quit()
@@ -444,6 +445,79 @@ func _test_signal_agent() -> void:
 		check(burst[0] >= 1 and float(scene.get("_interference")) == 1.0,
 			"[wp6] 死亡反制：特工阵亡触发大范围干扰爆发")
 		EventBus.signal_interference.disconnect(counter)
+	if is_instance_valid(scene):
+		scene.queue_free()
+	await get_tree().process_frame
+
+
+# --- wp7 P2-8 特工距离分带补齐：架枪前摇→三连点射 / 收枪巡逻 / 死亡掉弹药 ---------
+func _test_agent_bands() -> void:
+	GameManager.start_level(&"l01", &"SQUAD", &"NORMAL")
+	var scene: Node = load("res://scenes/levels/l01.tscn").instantiate()
+	add_child(scene)
+	await get_tree().create_timer(0.8, true, false, true).timeout
+	var agent: Node = scene.call("_spawn_humans", &"signal_bureau", &"agent", 1, 0.5)
+	check(agent != null, "[wp7] 分带测试特工生成")
+	if agent != null:
+		var player: Node2D = scene.get_player()
+		# 前提：signal_bureau 默认敌意 0.35 < 0.55 攻击门槛（faction_signal_bureau.tres），
+		# 显式拉满使特工进入对玩家交战（与 _test_factions 调敌意同法），测试后还原。
+		FactionManager.set_hostility(&"signal_bureau", 1.0)
+		var fx: Node2D = scene.get("fx_layer")
+		var tracer_count := [0]
+		var on_child := func(n: Node) -> void:
+			if n is Line2D:
+				tracer_count[0] += 1
+		fx.child_entered_tree.connect(on_child)
+		# 1) 400-600 带：游走 → 架枪前摇（红点）→ 三连点射（可见曳光）
+		agent.global_position = player.global_position + Vector2(520, 0)
+		agent.velocity = Vector2.ZERO
+		agent.set("_aim_timer", 0.05)
+		var dot_seen := false
+		var aim_state_max := 0
+		var burst_min := 99
+		for _i in 360:   # ≤6s：游走(≤2.5s)+前摇1s+三连射0.36s
+			await get_tree().process_frame
+			agent.set("target", null)   # 隔离分带逻辑：避免 director 刷出的僵尸抢占走通用交战分支
+			if agent.get("_red_dot") != null:
+				dot_seen = true
+			var st := int(agent.get("_aim_state"))
+			aim_state_max = maxi(aim_state_max, st)
+			if st == 2:
+				burst_min = mini(burst_min, int(agent.get("_burst_left")))
+			elif st == 0 and tracer_count[0] > 0:
+				break   # 一轮三连射已打完并复位
+		check(dot_seen and aim_state_max >= 1, "[wp7] 架枪前摇：400-600 带出现红点提示并进入架枪态")
+		# 注：发完第 3 发当帧即 _reset_agent_aim（state→0），state==2 采样帧最小只能看到 1；
+		# 3 发打完由「state 2 出现 + 曳光 >= 3」联合证明
+		check(aim_state_max == 2 and burst_min <= 1, "[wp7] 三连点射：进入连射态且连发倒计到位 (burst_min=%d)" % burst_min)
+		check(tracer_count[0] >= 3, "[wp7] 三连点射：一轮至少 3 条可见曳光 (实际 %d)" % tracer_count[0])
+		# 2) >600 带：收枪巡逻——无红点、不进架枪态、保持游走位移
+		agent.global_position = player.global_position + Vector2(700, 0)
+		agent.set("_aim_state", 0)
+		agent.set("_aim_timer", 1.5)
+		var moved := 0.0
+		var patrol_ok := true
+		for _i in 45:   # ~0.75s，避免游走漂移跌回 400-600 带
+			await get_tree().process_frame
+			agent.set("target", null)
+			moved = maxf(moved, (agent.get("velocity") as Vector2).length())
+			if agent.get("_red_dot") != null or int(agent.get("_aim_state")) != 0:
+				patrol_ok = false
+		check(patrol_ok, "[wp7] 收枪巡逻：>600px 不架枪不出红点")
+		check(moved > 5.0, "[wp7] 收枪巡逻：特工在游走位移 (峰值速度 %.1f)" % moved)
+		# 3) 被击杀掉落弹药
+		var pickups_before := get_tree().get_nodes_in_group("pickups").size()
+		agent.call("apply_damage", 9999, Vector2.RIGHT, false, &"player", &"bullet")
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var dropped: Node = null
+		for pk in get_tree().get_nodes_in_group("pickups"):
+			if pk.get("kind") == "ammo" and pk.global_position.distance_to(agent.global_position) < 60.0:
+				dropped = pk
+		check(get_tree().get_nodes_in_group("pickups").size() > pickups_before and dropped != null,
+			"[wp7] 死亡掉落：特工阵亡掉落弹药拾取物")
+		FactionManager.set_hostility(&"signal_bureau", 0.35)   # 还原默认敌意
 	if is_instance_valid(scene):
 		scene.queue_free()
 	await get_tree().process_frame

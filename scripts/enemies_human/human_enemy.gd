@@ -26,6 +26,13 @@ var sprite: AnimatedSprite2D
 const DAMAGE := 8
 const SHOOT_RANGE := 380.0
 
+# wp7（P2-8）：信号局特工对玩家的距离分带战术
+const AGENT_WANDER_RANGE := 400.0   # 距玩家 >400px：游走 + 周期架枪
+const AGENT_HOLSTER_RANGE := 600.0  # 距玩家 >600px：收枪巡逻
+const AGENT_AIM_TELEGRAPH := 1.0    # 架枪前摇 1s（红点提示）
+const AGENT_BURST_COUNT := 3        # 三连点射
+const AGENT_BURST_GAP := 0.12       # 连射间隔
+
 
 func _ready() -> void:
 	add_to_group("humans")
@@ -69,6 +76,14 @@ var _agent_pulse := 12.0
 # wp6：信号局特工专属招式状态（仅 kind==agent 使用）
 var _blink_cd := 0.0        # 受击瞬移冷却
 var _summon_cd := 10.0      # 诱导尸群冷却（首次接敌后 10s）
+# wp7（P2-8）：特工对玩家距离分带状态机
+var _aim_state := 0         # 0=游走/未架枪 1=架枪前摇（红点） 2=三连射中
+var _aim_timer := 1.5       # 架枪周期计时（前摇倒计时 / 游走期倒计时）
+var _burst_left := 0        # 三连射剩余弹数
+var _burst_timer := 0.0
+var _wander_dir := 1.0
+var _wander_timer := 0.0
+var _red_dot: Node2D = null # 架枪前摇红点提示（挂在 fx_layer，独立于本节点）
 
 
 func _physics_process(delta: float) -> void:
@@ -90,6 +105,18 @@ func _physics_process(delta: float) -> void:
 		_acquire_target()
 
 	var move := 0.0
+	if kind == &"agent":
+		move = _agent_move(delta)   # wp7：特工走距离分带状态机
+	else:
+		move = _generic_move()
+	velocity.x = move_toward(velocity.x, move * 130.0, 900.0 * delta)
+	move_and_slide()
+	_play_anim()
+
+
+## 通用交战移动（掩体反应 / 对目标逼近后退 / 中距射击）——wp7 扩展前原逻辑原样保留。
+func _generic_move() -> float:
+	var move := 0.0
 	if seeking_cover > 0.0:
 		var d := cover_point.x - global_position.x
 		if absf(d) > 12.0:
@@ -110,11 +137,7 @@ func _physics_process(delta: float) -> void:
 			_shoot()
 		if throw_cd <= 0.0 and dist > 150.0 and dist < 320.0 and randf() < 0.5:
 			_throw()
-	else:
-		move = 0.0
-	velocity.x = move_toward(velocity.x, move * 130.0, 900.0 * delta)
-	move_and_slide()
-	_play_anim()
+	return move
 
 
 # --- wp6：信号局特工（kind==agent）专属战术 ---------------------------------
@@ -156,6 +179,7 @@ func _agent_blink(from_dir: Vector2) -> void:
 	global_position = Vector2(new_x, gy - 2.0)
 	Fx.smoke(fx_parent, global_position + Vector2(0, -20))
 	EventBus.screen_shake.emit(1.5)
+	_reset_agent_aim()   # 换位后旧红点/连射作废（wp7）
 
 
 ## 诱导尸群：在玩家身边 ±110px 落地 1-2 只普通僵尸（alert 直接锁定玩家）。
@@ -180,6 +204,102 @@ func _summon_zombie_wave() -> void:
 	if spawned > 0:
 		EventBus.notify.emit("信号局特工：诱导尸群！")
 		EventBus.zombie_scream.emit(global_position, 300.0)
+
+
+# --- wp7（P2-8）：特工对玩家距离分带战术 ---------------------------------------
+## 分带：≤400px 走通用交战；400-600px 游走 + 周期架枪（1s 红点前摇）→ 三连点射；
+##       >600px 收枪巡逻（慢速游走、不射击、不出红点）。僵尸目标优先级高于分带。
+## 敌意门控与 _acquire_target 一致：FactionManager.unit_wants_to_attack(faction)。
+func _agent_move(delta: float) -> float:
+	var p: Node2D = level.get_player() if level != null else null
+	if p == null or not is_instance_valid(p) or bool(p.get("is_dead")) \
+			or not FactionManager.unit_wants_to_attack(faction):
+		_reset_agent_aim()
+		return _generic_move()
+	# 僵尸近身时优先处理僵尸，回到通用交战（不回退 wp6 之前的僵尸索敌行为）
+	if target != null and is_instance_valid(target) and target.is_in_group("zombies"):
+		_reset_agent_aim()
+		return _generic_move()
+	var pdist := global_position.distance_to(p.global_position)
+	if pdist <= AGENT_WANDER_RANGE:
+		_reset_agent_aim()
+		return _generic_move()
+	if pdist > AGENT_HOLSTER_RANGE:
+		_reset_agent_aim()
+		return _agent_patrol(delta)
+	return _agent_aim_burst(delta, p)
+
+
+## >600px：收枪巡逻——慢速往返游走，不架枪不射击。
+func _agent_patrol(delta: float) -> float:
+	_wander_timer -= delta
+	if _wander_timer <= 0.0:
+		_wander_timer = randf_range(1.4, 2.6)
+		_wander_dir = -1.0 if randf() < 0.5 else 1.0
+	facing = 1 if _wander_dir > 0 else -1
+	return _wander_dir * 0.7   # 巡逻速度约为交战移速 70%
+
+
+## 400-600px：游走 + 周期架枪。前摇 1s（红点跟随玩家）→ 站定三连点射 → 冷却循环。
+func _agent_aim_burst(delta: float, p: Node2D) -> float:
+	facing = 1 if p.global_position.x > global_position.x else -1
+	if _aim_state == 2:
+		# 三连射中：站定连发，可见曳光由 _shoot_at 内 Fx.tracer 保证
+		_burst_timer -= delta
+		if _burst_timer <= 0.0:
+			_burst_timer = AGENT_BURST_GAP
+			_burst_left -= 1
+			_shoot_at(p)
+			if _burst_left <= 0:
+				_reset_agent_aim()
+		return 0.0
+	if _aim_state == 1:
+		# 1s 前摇：红点持续锁定玩家胸口，特工站定架枪
+		_aim_timer -= delta
+		if _red_dot != null and is_instance_valid(_red_dot):
+			_red_dot.global_position = p.global_position + Vector2(0, -14.0)
+			_red_dot.modulate.a = 0.55 + 0.45 * absf(sin(_aim_timer * 12.0))
+		if _aim_timer <= 0.0:
+			_aim_state = 2
+			_burst_left = AGENT_BURST_COUNT
+			_burst_timer = 0.0
+		return 0.0
+	# 游走期：左右换向，倒计时归零进入架枪前摇
+	_wander_timer -= delta
+	if _wander_timer <= 0.0:
+		_wander_timer = randf_range(1.0, 2.0)
+		_wander_dir = -1.0 if randf() < 0.5 else 1.0
+	_aim_timer -= delta
+	if _aim_timer <= 0.0:
+		_aim_state = 1
+		_aim_timer = AGENT_AIM_TELEGRAPH
+		_agent_show_red_dot(p)
+		return 0.0
+	return _wander_dir
+
+
+func _agent_show_red_dot(p: Node2D) -> void:
+	var parent: Node = level.fx_layer if level.fx_layer != null else level
+	if parent == null:
+		return
+	_red_dot = Sprite2D.new()
+	_red_dot.texture = SpriteLibrary.ui_texture("crosshair")
+	_red_dot.modulate = Color(1.0, 0.15, 0.15, 0.9)
+	_red_dot.scale = Vector2(0.9, 0.9)
+	_red_dot.z_index = 31
+	parent.add_child(_red_dot)
+	_red_dot.global_position = p.global_position + Vector2(0, -14.0)
+
+
+## 清空架枪状态（红点 / 连射计数），重置架枪周期计时。
+func _reset_agent_aim() -> void:
+	if _red_dot != null and is_instance_valid(_red_dot):
+		_red_dot.queue_free()
+	_red_dot = null
+	if _aim_state != 0:
+		_aim_state = 0
+		_burst_left = 0
+		_aim_timer = randf_range(1.0, 2.5)
 
 
 func _acquire_target() -> void:
@@ -218,8 +338,13 @@ func _shoot() -> void:
 	shoot_cd = randf_range(0.7, 1.4)
 	if target == null or not is_instance_valid(target):
 		return
+	_shoot_at(target)
+
+
+## 朝指定目标开一枪（wp7：从 _shoot 拆出以便三连点射直射玩家；曳光可见）。
+func _shoot_at(t: Node2D) -> void:
 	var origin := global_position + Vector2(facing * 10.0, -18.0)
-	var aim := (target.global_position + Vector2(0, -14) - origin).normalized()
+	var aim := (t.global_position + Vector2(0, -14) - origin).normalized()
 	var result := _ray(origin, aim, SHOOT_RANGE)
 	var end := origin + aim * SHOOT_RANGE
 	if not result.is_empty():
@@ -227,10 +352,15 @@ func _shoot() -> void:
 		var collider: Object = result["collider"]
 		if collider.has_method("apply_damage"):
 			collider.apply_damage(DAMAGE, -aim, false, faction, &"bullet")
-			if collider != target and collider.is_in_group("zombies"):
+			if collider != t and collider.is_in_group("zombies"):
 				Fx.blood(level.fx_layer if level != null else null, end, aim)
-			elif collider == target:
+			elif collider == t:
 				Fx.blood(level.fx_layer if level != null else null, end, aim)
+		elif collider.is_in_group("player"):
+			# 玩家只有 take_damage（无 apply_damage）：旧 _shoot 对玩家命中实际不掉血，
+			# wp7 起特工子弹对玩家生效
+			collider.call("take_damage", DAMAGE, aim, faction, &"bullet")
+			Fx.blood(level.fx_layer if level != null else null, end, aim)
 	Fx.tracer(level.fx_layer if level != null else null, origin, end)
 	Fx.muzzle(level.fx_layer if level != null else null, origin, aim.angle())
 	AudioManager.play_sfx_2d(&"gunshot", global_position, 500.0)
@@ -311,6 +441,10 @@ func _play_die() -> void:
 	EventBus.enemy_died.emit(kind, global_position, 400)
 	# wp6：特工死亡反制——一次大范围干扰爆发（4s）+ 屏幕震动
 	if kind == &"agent":
+		_reset_agent_aim()
+		# wp7（P2-8）：被击杀掉落弹药（复用关卡 _spawn_pickup，玩家拾取 +90 备弹）
+		if level != null:
+			level.call("_spawn_pickup", "ammo", global_position + Vector2(0, -12.0), 90)
 		EventBus.notify.emit("信号局特工：信号反制爆发！")
 		EventBus.screen_shake.emit(4.0)
 		_agent_interference(4.0)
