@@ -1,6 +1,12 @@
 # LAST BASTION 更新日志
 
-## v3.4.4（本轮 · 建筑覆盖/动画/AI 强化合并版）
+## v3.4.5（本轮 · 发布准备收尾版）
+
+- **版本号递增 v3.4.5**：`project.godot` `config/version`，Windows 导出元数据 `file_version/product_version`，macOS `short_version/version`，共 5 行（均为实际存在字段，无其他版本字段需要改动）。
+- **发布准备轮**：本轮不 push、不打 tag、不发 GitHub Release、不自行导出 EXE/ZIP，导出由流程统一执行。
+- **v3.4.4 条目保留**：v3.4.4 从未发布过 GitHub Release，其条目原样保留、不合并压缩。
+
+## v3.4.4（v3.4.5 前一轮 · 建筑覆盖/动画/AI 强化合并版）
 
 ### 建筑与关卡
 - **wp1 全主题建筑覆盖**：`building_builder.gd` 放开主题门槛，subway/military 新增矮楼/营房立面变体并修复开窗死代码；11 关全部 `_buildings=4 enterable=2 cells>0`（l05/l06/l08/l10/l11 不再为 0），门与绳降点随建筑自动出现。
