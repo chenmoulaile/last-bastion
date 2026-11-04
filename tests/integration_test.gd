@@ -347,7 +347,8 @@ func _test_window_rappel() -> void:
 	print("[INTEGRATION] window rappel ok")
 
 
-## wp5-interior-rooms-harden：踢门→传送进远端房间→出口回街道（level_runner.gd:359-417）。
+## wp5-interior-rooms-harden + wp1-door-entry：打爆门不再传送（wp1 废除破门即传送），
+## 玩家走入门洞 Area2D 才传送进远端房间，出口回街道（level_runner.gd:359-470）。
 func _test_interior_rooms() -> void:
 	var scene := await _open_level(&"l01")
 	var player: Node2D = scene.get_player()
@@ -369,11 +370,27 @@ func _test_interior_rooms() -> void:
 		var door_x := float(b0["door_x"])
 		var ground_y := float(b0["ground_y"])
 		var back := Vector2(door_x - 26.0, ground_y - 2.0)
-		# 断言2：踢门传送把玩家放到 room["entry"]，并记录 _street_return（:402-417）。
-		scene.call("_on_door_enterable", Vector2(door_x, ground_y))
+		# 断言2（wp1）：远距打爆门不传送玩家——玩家原地不动，也不在室内 entry。
+		var door: Node2D = null
+		for d in get_tree().get_nodes_in_group("doors"):
+			if absf(d.global_position.x - door_x) < 24.0:
+				door = d
+				break
+		_check(door != null, "interior: enterable door spawned at door_x")
+		var street_pos := Vector2(600.0, ground_y - 2.0)
+		player.global_position = street_pos
+		if door != null:
+			door.call("hit", 999)
+		for _i in 10:
+			await get_tree().physics_frame
+		_check(player.global_position.distance_to(street_pos) < 50.0,
+			"interior: door broken far away does NOT teleport player (wp1)")
+		# 断言2b（wp1）：玩家站在门口、由玩家行为发起走入门洞 → 传送到 entry 并记录 _street_return。
+		player.global_position = Vector2(door_x - 30.0, ground_y - 2.0)
+		scene.call("_try_enter_interior", b0, null, true)
 		_check(player.global_position.distance_to(room0["entry"]) < 0.5
 				and (scene.get("_street_return") as Vector2).distance_to(back) < 0.5,
-			"interior: door teleport to entry and street return recorded")
+			"interior: walking into doorway teleports to entry and street return recorded (wp1)")
 		# 断言3：走进出口 Area2D 被传回街道 back 点（:370-389）。
 		var exit_area: Area2D = null
 		for child in scene.get_children():

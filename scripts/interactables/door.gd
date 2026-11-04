@@ -10,6 +10,9 @@ var max_health: int = 60
 var kick_cd: float = 0.0
 var scratch_cd: float = 0.0
 var broken: bool = false
+## wp1：最后一次伤害来源（&"kick"=玩家踢门 / &"combat"=玩家射击或爆炸 / &"zombie"=僵尸挠门），
+## 随 door_broken 信号广播，供下游按来源分流。
+var last_damage_source: StringName = &"kick"
 var sprite: Sprite2D
 var collision: CollisionShape2D
 
@@ -54,6 +57,7 @@ func interact(player: Node) -> void:
 	if broken or kick_cd > 0.0:
 		return
 	kick_cd = 0.38
+	last_damage_source = &"kick"
 	health -= 36
 	EventBus.door_kicked.emit(global_position)
 	EventBus.shake(2.2)
@@ -73,6 +77,7 @@ func interact(player: Node) -> void:
 func hit(amount: int, source: StringName = &"player") -> void:
 	if broken:
 		return
+	last_damage_source = &"combat"
 	health -= amount
 	AudioManager.play_sfx_2d(&"door_hit", global_position, 600.0)
 	if level:
@@ -85,6 +90,7 @@ func zombie_scratch(zombie: Node) -> void:
 	if broken or scratch_cd > 0.0:
 		return
 	scratch_cd = 0.75
+	last_damage_source = &"zombie"
 	health -= 9
 	if level:
 		Fx.spark(level.fx_layer, global_position + Vector2(0, -18))
@@ -98,7 +104,7 @@ func _break() -> void:
 	if broken:
 		return
 	broken = true
-	EventBus.door_broken.emit(global_position)
+	EventBus.door_broken.emit(global_position, last_damage_source)
 	AudioManager.play_sfx_2d(&"door_break", global_position, 900.0)
 	EventBus.shake(3.0)
 	if level:

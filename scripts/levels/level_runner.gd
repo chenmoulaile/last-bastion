@@ -391,6 +391,23 @@ func _build_buildings() -> void:
 				EventBus.notify.emit("回到街道")
 				AudioManager.play_sfx(&"door_open"))
 		add_child(exit_area)
+		# wp1：门口开放门洞的进入触发区——门破后玩家主动走入才传送。
+		# 宽 26px × 高 48px 覆盖门洞；门未破时门口的静态门体会先挡住玩家，
+		# 且 _try_enter_interior 会再做「门已破」复核，防止贴门误触。
+		var entry_area := Area2D.new()
+		entry_area.position = Vector2(float(b["door_x"]), float(b["ground_y"]) - 24.0)
+		entry_area.collision_layer = 0
+		entry_area.collision_mask = 2  # 仅监听玩家层；僵尸/友军不在该层
+		var entry_shape := CollisionShape2D.new()
+		var entry_rect := RectangleShape2D.new()
+		entry_rect.size = Vector2(26, 48)
+		entry_shape.shape = entry_rect
+		entry_area.add_child(entry_shape)
+		entry_area.body_entered.connect(func(body: Node2D) -> void:
+			# 按 body 类型过滤：只有玩家触发；僵尸、友军无效
+			if body.is_in_group("player"):
+				_try_enter_interior(b, entry_area, true))
+		add_child(entry_area)
 		# 房间补给（掩体 + 弹药）
 		var room_x: float = (room["rect"] as Rect2).position.x
 		_spawn_pickup("ammo", Vector2(room_x + 120.0, 288.0 - 24.0), 1)
@@ -402,27 +419,43 @@ func _build_buildings() -> void:
 		add_child(crate)
 
 
-## 踢破可进入建筑的门 → 传送到内部房间
-func _on_door_enterable(pos: Vector2) -> void:
+## wp1：玩家主动走入可进入建筑的门洞 → 传送到内部房间。
+## 兜底断言（不满足即丢弃传送）：玩家存活 + 玩家距门 ≤80px + 传送由玩家行为发起。
+## 该函数唯一调用入口是门洞 Area2D 的 body_entered（且仅玩家 body 通过过滤），
+## initiated_by_player 只在该路径传 true——破门信号不再触发传送。
+func _try_enter_interior(b: Dictionary, area: Area2D = null, initiated_by_player: bool = false) -> void:
+	# 进入后 0.6s 内该 Area 不重复触发
+	if area != null:
+		var now := Time.get_ticks_msec()
+		if int(area.get_meta("wp1_entry_cd_until", 0)) > now:
+			return
+		area.set_meta("wp1_entry_cd_until", now + 600)
 	if player == null or not is_instance_valid(player):
 		return
-	for b in _buildings:
-		if not bool(b.get("enterable", false)):
-			continue
-		if absf(float(b["door_x"]) - pos.x) < 24.0:
-			var room: Dictionary = b.get("interior", {})
-			if room.is_empty():
-				return
-			_street_return = Vector2(float(b["door_x"]) - 26.0, float(b["ground_y"]) - 2.0)
-			player.global_position = room["entry"]
-			# wp5：房间建在 level_width+700 远端实例区，进门后放宽相机右界让房间可见
-			var cam := player.get_viewport().get_camera_2d()
-			if cam != null:
-				cam.limit_right = int((room["rect"] as Rect2).end.x) + 64
-			EventBus.notify.emit("进入建筑内部")
-			EventBus.level_event.emit("室内：掩体与补给")
-			AudioManager.play_sfx(&"door_open")
+	if player.get("is_dead"):
+		return
+	if not initiated_by_player:
+		return
+	var door_x := float(b["door_x"])
+	var door_pos := Vector2(door_x, float(b["ground_y"]))
+	if player.global_position.distance_to(door_pos) > 80.0:
+		return
+	# 门必须已破：完好门还在 "doors" 组里（door.gd 破门时移出），门体也在物理上挡住门洞
+	for d in get_tree().get_nodes_in_group("doors"):
+		if absf(d.global_position.x - door_x) < 24.0:
 			return
+	var room: Dictionary = b.get("interior", {})
+	if room.is_empty():
+		return
+	_street_return = Vector2(door_x - 26.0, float(b["ground_y"]) - 2.0)
+	player.global_position = room["entry"]
+	# wp5：房间建在 level_width+700 远端实例区，进门后放宽相机右界让房间可见
+	var cam := player.get_viewport().get_camera_2d()
+	if cam != null:
+		cam.limit_right = int((room["rect"] as Rect2).end.x) + 64
+	EventBus.notify.emit("进入建筑内部")
+	EventBus.level_event.emit("室内：掩体与补给")
+	AudioManager.play_sfx(&"door_open")
 
 
 var _buildings: Array = []
@@ -773,7 +806,7 @@ func _connect_events() -> void:
 	# 最终抉择信号（P0-2）：缺了这条 4-2 选完结局没有任何反应
 	EventBus.story_choice_made.connect(_on_story_choice_made)
 	EventBus.signal_agent_requested.connect(_on_signal_agent_requested)
-	EventBus.door_broken.connect(_on_door_broken_enterable)
+	# wp1：door_broken 不再连接传送——破门只留开放门洞，进入改为玩家主动走入门洞 Area2D
 
 
 func _exit_tree() -> void:
@@ -1115,9 +1148,12 @@ func _spawn_humans(faction: StringName, kind: StringName, count: int, at: float)
 	return first
 
 
-## 门被踢破后：若为可进入建筑的门 → 传送进房间
-func _on_door_broken_enterable(pos: Vector2) -> void:
-	_on_door_enterable(pos)
+## wp1：破门不再传送（废除「破门即传送」）。门破后门口只留开放门洞，
+## 进入由门洞 Area2D + _try_enter_interior 处理。保留此空实现以维持
+## door_broken(pos, source) 信号语义的文档锚点；door_broken 的 source 参数
+## （&"kick"/&"combat"/&"zombie"）由 door.gd 广播，供后续按来源分流。
+func _on_door_broken_enterable(pos: Vector2, source: StringName = &"kick") -> void:
+	pass  # 废除破门即传送：不允许任何由破门信号发起的室内传送
 
 
 func _on_story_choice_made(choice_id: StringName, option: int) -> void:
