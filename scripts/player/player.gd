@@ -16,12 +16,24 @@ const REVIVE_TIME := 3.0
 const MEDKIT_TIME := 4.0
 const MAX_THROWABLES := 3
 
+# wp5-arms-gait：手臂规格（±75° 限幅 / lerp_angle 平滑 / 蹲姿下移）与步态计时
+const ARM_TURN_SPEED := 14.0          # 手臂追踪速率 rad/s（规格要求 ≥12/秒）
+const ARM_MAX_REL := 1.3089969        # 手臂相对朝向限幅 ±75°（rad）
+const ARM_HEIGHT_STAND := -22.0
+const ARM_HEIGHT_CROUCH := -16.0      # 蹲下时肩/手随身体下移 6px
+const LAND_DIP_TIME := 0.09           # 着弹脚 1px 下沉帧持续时长
+const BRAKE_TIME := 0.1               # 松开方向后的刹车姿势窗口
+
 var level: Node = null
 var character: CharacterData
 var visual_id: String = "assault"
 var arm_category: StringName = &"primary"      # P0-1 手臂姿态类别
 var _drawn_angle: float = 99.0                 # wp3：上次手臂绘制角度（rad），防抖重绘
 var _drawn_facing: int = 0                     # wp3：上次手臂绘制朝向
+var _arm_angle: float = 0.0                    # wp5：限幅+平滑后的实际手臂/枪管角（rad）
+var _arm_height: float = ARM_HEIGHT_STAND      # wp5：手臂高度（蹲下随身体下移）
+var _land_dip_timer: float = 0.0               # wp5：着弹脚 1px 下沉帧计时
+var _brake_timer: float = 0.0                  # wp5：急停刹车姿势计时
 
 var max_hp: int = 100
 var hp: int = 100
@@ -273,15 +285,15 @@ func _setup_weapons() -> void:
 
 
 ## P0-1 + wp3：程序化手臂——肩→握把的 2px 线，随 aim_angle 连续旋转
-## （肩点固定角色本地 (2f,-22)；握把端点对齐 WeaponSprite 位置，即
-## _update_aim 里的 hand+aim_dir*4，保证手贴合枪身）
+## （wp5：肩点高度 _arm_height 随蹲姿下移、着地时加 1px 下沉；握把端点对齐
+## WeaponSprite 位置，即 _apply_arm_pose 里的 hand+gun_dir*4，保证手贴合枪身）
 func _draw() -> void:
 	if arm_category == &"" or is_dead:
 		return
 	var sleeve := Color(0.32, 0.34, 0.38) if character == null else character.accent.darkened(0.35)
 	var glove := Color(0.22, 0.23, 0.26)
 	var f := float(facing)
-	var shoulder := Vector2(2.0 * f, -22.0)
+	var shoulder := Vector2(2.0 * f, _arm_height + (1.0 if _land_dip_timer > 0.0 else 0.0))
 	var grip := weapon_sprite.position
 	var line := grip - shoulder
 	var along := line.normalized() if line.length_squared() > 1.0 else Vector2(f, 0.0)
@@ -370,6 +382,14 @@ func _physics_process(delta: float) -> void:
 
 
 func _tick_timers(delta: float) -> void:
+	# wp5：着弹下沉帧计时（贴图整体下沉 1px，到点复位并重绘手臂）
+	var dip_before := _land_dip_timer > 0.0
+	_land_dip_timer = maxf(0.0, _land_dip_timer - delta)
+	_brake_timer = maxf(0.0, _brake_timer - delta)
+	if sprite != null:
+		sprite.offset = Vector2(0.0, 1.0 if _land_dip_timer > 0.0 else 0.0)
+	if dip_before and _land_dip_timer <= 0.0:
+		queue_redraw()
 	iframes = maxf(0.0, iframes - delta)
 	control_immune = maxf(0.0, control_immune - delta)
 	slide_cd = maxf(0.0, slide_cd - delta)
@@ -460,6 +480,10 @@ func _tick_movement(delta: float) -> void:
 		var target_x := input_x * speed
 		var accel := 1800.0 if on_floor else 900.0
 		velocity.x = move_toward(velocity.x, target_x, accel * delta)
+		# wp5：急停——松开方向后 0.1s 内播 1 帧刹车姿势（slide 第 0 帧定格）
+		if on_floor and absf(input_x) <= 0.1 and absf(velocity.x) > run_speed * 0.5 \
+				and not is_crouching:
+			_brake_timer = BRAKE_TIME
 
 	# Crouch + jump drops through one-way platforms.
 	if jump_buffer > 0.0 and Input.is_action_pressed("crouch") and on_floor:
@@ -476,8 +500,13 @@ func _tick_movement(delta: float) -> void:
 		velocity.y += GRAVITY * delta
 		if velocity.y > 700.0:
 			velocity.y = 700.0
+	var fall_speed := velocity.y
 	_step_up(input_x)
 	move_and_slide()
+	# wp5：着弹脚——从空中落地瞬间整体下沉 1px（LAND_DIP_TIME 后复位）
+	if not _last_floor and is_on_floor() and fall_speed > 120.0:
+		_land_dip_timer = LAND_DIP_TIME
+		queue_redraw()
 	if global_position.y > 460.0:
 		take_damage(999, Vector2.DOWN, &"pit", &"fall")
 	camera.set_look_ahead(facing * 40.0)
@@ -568,18 +597,34 @@ func _update_aim(delta: float) -> void:
 		facing = 1
 	elif aim_dir.x < -0.25:
 		facing = -1
+	_apply_arm_pose(delta)
+
+
+## wp5：手臂姿态统一入口——primary（双手端枪）与 secondary（单手持枪）共用。
+## ① 瞄准角相对朝向限幅 ±75°（ARM_MAX_REL）；② lerp_angle 以 ARM_TURN_SPEED
+## （14 rad/s，≥ 规格 12/秒）平滑追踪，替代旧的 0.15 rad 阈值直跳；
+## ③ 蹲下时肩/手高度随身体下移（ARM_HEIGHT_CROUCH）；
+## 枪管（weapon_sprite.rotation）、枪口（_muzzle_local）与手臂线全部使用同一
+## _arm_angle，保证人枪一致不脱节。
+func _apply_arm_pose(delta: float) -> void:
+	var forward := 0.0 if facing > 0 else PI
+	var rel := clampf(wrapf(aim_angle - forward, -PI, PI), -ARM_MAX_REL, ARM_MAX_REL)
+	_arm_angle = lerp_angle(_arm_angle, wrapf(forward + rel, -PI, PI), 1.0 - exp(-ARM_TURN_SPEED * delta))
+	var target_height := ARM_HEIGHT_CROUCH if is_crouching else ARM_HEIGHT_STAND
+	_arm_height = move_toward(_arm_height, target_height, 90.0 * delta)
+	var gun_dir := Vector2.from_angle(_arm_angle)
 	sprite.flip_h = facing < 0
 	weapon_sprite.flip_h = facing < 0
-	weapon_sprite.flip_v = absf(aim_angle) > PI * 0.5
-	weapon_sprite.rotation = aim_angle
-	var hand := Vector2(facing * 8.0, -22.0)
-	weapon_sprite.position = hand + aim_dir * 4.0
+	weapon_sprite.flip_v = absf(wrapf(_arm_angle, -PI, PI)) > PI * 0.5
+	weapon_sprite.rotation = _arm_angle
+	var hand := Vector2(facing * 8.0, _arm_height + (1.0 if _land_dip_timer > 0.0 else 0.0))
+	weapon_sprite.position = hand + gun_dir * 4.0
 	weapon_sprite.z_index = 6 if facing > 0 else 4
-	_muzzle_local = hand + aim_dir * 20.0
+	_muzzle_local = hand + gun_dir * 20.0
 	muzzle.position = _muzzle_local
-	# wp3：手臂随瞄准角连续旋转——与上次绘制角度差超过 0.15 rad 或朝向翻转才重绘
-	if absf(wrapf(aim_angle - _drawn_angle, -PI, PI)) > 0.15 or _drawn_facing != facing:
-		_drawn_angle = aim_angle
+	# wp5：平滑期间逐帧重绘（阈值 0.02 rad + 朝向翻转），替代旧 0.15 rad 防抖
+	if absf(wrapf(_arm_angle - _drawn_angle, -PI, PI)) > 0.02 or _drawn_facing != facing:
+		_drawn_angle = _arm_angle
 		_drawn_facing = facing
 		queue_redraw()
 
@@ -689,16 +734,17 @@ func _fire_weapon(weapon: WeaponData) -> void:
 		spread_heat = 0.0
 	spread += spread_heat
 	var origin := global_position + _muzzle_local
-	var end_point := origin + aim_dir * weapon.effective_range
+	# wp5：弹道与枪管同角（限幅平滑后的 _arm_angle），射击不与手臂脱节
+	var end_point := origin + Vector2.from_angle(_arm_angle) * weapon.effective_range
 	for pellet in weapon.pellets:
-		var shot_angle := aim_angle + deg_to_rad(randf_range(-spread, spread) * 0.5)
+		var shot_angle := _arm_angle + deg_to_rad(randf_range(-spread, spread) * 0.5)
 		var dir := Vector2(cos(shot_angle), sin(shot_angle))
 		var hits := _ray_hits(origin, dir, weapon.effective_range, weapon.pierce)
 		for hit in hits:
 			_apply_hit(weapon, hit, dir)
 		if hits.is_empty():
 			Fx.tracer(level.fx_layer, origin, origin + dir * weapon.effective_range)
-	Fx.muzzle(level.fx_layer, origin, aim_angle)
+	Fx.muzzle(level.fx_layer, origin, _arm_angle)
 	Fx.shell(level.fx_layer, global_position + Vector2(facing * 4.0, -16.0), -facing)
 	AudioManager.play_sfx(weapon.id)
 	AudioManager.play_sfx(&"gunshot", 1.0, -8.0)
@@ -1010,6 +1056,9 @@ func _update_animation() -> void:
 		anim = "jump"
 	elif is_crouching:
 		anim = "crouch"
+	elif _brake_timer > 0.0 and absf(velocity.x) > 30.0 and is_on_floor():
+		# wp5：急停刹车姿势——slide 第 0 帧（前倾刹车帧）定格 0.1s
+		anim = "slide"
 	elif melee_anim_timer > 0.0:
 		anim = "melee"
 	elif shoot_anim_timer > 0.0:
@@ -1020,6 +1069,10 @@ func _update_animation() -> void:
 		anim = "run"
 	if sprite.animation != anim:
 		sprite.play(anim)
+	if anim == "slide" and not is_sliding:
+		# wp5：刹车姿势只定格 slide 第 0 帧（真实滑铲仍正常播 2 帧）
+		sprite.set_frame_and_progress(0, 0.0)
+		sprite.pause()
 
 
 func _tick_downed(delta: float) -> void:
@@ -1042,18 +1095,19 @@ func _tick_downed(delta: float) -> void:
 	if Input.is_action_pressed("fire") and weapon_cooldown <= 0.0 and _downed_shot_available():
 		weapon_cooldown = 0.35
 		_downed_consume_round()
+		var down_dir := Vector2.from_angle(_arm_angle)  # wp5：倒地射击同枪管角
 		var origin := global_position + _muzzle_local
-		var query := PhysicsRayQueryParameters2D.create(origin, origin + aim_dir * 400.0, 89, [get_rid()])
+		var query := PhysicsRayQueryParameters2D.create(origin, origin + down_dir * 400.0, 89, [get_rid()])
 		var result := get_world_2d().direct_space_state.intersect_ray(query)
-		var end := origin + aim_dir * 400.0
+		var end := origin + down_dir * 400.0
 		if not result.is_empty():
 			end = result["position"]
 			var collider: Object = result["collider"]
 			if collider.has_method("apply_damage"):
-				collider.apply_damage(18, -aim_dir, false, &"player", &"bullet")
-				Fx.blood(level.fx_layer, end, aim_dir)
+				collider.apply_damage(18, -down_dir, false, &"player", &"bullet")
+				Fx.blood(level.fx_layer, end, down_dir)
 		Fx.tracer(level.fx_layer, origin, end)
-		Fx.muzzle(level.fx_layer, origin, aim_angle)
+		Fx.muzzle(level.fx_layer, origin, _arm_angle)
 		AudioManager.play_sfx(&"m9")
 	if bleedout <= 0.0:
 		die()

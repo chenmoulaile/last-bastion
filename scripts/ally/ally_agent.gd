@@ -9,6 +9,10 @@ const GRAVITY := 1500.0
 const JUMP_VELOCITY := -540.0
 const BLEEDOUT_TIME := 20.0
 
+# wp5-arms-gait：手臂规格（与 player.gd 同规格）
+const ARM_TURN_SPEED := 14.0       # 手臂追踪速率 rad/s（规格要求 ≥12/秒）
+const ARM_MAX_REL := 1.3089969     # 手臂相对朝向限幅 ±75°（rad）
+
 var data: CharacterData
 var level: Node = null
 var visual_id: String = "assault"
@@ -82,24 +86,26 @@ func _draw() -> void:
 	_draw_arm(shoulder + Vector2(2.0 * f, 1.0), grip + along * 3.0, sleeve)
 
 
-## wp3：队友没有 aim_angle——交战用 aim_dir（目标方向），移动用 velocity 方向，
-## 静止用 facing；角度或朝向变化超过 0.15 rad 才 queue_redraw。
-## 非交战时同步回写 aim_dir，让 WeaponSprite 与手臂同角（人枪一致）。
+## wp3 + wp5：队友没有 aim_angle——交战用 aim_dir（目标方向，保持原始目标向），
+## 移动用 velocity 方向，静止用 facing；wp5 在此基础上加 ±75° 相对朝向限幅
+## （ARM_MAX_REL）与 lerp_angle 平滑（ARM_TURN_SPEED=14 rad/s，≥ 规格 12/秒，
+## 替代旧 0.15 rad 防抖直跳）。aim_dir 不回写平滑角（避免反馈停滞），
+## WeaponSprite 直接消费 _arm_angle，与手臂同角（人枪一致）；
+## 平滑期间按 0.02 rad 差值逐帧 queue_redraw。
 func _update_arm_visual() -> void:
 	var dir: Vector2
 	if enemy != null and is_instance_valid(enemy):
 		dir = aim_dir
 	elif velocity.length_squared() > 100.0:
 		dir = velocity.normalized()
-		aim_dir = dir
 	else:
 		dir = Vector2(float(facing), 0.0)
-		aim_dir = dir
 	if dir.length_squared() < 0.01:
 		dir = Vector2(float(facing), 0.0)
-		aim_dir = dir
-	_arm_angle = dir.angle()
-	if absf(wrapf(_arm_angle - _drawn_angle, -PI, PI)) > 0.15 or _drawn_facing != facing:
+	var forward := 0.0 if facing > 0 else PI
+	var rel := clampf(wrapf(dir.angle() - forward, -PI, PI), -ARM_MAX_REL, ARM_MAX_REL)
+	_arm_angle = lerp_angle(_arm_angle, wrapf(forward + rel, -PI, PI), 1.0 - exp(-ARM_TURN_SPEED * _delta))
+	if absf(wrapf(_arm_angle - _drawn_angle, -PI, PI)) > 0.02 or _drawn_facing != facing:
 		_drawn_angle = _arm_angle
 		_drawn_facing = facing
 		queue_redraw()
@@ -767,11 +773,12 @@ func _update_animation() -> void:
 func _update_weapon_visual() -> void:
 	if weapon_sprite == null:
 		return
+	# wp5：武器直接使用限幅+平滑后的 _arm_angle，与手臂线同角（人枪一致）
 	weapon_sprite.visible = not is_downed
 	weapon_sprite.flip_h = facing < 0
-	weapon_sprite.flip_v = absf(aim_dir.angle()) > PI * 0.5
-	weapon_sprite.rotation = aim_dir.angle()
-	weapon_sprite.position = Vector2(facing * 8.0, -18.0) + aim_dir * 4.0
+	weapon_sprite.flip_v = absf(wrapf(_arm_angle, -PI, PI)) > PI * 0.5
+	weapon_sprite.rotation = _arm_angle
+	weapon_sprite.position = Vector2(facing * 8.0, -18.0) + Vector2.from_angle(_arm_angle) * 4.0
 	weapon_sprite.z_index = 5 if facing > 0 else 3
 
 
