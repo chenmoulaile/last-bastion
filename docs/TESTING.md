@@ -141,3 +141,11 @@ Windows 发行版启动验证：
 ## CI
 
 仓库包含 `.github/workflows/ci.yml`，在 Ubuntu 上使用 Godot 4.7.2 headless 依次运行 smoke / campaign / integration 三个测试场景。性能门禁依赖真实 GPU，保留为发布前手动步骤。
+
+### 本地一键检查链（wp8-tests-ci）
+
+```bat
+tools\ci_checks.bat
+```
+
+在仓库根目录串联五步：smoke / narrative / integration（含 wp8 崩溃链回归与进屋全流程测试）三个 headless 测试 + `py -3.14 tools\assert_no_baked_weapons.py`（角色帧不得烤入枪械）+ `py -3.14 tools\assert_weapon_clean.py`（武器贴图杂点断言，只读判定）。每步 stdout/stderr 保留在 `build\ci_logs\<step>.log`；Godot 三步的日志还会扫描 `SCRIPT ERROR`，出现即判失败；任意一步失败脚本退出码非 0。Godot 路径默认 `D:\DevTools\Godot\Godot_v4.7.2-stable_win64_console.exe`，可用环境变量 `GODOT_EXE` 覆盖。

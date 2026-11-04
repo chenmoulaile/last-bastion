@@ -8,6 +8,8 @@ var _phase := 0
 var _scene: Node
 var _fired := false
 var _last_print := -1
+## wp8-tests-ci：每 90s 在最近可进入门旁注入 10 只尸潮（「尸潮贴门」场景回归）
+var _next_door_horde := 90.0
 
 
 func _ready() -> void:
@@ -100,6 +102,30 @@ func _drive() -> void:
 	if _elapsed > 500.0 and _phase < 5:
 		_phase = 5
 		_scene.spawn_boss(&"tank", 1)
+	# wp8-tests-ci：每 90s 在最近可进入门旁 spawn_horde_at(门旁, 10)——
+	# 持续制造「尸潮贴近可进入门」的压力场景；室内态时 spawn_horde_at 内部
+	# 自动改投 _street_return 街道门口（level_runner.gd:1317）。
+	if _elapsed >= _next_door_horde:
+		_next_door_horde += 90.0
+		var door_pos := _nearest_enterable_door(player.global_position)
+		if door_pos.x >= 0.0:
+			_scene.spawn_horde_at(door_pos, 10, true)
+			print("[AUTO] wp8 door horde t=%d at (%.0f, %.0f)" % [int(_elapsed), door_pos.x, door_pos.y])
+
+
+## wp8：找距玩家最近的可进入建筑门口（无 enterable 建筑时返回 x=-1）
+func _nearest_enterable_door(from: Vector2) -> Vector2:
+	var best := Vector2(-1.0, 0.0)
+	var best_d := INF
+	for b in _scene.get("_buildings"):
+		if not bool(b.get("enterable", false)):
+			continue
+		var p := Vector2(float(b["door_x"]), float(b["ground_y"]))
+		var d := p.distance_to(from)
+		if d < best_d:
+			best_d = d
+			best = p
+	return best
 
 
 func _tap_key(keycode: Key) -> void:

@@ -24,6 +24,8 @@ func _ready() -> void:
 	await _test_command_mode()
 	await _test_window_rappel()
 	await _test_interior_rooms()
+	await _test_crash_chain_regression()
+	await _test_interior_full_flow()
 	await _test_scoring()
 	await _test_audio_layers()
 	await _test_save_persistence()
@@ -54,6 +56,32 @@ func _frames(count: int) -> void:
 
 func _wait(seconds: float) -> void:
 	await get_tree().create_timer(seconds, true, false, true).timeout
+
+
+## wp8：受 Engine.time_scale 影响的游戏时间等待（_wait 是 ignore_time_scale 的真实时间）。
+func _wait_game(seconds: float) -> void:
+	await get_tree().create_timer(seconds, true, false, false).timeout
+
+
+## wp8：记录一段 objective_changed 文本并断言其中从未出现「任务完成」。
+class ObjectiveRecorder:
+	var texts: Array[String] = []
+
+	func attach() -> void:
+		EventBus.objective_changed.connect(_on_text)
+
+	func detach() -> void:
+		if EventBus.objective_changed.is_connected(_on_text):
+			EventBus.objective_changed.disconnect(_on_text)
+
+	func _on_text(t: String) -> void:
+		texts.append(t)
+
+	func saw_mission_complete() -> bool:
+		for t in texts:
+			if t.contains("任务完成"):
+				return true
+		return false
 
 
 func _open_level(id: StringName, mode: StringName = &"SQUAD") -> Node:
@@ -430,6 +458,189 @@ func _test_interior_rooms() -> void:
 			_check(false, "interior: exit area returns player to street")
 	await _close_level(scene)
 	print("[INTEGRATION] interior rooms ok")
+
+
+## wp8-tests-ci：崩溃链回归（审计场景护栏，wp1/wp2/wp4 修复不得回退）。
+## 链A：玩家 x=600 远距 hit(999) 打爆可进入门 → 10 物理帧位移 <50px、不进室内、不结算。
+## 链B：玩家贴 17% 进度门，附近刷 12 只尸潮持续 30 游戏秒 → 玩家未被传送、
+##      enterable 门不掉血不破、objective 从未出现「任务完成」。
+func _test_crash_chain_regression() -> void:
+	# ---------- 链A：远距打爆门不传送 ----------
+	var scene := await _open_level(&"l01")
+	var player: Node2D = scene.get_player()
+	var buildings: Array = scene.get("_buildings")
+	var enterable: Array = buildings.filter(func(b): return bool(b.get("enterable", false)))
+	_check(not enterable.is_empty(), "crash chain: l01 has enterable buildings")
+	if enterable.is_empty():
+		await _close_level(scene)
+		return
+	var b0: Dictionary = enterable[0]
+	var door_x := float(b0["door_x"])
+	var ground_y := float(b0["ground_y"])
+	var door: Node2D = null
+	for d in get_tree().get_nodes_in_group("doors"):
+		if absf(d.global_position.x - door_x) < 24.0:
+			door = d
+			break
+	_check(door != null, "crash chain: enterable door spawned at door_x=%.0f" % door_x)
+	if door != null:
+		var parked := Vector2(600.0, ground_y - 2.0)
+		player.global_position = parked
+		player.velocity = Vector2.ZERO
+		_check(absf(player.global_position.x - door_x) > 400.0,
+			"crash chain A: player parked far from door (dx=%.0f)" % absf(player.global_position.x - door_x))
+		var rec := ObjectiveRecorder.new()
+		rec.attach()
+		door.call("hit", 999)
+		_check(not is_instance_valid(door) or bool(door.get("broken")),
+			"crash chain A: door broke from hit(999)")
+		for _i in 10:
+			await get_tree().physics_frame
+		var disp := player.global_position.distance_to(parked)
+		_check(disp < 50.0,
+			"crash chain A: door broken far away does NOT teleport player (10 physics frames, disp=%.1fpx)" % disp)
+		_check(not bool(scene.get("_in_interior")), "crash chain A: player not in interior")
+		_check(not bool(scene.get("_finishing")), "crash chain A: level not finishing after door break")
+		_check(not rec.saw_mission_complete(), "crash chain A: objective never says 任务完成")
+		rec.detach()
+	await _close_level(scene)
+
+	# ---------- 链B：尸潮贴门 30 秒不传送不结算 ----------
+	scene = await _open_level(&"l01")
+	player = scene.get_player()
+	buildings = scene.get("_buildings")
+	enterable = buildings.filter(func(b): return bool(b.get("enterable", false)))
+	if enterable.is_empty():
+		_check(false, "crash chain B: l01 has enterable buildings")
+		await _close_level(scene)
+		return
+	b0 = enterable[0]
+	door_x = float(b0["door_x"])
+	ground_y = float(b0["ground_y"])
+	var door2: Node2D = null
+	for d in get_tree().get_nodes_in_group("doors"):
+		if absf(d.global_position.x - door_x) < 24.0:
+			door2 = d
+			break
+	_check(door2 != null, "crash chain B: enterable door spawned")
+	if door2 != null:
+		var parked2 := Vector2(door_x - 30.0, ground_y - 2.0)
+		player.global_position = parked2
+		player.velocity = Vector2.ZERO
+		player.call("heal_full")
+		var hp_before := int(door2.get("health"))
+		var rec2 := ObjectiveRecorder.new()
+		rec2.attach()
+		# 12 只尸潮在门附近刷出（spawn_horde_at 在目标 ±260-620px 落地后涌向玩家/门口）
+		scene.spawn_horde_at(Vector2(door_x, ground_y), 12, true)
+		# 30 游戏秒：time_scale=3 加速（墙钟约 10s），每游戏秒续满无敌帧防止
+		# 玩家被围殴死亡干扰「未被传送」断言（本测试聚焦传送/结算，不测生存）。
+		Engine.time_scale = 3.0
+		for _s in 30:
+			await _wait_game(1.0)
+			if is_instance_valid(player):
+				player.call("heal_full")
+				player.set("iframes", 2.0)
+		Engine.time_scale = 1.0
+		_check(not rec2.saw_mission_complete(), "crash chain B: objective never says 任务完成")
+		_check(not bool(scene.get("_finishing")), "crash chain B: level not finishing")
+		_check(not bool(scene.get("_extraction_started")), "crash chain B: extraction not started")
+		_check(not bool(scene.get("_in_interior")), "crash chain B: player not teleported into interior")
+		_check(not is_instance_valid(door2) or bool(door2.get("broken")) == false,
+			"crash chain B: enterable door not broken by horde (P1-4)")
+		if is_instance_valid(door2):
+			_check(int(door2.get("health")) == hp_before,
+				"crash chain B: enterable door health intact after 30s horde (%d->%d)" % [hp_before, int(door2.get("health"))])
+		if is_instance_valid(player):
+			var disp2 := player.global_position.distance_to(parked2)
+			_check(not bool(player.get("is_dead")) and disp2 < 300.0,
+				"crash chain B: player NOT teleported after 30s horde at door (disp=%.1fpx)" % disp2)
+		rec2.detach()
+	await _close_level(scene)
+	print("[INTEGRATION] crash chain ok")
+
+
+## wp8-tests-ci：进屋全流程——踢两脚破门 → 走入门洞传入室内 → 室内站 60 游戏秒
+## （进度/剧情事件/教程提示/撤离全部冻结）→ 出口返回街道 ±60px。
+## 全程由外部 CI 扫描本测试日志确认 0 条 SCRIPT ERROR（tools/ci_checks.bat）。
+func _test_interior_full_flow() -> void:
+	var scene := await _open_level(&"l01")
+	var player: Node2D = scene.get_player()
+	var buildings: Array = scene.get("_buildings")
+	var enterable: Array = buildings.filter(func(b): return bool(b.get("enterable", false)))
+	_check(not enterable.is_empty(), "interior flow: l01 has enterable buildings")
+	if enterable.is_empty():
+		await _close_level(scene)
+		return
+	var b0: Dictionary = enterable[0]
+	var door_x := float(b0["door_x"])
+	var ground_y := float(b0["ground_y"])
+	var room: Dictionary = b0.get("interior", {})
+	var door: Node2D = null
+	for d in get_tree().get_nodes_in_group("doors"):
+		if absf(d.global_position.x - door_x) < 24.0:
+			door = d
+			break
+	_check(door != null and not room.is_empty(), "interior flow: door and interior room exist")
+	if door != null and not room.is_empty():
+		# ① 踢两脚破门（与 _test_interactables 同规格：重置 kick_cd 后 interact）
+		player.global_position = Vector2(door_x - 30.0, ground_y - 2.0)
+		player.velocity = Vector2.ZERO
+		for _k in 2:
+			door.set("kick_cd", 0.0)
+			door.call("interact", player)
+		_check(not is_instance_valid(door) or bool(door.get("broken")),
+			"interior flow: two kicks break the door")
+		# ② 真实输入走入门洞 → 门洞 Area2D 触发 _try_enter_interior
+		Input.action_press("move_right")
+		var entered := false
+		for _i in 240:
+			await get_tree().physics_frame
+			if bool(scene.get("_in_interior")):
+				entered = true
+				break
+		Input.action_release("move_right")
+		_check(entered, "interior flow: walking into doorway enters interior")
+		_check(player.global_position.distance_to(room["entry"]) < 2.0,
+			"interior flow: player placed at interior entry")
+		_check((scene.get("_street_return") as Vector2).distance_to(
+				Vector2(door_x - 26.0, ground_y - 2.0)) < 0.5,
+			"interior flow: street return recorded at doorway")
+		# ③ 室内站 60 游戏秒（time_scale=3 → 墙钟 20s）：进度/事件/提示/撤离全冻结
+		var progress_before := float(scene.get("_progress"))
+		var events_before: int = (scene.get("_events_fired") as Dictionary).size()
+		var tips_before: int = int(scene.get("_tips_shown"))
+		var rec := ObjectiveRecorder.new()
+		rec.attach()
+		Engine.time_scale = 3.0
+		var froze := true
+		for _s in 12:
+			await _wait_game(5.0)
+			if float(scene.get("_progress")) != progress_before \
+					or bool(scene.get("_finishing")) \
+					or bool(scene.get("_extraction_started")) \
+					or (scene.get("_events_fired") as Dictionary).size() != events_before \
+					or int(scene.get("_tips_shown")) != tips_before:
+				froze = false
+				break
+			if is_instance_valid(player):
+				player.call("heal_full")
+		Engine.time_scale = 1.0
+		_check(froze, "interior flow: 60s inside freezes progress/events/tips/extraction")
+		_check(float(scene.get("_progress")) == progress_before,
+			"interior flow: progress frozen at %.3f" % progress_before)
+		_check(not rec.saw_mission_complete(), "interior flow: objective never says 任务完成 inside")
+		rec.detach()
+		# ④ 出口返回街道 ±60px
+		var back := Vector2(door_x - 26.0, ground_y - 2.0)
+		player.global_position = (room["exit"] as Vector2) + Vector2(0, -8)
+		for _i in 8:
+			await get_tree().physics_frame
+		_check(not bool(scene.get("_in_interior")), "interior flow: exit clears interior state")
+		_check(player.global_position.distance_to(back) <= 60.0,
+			"interior flow: exit returns player to street ±60px (dx=%.1f)" % player.global_position.distance_to(back))
+	await _close_level(scene)
+	print("[INTEGRATION] interior full flow ok")
 
 
 func _test_scoring() -> void:
