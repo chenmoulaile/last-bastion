@@ -482,6 +482,9 @@ func _build_doors() -> void:
 		door.set_meta("building_index", _buildings.find(b))
 		interactables.add_child(door)
 		if bool(b.get("enterable", false)):
+			# P1-4：enterable 门免疫僵尸挠破（door.gd zombie_scratch 只播火花/音效），
+			# 玩家踢门/射击仍可破门进屋；街面普通路障门不受影响。
+			door.enterable = true
 			var room: Dictionary = b.get("interior", {})
 			door.set_meta("interior_entry", room.get("entry", Vector2.ZERO))
 			door.set_meta("street_return", Vector2(float(b["door_x"]) - 26.0, float(b["ground_y"]) - 2.0))

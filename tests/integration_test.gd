@@ -377,6 +377,28 @@ func _test_interior_rooms() -> void:
 				door = d
 				break
 		_check(door != null, "interior: enterable door spawned at door_x")
+		# 断言2a（P1-4）：enterable 门免疫僵尸挠——12 只僵尸连挠 30 秒（0.75s 冷却内
+		# 12 只轮番，等效持续挠门），门血量不变；门上标记 enterable=true。
+		if door != null:
+			_check(bool(door.get("enterable")), "interior: enterable door flagged enterable (P1-4)")
+			var hp_before := int(door.get("health"))
+			for _i in 12:
+				door.set("scratch_cd", 0.0)
+				door.call("zombie_scratch", null)
+			_check(int(door.get("health")) == hp_before and not bool(door.get("broken")),
+				"interior: 12 zombie scratches leave enterable door health intact (P1-4)")
+			# 对照组：街面普通路障门（enterable=false）维持现状，挠门照样掉血。
+			var barricade: Node2D = null
+			for d in get_tree().get_nodes_in_group("doors"):
+				if absf(d.global_position.x - door_x) > 24.0 and not bool(d.get("enterable")):
+					barricade = d
+					break
+			if barricade != null:
+				var bhp_before := int(barricade.get("health"))
+				barricade.set("scratch_cd", 0.0)
+				barricade.call("zombie_scratch", null)
+				_check(int(barricade.get("health")) < bhp_before,
+					"interior: barricade door still takes scratch damage (P1-4)")
 		var street_pos := Vector2(600.0, ground_y - 2.0)
 		player.global_position = street_pos
 		if door != null:

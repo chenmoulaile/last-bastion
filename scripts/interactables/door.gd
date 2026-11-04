@@ -13,6 +13,10 @@ var broken: bool = false
 ## wp1：最后一次伤害来源（&"kick"=玩家踢门 / &"combat"=玩家射击或爆炸 / &"zombie"=僵尸挠门），
 ## 随 door_broken 信号广播，供下游按来源分流。
 var last_damage_source: StringName = &"kick"
+## P1-4：可进入建筑的门（玩家补给房入口）标记，由 level_runner._build_doors 传入。
+## 为 true 时僵尸 zombie_scratch 挠不破——只播火花/音效不掉血；玩家踢门（interact）
+## 与射击（hit）仍可破门进屋；街面普通路障门维持原掉血逻辑。
+var enterable: bool = false
 var sprite: Sprite2D
 var collision: CollisionShape2D
 
@@ -90,6 +94,15 @@ func zombie_scratch(zombie: Node) -> void:
 	if broken or scratch_cd > 0.0:
 		return
 	scratch_cd = 0.75
+	# P1-4：可进入建筑的门免疫僵尸挠破——只播火花/音效，不掉血、不会 _break()，
+	# 杜绝「僵尸挠破 enterable 门 → door_broken → 玩家被传进室内」的崩溃链入口。
+	if enterable:
+		AudioManager.play_sfx_2d(&"door_hit", global_position, 600.0)
+		if level:
+			Fx.spark(level.fx_layer, global_position + Vector2(0, -18))
+		if zombie and zombie.has_method("apply_stagger"):
+			zombie.apply_stagger(0.1)
+		return
 	last_damage_source = &"zombie"
 	health -= 9
 	if level:
