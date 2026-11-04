@@ -384,6 +384,8 @@ func _build_buildings() -> void:
 		exit_area.body_entered.connect(func(body: Node2D) -> void:
 			if body.is_in_group("player") and is_instance_valid(exit_area):
 				body.global_position = back
+				# wp2：离开室内 → 退出室内态，进度/事件/导演/撤离全部恢复街道规则
+				_in_interior = false
 				# wp5：回到街道后相机右界还原到关卡宽度（房间远端实例区不再可见）
 				var cam := body.get_viewport().get_camera_2d()
 				if cam != null:
@@ -448,6 +450,8 @@ func _try_enter_interior(b: Dictionary, area: Area2D = null, initiated_by_player
 	if room.is_empty():
 		return
 	_street_return = Vector2(door_x - 26.0, float(b["ground_y"]) - 2.0)
+	# wp2：进入室内 → 置室内态（_street_return 已是出口落点，供导演投放改址与验收比对）
+	_in_interior = true
 	player.global_position = room["entry"]
 	# wp5：房间建在 level_width+700 远端实例区，进门后放宽相机右界让房间可见
 	var cam := player.get_viewport().get_camera_2d()
@@ -460,6 +464,11 @@ func _try_enter_interior(b: Dictionary, area: Area2D = null, initiated_by_player
 
 var _buildings: Array = []
 var _street_return: Vector2 = Vector2.ZERO
+## wp2：室内态状态机标记。玩家经门洞 Area2D 进入内部房间时置 true，
+## 从房间出口 Area2D 回到街道时置 false。室内期间：
+## 进度 _progress 冻结、剧情事件 _fire_due_events 暂停、
+## 撤离判定/倒计时跳过、导演尸潮与特感投放改投 _street_return 街道门口附近。
+var _in_interior := false
 
 
 func _build_doors() -> void:
@@ -856,9 +865,12 @@ func _process(delta: float) -> void:
 		if _corpses[i]["t"] <= 0.0:
 			_corpses.remove_at(i)
 	_tick_markers(delta)
-	_progress = clampf(player.global_position.x / level_width, 0.0, 1.0)
-	_fire_due_events()
-	_show_tips()
+	# wp2：室内态冻结进度并暂停剧情事件推进——室内 x 恒在 level_width 之外，
+	# 直接计算会把 _progress 钳到 1.0 并一次性触发剩余全部事件。
+	if not _in_interior:
+		_progress = clampf(player.global_position.x / level_width, 0.0, 1.0)
+		_fire_due_events()
+		_show_tips()
 	_tick_defense(delta)
 	_tick_extraction(delta)
 	_check_horde()
@@ -872,7 +884,8 @@ func _process(delta: float) -> void:
 		if not _extraction_started and not _defense_active:
 			EventBus.objective_changed.emit("推进至撤离点 · %d%%" % int(_progress * 100.0))
 	# The player can also walk past the extraction zone without triggering it.
-	if not _extraction_started and player.global_position.x > level_width - 120.0:
+	# wp2：室内态绝不触发撤离（室内 x 恒 > level_width-120，否则进屋即结算）。
+	if not _extraction_started and not _in_interior and player.global_position.x > level_width - 120.0:
 		_on_extraction_trigger(player)
 
 
@@ -892,7 +905,9 @@ func _on_signal_agent_requested() -> void:
 	if _agent_cd > 0.0 or data.chapter < 3 or player == null:
 		return
 	_agent_cd = 60.0
-	var x := _nearest_ground_x(clampf(player.global_position.x + 260.0, 100.0, level_width - 100.0))
+	# wp2：室内态特工改投 _street_return 附近街道（同 _spawn_horde_around 的理由）
+	var base_x := _street_return.x if _in_interior else player.global_position.x
+	var x := _nearest_ground_x(clampf(base_x + 260.0, 100.0, level_width - 100.0))
 	if x < 0.0:
 		return
 	_agent_alive = _spawn_humans(&"signal_bureau", &"agent", 1, clampf(x / level_width, 0.05, 0.95))
@@ -1294,6 +1309,10 @@ func spawn_horde_at(pos: Vector2, count: int, alert: bool = true) -> void:
 
 
 func _spawn_horde_around(pos: Vector2, count: int, alert: bool) -> void:
+	# wp2：室内态玩家坐标恒在 level_width 之外，尸潮若按玩家位置刷会被 clamp
+	# 堆到关卡右端撤离点；改投到 _street_return（进屋前街道门口）附近。
+	if _in_interior:
+		pos = _street_return
 	var room := MAX_COMMONS - _alive_common_count()
 	count = mini(count, room)
 	if count <= 0:
@@ -1360,8 +1379,10 @@ func spawn_special(kind: StringName) -> void:
 		return
 	if _alive_special_count() >= MAX_SPECIALS:
 		return
+	# wp2：室内态改投 _street_return 附近，不在撤离点边缘堆特感
+	var base_x := _street_return.x if _in_interior else player.global_position.x
 	var dir := 1.0 if _rng.randf() < 0.65 else -1.0
-	var x := player.global_position.x + dir * _rng.randf_range(360.0, 620.0)
+	var x := base_x + dir * _rng.randf_range(360.0, 620.0)
 	x = clampf(x, 100.0, level_width - 100.0)
 	var z := _spawn_zombie(kind, _ground_pos(x), true)
 	if z != null:
@@ -1370,8 +1391,10 @@ func spawn_special(kind: StringName) -> void:
 
 
 func spawn_boss(kind: StringName, count: int = 1) -> void:
+	# wp2：室内态改投 _street_return 附近
+	var base_x := _street_return.x if _in_interior else player.global_position.x
 	for i in count:
-		var x := player.global_position.x + 420.0 + i * 90.0
+		var x := base_x + 420.0 + i * 90.0
 		x = clampf(x, 120.0, level_width - 120.0)
 		var z := _spawn_zombie(kind, _ground_pos(x), true)
 		if z != null and i == 0:
@@ -1393,7 +1416,9 @@ func _on_director_supply(kind: StringName) -> void:
 
 
 func _spawn_director_supply(kind: StringName) -> void:
-	var x := player.global_position.x + 180.0
+	# wp2：室内态补给改投 _street_return 附近街道（室内 x 在 level_width 之外，
+	# 直接按玩家位置投放会被 clamp 到撤离点，玩家根本捡不到）
+	var x := (_street_return.x if _in_interior else player.global_position.x) + 180.0
 	x = clampf(x, 80.0, level_width - 80.0)
 	var pos := _ground_pos(x)
 	if kind == &"medkit":
@@ -1439,6 +1464,9 @@ func _tick_defense(delta: float) -> void:
 
 func _tick_extraction(delta: float) -> void:
 	if not _extraction_started:
+		return
+	# wp2：室内态撤离倒计时暂停（玩家从撤离点跑进屋里躲秒数不被允许结算）
+	if _in_interior:
 		return
 	if data.extraction_defense <= 0.0:
 		return
@@ -1532,6 +1560,10 @@ func _on_hidden_trigger(body: Node) -> void:
 
 func _on_extraction_trigger(body: Node) -> void:
 	if not body.is_in_group("player") or _extraction_started or _finishing:
+		return
+	# wp2：室内态兜底——撤离 Area2D（level_width-140）与 _process 自动检查之外的第三道闸。
+	# 室内坐标恒在 level_width 之外，会同时绕过 :1536 的距离检查，必须在此拦截。
+	if _in_interior:
 		return
 	if player.global_position.x < level_width - 240.0:
 		return
