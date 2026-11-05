@@ -6,7 +6,7 @@ var _tab_buttons: Array[Button] = []
 var _tab: int = 0
 var _listening_action: String = ""
 var _listening_button: Button = null
-var _fullscreen_button: Button
+var _window_mode_button: Button
 var _tips_button: Button
 var _shake_label: Label
 
@@ -119,17 +119,18 @@ func _build_audio() -> void:
 
 func _build_video() -> void:
 	var panel := _panel()
-	var fs_label := UIKit.label("显示模式", 10, UIKit.INK)
+	# wp8-window-saves：窗口模式三选项（窗口化/最大化/全屏），点按循环，立即生效并持久化。
+	var fs_label := UIKit.label("窗口模式", 10, UIKit.INK)
 	fs_label.position = Vector2(16, 20)
 	fs_label.size = Vector2(120, 12)
 	panel.add_child(fs_label)
-	_fullscreen_button = UIKit.button("", 110, 24)
-	_fullscreen_button.position = Vector2(150, 16)
-	_fullscreen_button.pressed.connect(_toggle_fullscreen)
-	panel.add_child(_fullscreen_button)
+	_window_mode_button = UIKit.button("", 130, 24)
+	_window_mode_button.position = Vector2(150, 16)
+	_window_mode_button.pressed.connect(_cycle_window_mode)
+	panel.add_child(_window_mode_button)
 	_refresh_video_buttons()
 
-	var mode := UIKit.label("窗口 1280 × 720 · 画布 640 × 360 · 整数缩放", 8, UIKit.MUTED)
+	var mode := UIKit.label("窗口化 1280 × 720 · 画布 640 × 360 · 整数缩放 · 默认最大化启动", 8, UIKit.MUTED)
 	mode.position = Vector2(16, 48)
 	mode.size = Vector2(430, 10)
 	panel.add_child(mode)
@@ -179,14 +180,15 @@ func _build_video() -> void:
 
 
 func _refresh_video_buttons() -> void:
-	if _fullscreen_button != null:
-		_fullscreen_button.text = "全屏：开" if ConfigManager.is_fullscreen() else "全屏：关"
+	if _window_mode_button != null:
+		_window_mode_button.text = "窗口模式：" + ConfigManager.window_mode_label()
 	if _tips_button != null:
 		_tips_button.text = "提示：开" if ConfigManager.show_tips() else "提示：关"
 
 
-func _toggle_fullscreen() -> void:
-	ConfigManager.set_fullscreen(not ConfigManager.is_fullscreen())
+func _cycle_window_mode() -> void:
+	var next := (ConfigManager.window_mode() + 1) % ConfigManager.WINDOW_MODE_LABELS.size()
+	ConfigManager.set_window_mode(next)
 	_refresh_video_buttons()
 
 

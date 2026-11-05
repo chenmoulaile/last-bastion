@@ -35,6 +35,10 @@ window/size/viewport_width=640
 window/size/viewport_height=360
 window/size/window_width_override=1280
 window/size/window_height_override=720
+; wp8-window-saves：初始窗口模式 2=最大化（WINDOW_MODE_MAXIMIZED）。
+; 新装无存档时以此默认最大化启动；已有存档时 ConfigManager.apply_display
+; 会按 settings.window_mode 在主场景加载前覆盖，无可见切换闪烁。
+window/size/mode=2
 window/stretch/mode="canvas_items"
 window/stretch/aspect="keep"
 window/stretch/scale_mode="integer"

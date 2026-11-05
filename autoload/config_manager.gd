@@ -234,21 +234,69 @@ func apply_volumes() -> void:
 			AudioServer.set_bus_mute(index, value <= 0.001)
 
 
-func set_fullscreen(enabled: bool) -> void:
-	_settings["fullscreen"] = enabled
+# ---------------------------------------------------------- window mode ----
+# wp8-window-saves：窗口模式三选项（窗口化/最大化/全屏），持久化到用户设置。
+const WINDOW_MODE_WINDOWED := 0
+const WINDOW_MODE_MAXIMIZED := 1
+const WINDOW_MODE_FULLSCREEN := 2
+## 全新安装（无存档）时的默认窗口模式：最大化启动。
+const DEFAULT_WINDOW_MODE := WINDOW_MODE_MAXIMIZED
+
+const WINDOW_MODE_LABELS := ["窗口化", "最大化", "全屏"]
+
+
+## 当前窗口模式设置。旧档迁移：没有 window_mode 字段时按旧 fullscreen
+## 布尔值降级（true→全屏），否则取默认最大化。
+func window_mode() -> int:
+	if _settings.has("window_mode"):
+		return clampi(int(_settings["window_mode"]), WINDOW_MODE_WINDOWED, WINDOW_MODE_FULLSCREEN)
+	if bool(_settings.get("fullscreen", false)):
+		return WINDOW_MODE_FULLSCREEN
+	return DEFAULT_WINDOW_MODE
+
+
+func window_mode_label(mode: int = -1) -> String:
+	if mode < 0:
+		mode = window_mode()
+	return WINDOW_MODE_LABELS[clampi(mode, 0, WINDOW_MODE_LABELS.size() - 1)]
+
+
+## 非全屏模式下最近一次使用过的窗口模式（供 F11 退出全屏时回落）。
+func window_mode_last() -> int:
+	var mode := clampi(int(_settings.get("window_mode_last", DEFAULT_WINDOW_MODE)),
+		WINDOW_MODE_WINDOWED, WINDOW_MODE_MAXIMIZED)
+	return mode
+
+
+func set_window_mode(mode: int) -> void:
+	mode = clampi(mode, WINDOW_MODE_WINDOWED, WINDOW_MODE_FULLSCREEN)
+	if mode != WINDOW_MODE_FULLSCREEN:
+		_settings["window_mode_last"] = mode
+	_settings["window_mode"] = mode
+	# 同步旧字段，旧版本游戏读新档也能拿到正确的全屏布尔值。
+	_settings["fullscreen"] = mode == WINDOW_MODE_FULLSCREEN
 	SaveSystem.set_settings(_settings)
 	apply_display()
 
 
-func is_fullscreen() -> bool:
-	return bool(_settings.get("fullscreen", false))
+## F11 语义：全屏 ↔ 之前用过的窗口模式（默认最大化）。
+func toggle_fullscreen() -> void:
+	if window_mode() == WINDOW_MODE_FULLSCREEN:
+		set_window_mode(window_mode_last())
+	else:
+		set_window_mode(WINDOW_MODE_FULLSCREEN)
 
 
 func apply_display() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
-	var mode := DisplayServer.WINDOW_MODE_FULLSCREEN if is_fullscreen() else DisplayServer.WINDOW_MODE_WINDOWED
-	DisplayServer.window_set_mode(mode)
+	match window_mode():
+		WINDOW_MODE_FULLSCREEN:
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		WINDOW_MODE_MAXIMIZED:
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_MAXIMIZED)
+		_:
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 
 
 func set_screenshake(value: float) -> void:

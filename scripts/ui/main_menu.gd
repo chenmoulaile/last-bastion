@@ -103,11 +103,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_ESCAPE:
 			go(&"quit")
 		KEY_F11:
-			var mode := DisplayServer.window_get_mode()
-			if mode == DisplayServer.WINDOW_MODE_FULLSCREEN:
-				DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
-			else:
-				DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+			# wp8-window-saves：F11 全屏切换改走 ConfigManager，同步写回用户设置，
+			# 重启后保持（旧实现直接调 DisplayServer 不落盘）。
+			ConfigManager.toggle_fullscreen()
 		_:
 			return
 	get_viewport().set_input_as_handled()
