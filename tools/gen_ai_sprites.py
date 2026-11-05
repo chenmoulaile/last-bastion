@@ -321,30 +321,104 @@ def shift(img: Image.Image, dy: int = 0, dx: int = 0, squash: float = 1.0) -> Im
     return out
 
 
-def mirror_legs(img: Image.Image, hip_y: int = 28) -> Image.Image:
-    """镜像腿变体（wp7 路线 A）：仅水平翻转髋线以下的腿带，躯干/手臂保持原朝向。
+# --- wp2-run-anim-rework：程序化跑步腿部循环 --------------------------------
+# 美术审计实测：mirror_legs 绕腿带质心水平镜像会产生膝反关节 + 髋线错位
+# （f5 质心差达 5-6px）+ 相邻帧腿带 XOR 高达 258-321px 的跳变。本节改为：
+# run_a 上半身（0..27 行）做 2px 起伏 bob，源骨盆块（28..31 行）原位保留，
+# 双腿按 4 脉冲足环逐帧程序化重绘——每帧仅一条腿的足端动 1-2px，
+# 左右腿严格交替发力，相邻帧腿带 XOR 稳定落在 8-20px 且 wrap 连续。
+def _shade(c: tuple[int, int, int], f: float) -> tuple[int, int, int, int]:
+    return (max(0, min(255, round(c[0] * f))),
+            max(0, min(255, round(c[1] * f))),
+            max(0, min(255, round(c[2] * f))), 255)
 
-    侧视条带的朝向由游戏端 flip_h 统一控制（player.gd sprite.flip_h），
-    整帧翻转会让条带内朝向左右乱跳；只翻腿带可安全交换前后腿站位，
-    把 4 源姿势扩成 8 个可辨识步态帧。
-    镜像轴取腿带不透明像素的 x 重心而非帧中心：躯干前倾时髋部重心偏前，
-    绕重心反射使大腿根（近轴处）几乎不动、两脚（远端）互换站位，
-    避免绕帧中心镜像造成的「大腿留在原位 + 小腿甩开」四腿撕裂感。
-    """
-    a = np.asarray(img).copy()
-    hip_y = min(max(0, hip_y), a.shape[0])
-    band = a[hip_y:, :, :]
-    ys, xs = np.nonzero(band[:, :, 3] > 10)
-    if len(xs) == 0:
-        return img.copy()
-    cx = float(xs.mean())
-    w = band.shape[1]
-    src = np.round(2 * cx - np.arange(w)).astype(int)
-    valid = (src >= 0) & (src < w)
-    out = np.zeros_like(band)
-    out[:, valid, :] = band[:, src[valid], :]
-    a[hip_y:, :, :] = out
-    return Image.fromarray(a)
+
+# 每角色腿/靴/鞋底配色（取自各角色源表腿区实测 census）与腿宽 (大腿, 小腿, 靴)
+RUN_PALETTES = {
+    "assault": dict(near=(33, 38, 34), far=(20, 23, 19), boot=(22, 43, 41), boot_far=(14, 29, 27),
+                    sole=(10, 14, 13), wn=(5, 4, 5), wf=(4, 3, 5)),
+    "heavy":   dict(near=(36, 70, 80), far=(20, 37, 43), boot=(25, 49, 57), boot_far=(16, 32, 37),
+                    sole=(7, 11, 12), wn=(6, 5, 6), wf=(5, 4, 5)),
+    "medic":   dict(near=(64, 55, 29), far=(40, 35, 18), boot=(29, 49, 63), boot_far=(19, 33, 43),
+                    sole=(20, 22, 18), wn=(5, 4, 5), wf=(4, 3, 5)),
+    "ninja":   dict(near=(26, 47, 55), far=(15, 27, 32), boot=(35, 68, 77), boot_far=(22, 43, 49),
+                    sole=(5, 9, 9), wn=(4, 3, 5), wf=(4, 3, 5)),
+    "officer": dict(near=(34, 38, 31), far=(21, 24, 20), boot=(35, 58, 61), boot_far=(22, 38, 40),
+                    sole=(12, 22, 17), wn=(5, 4, 5), wf=(4, 3, 5)),
+    "scout":   dict(near=(78, 67, 36), far=(48, 42, 23), boot=(36, 52, 69), boot_far=(24, 34, 46),
+                    sole=(23, 23, 20), wn=(5, 4, 5), wf=(4, 3, 5)),
+}
+
+# 足端环（dx 相对锚点, dy 提升量）：站地 → 前迈 → 抬起 → 后收 → 落回
+RUN_LOOP = [(0, 0), (1, 0), (1, -2), (0, -2)]
+RUN_NEAR_T = [0, 1, 1, 2, 2, 3, 3, 0]   # 近腿在偶→奇帧间脉冲
+RUN_FAR_T = [2, 2, 3, 3, 0, 0, 1, 1]    # 远腿在奇→偶帧间脉冲（与近腿严格交错）
+RUN_DY = [0, 0, -1, -2, 0, 0, -1, -2]   # 触地帧躯干最低、腾空帧最高（2px 起伏）
+
+
+def _thick_line(cv: np.ndarray, x0: float, y0: float, x1: float, y1: float,
+                w: int, col: tuple[int, int, int, int]) -> None:
+    n = int(max(abs(x1 - x0), abs(y1 - y0))) * 2 + 2
+    r = w // 2
+    for t in np.linspace(0.0, 1.0, n):
+        x = int(round(x0 + (x1 - x0) * t))
+        y = int(round(y0 + (y1 - y0) * t))
+        cv[max(0, y - r):y + r + 1, max(0, x - r):x + r + 1] = col
+
+
+def _draw_leg(cv: np.ndarray, hx: int, hy: int, fx: int, fy: int,
+              wv: tuple[int, int, int], col: tuple[int, int, int, int],
+              boot_col: tuple[int, int, int, int],
+              sole_col: tuple[int, int, int, int]) -> None:
+    """大腿(髋→膝)+小腿(膝→踝)+靴子(2 行)+鞋底(1 行)，膝弯随腿压缩量。"""
+    from math import hypot
+    d = hypot(fx - hx, fy - hy)
+    bend = max(0, min(3, int(round(3.0 - 0.16 * d))))
+    kx = hx + (fx - hx) * 0.30 - bend
+    ky = hy + (fy - hy) * 0.5
+    wt, ws, bw = wv
+    _thick_line(cv, hx, hy, kx, ky, wt, col)
+    _thick_line(cv, kx, ky, fx, fy - 3, ws, col)  # 止于踝上 2px，避免盖章盖掉靴子位移
+    bw2 = bw // 2
+    cv[fy - 2:fy, max(0, fx - bw2):fx + bw2 + 1] = boot_col
+    cv[fy:fy + 1, max(0, fx - bw2 + 1):fx + bw2] = sole_col
+
+
+def build_run_strip(ra: Image.Image, char_id: str) -> Image.Image:
+    """8 帧跑步条带：run_a 上半身 + 骨盆原位 + 程序化交替腿循环。"""
+    pal = RUN_PALETTES.get(char_id, RUN_PALETTES["assault"])
+    src = np.asarray(ra).copy()
+    up = src.copy()
+    up[28:, :, :] = 0
+    hem = up[27:28, :, :].copy()  # 下摆底行，躯干上移时向下拉伸补缝
+    band = src[28:32, :, 3] > 40
+    xs = np.nonzero(band)[1]
+    hx = int(round(float(xs.mean()))) if len(xs) else FRAME // 2
+    near_c = pal["near"] + (255,)
+    far_c = pal["far"] + (255,)
+    boot_c = pal["boot"] + (255,)
+    bootf_c = pal["boot_far"] + (255,)
+    sole_c = pal["sole"] + (255,)
+    frames = []
+    for i in range(8):
+        cv = np.zeros((FRAME, FRAME, 4), np.uint8)
+        dy = RUN_DY[i]
+        ex, el = RUN_LOOP[RUN_FAR_T[i]]
+        _draw_leg(cv, hx - 5, 29, hx - 6 + ex, 47 + el, pal["wf"], far_c, bootf_c, _shade(pal["sole"], 0.8))
+        ex, el = RUN_LOOP[RUN_NEAR_T[i]]
+        _draw_leg(cv, hx + 3, 29, hx + 4 + ex, 47 + el, pal["wn"], near_c, boot_c, sole_c)
+        # 躯干 0..27 行整体上移 |dy|，底部用下摆行拉伸补缝（不触碰 28+ 腿带）
+        if dy < 0:
+            cv[0:28 + dy, :, :] = up[-dy:28, :, :]
+            cv[28 + dy:28, :, :] = hem
+        else:
+            cv[dy:28, :, :] = up[0:28 - dy, :, :]
+        cv[28:32, :, :] = src[28:32, :, :]  # 源骨盆块原位保留，衔接裤色
+        frames.append(Image.fromarray(cv, "RGBA"))
+    strip = Image.new("RGBA", (FRAME * 8, FRAME), (0, 0, 0, 0))
+    for i, f in enumerate(frames):
+        strip.alpha_composite(f, (i * FRAME, 0))
+    return strip
 
 
 def rot(img: Image.Image, deg: float) -> Image.Image:
@@ -365,7 +439,7 @@ def rot_fit(img: Image.Image, deg: float) -> Image.Image:
 # ---------------------------------------------------------------------------
 # strip assembly
 # ---------------------------------------------------------------------------
-def assemble(poses: dict[str, Image.Image]) -> dict[str, Image.Image]:
+def assemble(poses: dict[str, Image.Image], char_id: str = "assault") -> dict[str, Image.Image]:
     strips = {}
     idle = poses["idle"]
     ra, rb, rc, rd = poses["run_a"], poses["run_b"], poses["run_c"], poses["run_d"]
@@ -384,14 +458,10 @@ def assemble(poses: dict[str, Image.Image]) -> dict[str, Image.Image]:
 
     # P1-6：idle 4 帧呼吸（胸腔/头部微动）
     strips["idle"] = strip([idle, shift(idle, dy=-1), idle, shift(idle, dy=-1)])
-    # P1-6 / wp7 路线 A：8 帧完整步态循环（触地→蹬伸→腾空→落地，左右腿交替 + 躯干起伏）。
-    # 前半程 ra..rd 原腿，后半程同节奏换镜像腿（mirror_legs 只翻髋线下腿带），
-    # 8 帧两两不全等；AI 真 8 姿势源图放入 tools/ai_src/ 登记 POSE_KEYS 后即可无损替换。
-    strips["run"] = strip([
-        ra, shift(rb, dy=-1), rc, shift(rd, dy=-2),
-        shift(mirror_legs(rc), dy=-1), mirror_legs(rb),
-        shift(mirror_legs(ra), dy=-1), shift(mirror_legs(rd), dy=-1),
-    ])
+    # wp2-run-anim-rework：8 帧跑步循环改为「run_a 上半身 bob + 程序化交替腿」，
+    # 消除 mirror_legs 的膝反关节/髋线错位/相邻帧跳变；AI 真 8 姿势源图放入
+    # tools/ai_src/ 登记 POSE_KEYS 后仍可无损替换（build_run_strip 只依赖 run_a）。
+    strips["run"] = build_run_strip(ra, char_id)
     strips["shoot"] = strip([shoot, shift(shoot, dx=-1, dy=-1), shoot])
     strips["melee"] = strip([melee, shift(melee, dx=2), shift(melee, dx=1, dy=-1)])
     strips["hurt"] = strip([hurt, shift(hurt, dx=-1)])
@@ -440,7 +510,7 @@ def process_character(char_id: str, filename: str) -> None:
     poses["dead"] = place(pixelize(poses_raw["dead"], DEAD_W, FRAME // 2))
     poses["shoot"] = poses["aim"]  # 瞄准姿势即射击姿势（武器由 WeaponSprite 叠加）
 
-    strips = assemble(poses)
+    strips = assemble(poses, char_id)
     OUT.mkdir(parents=True, exist_ok=True)
     for anim, strip_img in strips.items():
         strip_img.save(OUT / f"{char_id}_{anim}.png")
