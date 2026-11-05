@@ -131,10 +131,16 @@ func _test_levels() -> void:
 			has_drain = true
 		elif ev.get("requires_flag") == "route_gate":
 			has_gate = true
-		if ev.get("type") != "dialogue" and "requires_flag" not in ev:
+		# wp7：boss 事件是关卡级演出，两条路线都要出 Boss，不挂路线旗标
+		if ev.get("type") != "dialogue" and ev.get("type") != "boss" and "requires_flag" not in ev:
 			all_conditional = false
 	check(has_drain and has_gate, "3-1 双路线事件存在")
-	check(all_conditional, "3-1 全部路线事件都有旗标条件")
+	check(all_conditional, "3-1 全部路线事件都有旗标条件（boss 除外）")
+	var l07_route_boss := false
+	for ev in l07.events:
+		if ev.get("type") == "boss" and "requires_flag" not in ev:
+			l07_route_boss = true
+	check(l07_route_boss, "3-1 wp7 boss 事件两条路线共用（无旗标）")
 	var event_types := {}
 	for lid in ["l01", "l04", "l07", "l10", "l11"]:
 		var lvl := GameManager.get_level(StringName(lid))

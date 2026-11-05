@@ -1,7 +1,9 @@
 class_name ZombieCharger
 extends ZombieBase
-## Charger: winds up and sprints in a straight line. Anyone caught by the
-## charge is pinned and pounded into the ground until the Charger dies.
+## Charger：普通特感保持「冲锋-扑倒锤击」行为；wp7 起 l07/l08 关卡的 charger
+## 由 LEVEL_CFG 命中（泵站迫击兽 / 净化区处刑者）走 BossEngine boss 模式——
+## 普通 charger 只出现在 l09/l10/l11 的 special_weights（不在 boss 化关卡表内），
+## 行为不受影响。
 
 var state: String = "approach"
 var windup: float = 0.0
@@ -10,13 +12,27 @@ var pound_time: float = 0.0
 var pound_damage_timer: float = 0.0
 var charge_cooldown: float = 0.0
 
+var _mind: RefCounted = null
+var _bcfg: Dictionary = {}
+
 
 func _ready() -> void:
 	super()
-	charge_cooldown = randf_range(1.5, 3.0)
+	# 仅 l07/l08（LEVEL_CFG 命中且 kind==charger 会被 level_runner 注册为 boss）
+	# 走 boss 模式；其余关卡 charger 是普通特感（如 l09/l10/l11 的 special_weights）
+	var lid := ""
+	if level != null and level.get("data") != null:
+		lid = String(level.data.id)
+	if lid in ["l07", "l08"]:
+		_bcfg = BossEngine.setup(self)
+	if _bcfg.is_empty():
+		charge_cooldown = randf_range(1.5, 3.0)
 
 
 func _ai_tick(delta: float) -> void:
+	if _mind != null:
+		BossEngine.tick(self, delta)
+		return
 	if target == null or not is_instance_valid(target):
 		_wander(delta)
 		return
@@ -144,6 +160,8 @@ func _tick_recover(delta: float) -> void:
 
 
 func on_melee_interrupt() -> bool:
+	if _mind != null:
+		return false
 	if pinning:
 		var victim := target
 		release_controlled_target()
@@ -162,6 +180,20 @@ func on_melee_interrupt() -> bool:
 	return false
 
 
+func apply_damage(amount: int, from_dir: Vector2, is_head: bool, source: StringName = &"player",
+		damage_type: StringName = &"bullet") -> void:
+	if _mind != null:
+		amount = BossEngine.mitigate(self, amount, from_dir, damage_type)
+		if amount <= 0:
+			return
+	super(amount, from_dir, is_head, source, damage_type)
+	if not dead and _mind != null:
+		BossEngine.on_damaged(self)
+
+
 func _on_death_effect() -> void:
+	if _mind != null:
+		BossEngine.on_death(self)
+		return
 	release_controlled_target()
 	EventBus.shake(3.0)
