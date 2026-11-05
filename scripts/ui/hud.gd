@@ -545,9 +545,13 @@ func _build_weapon_panel() -> void:
 	panel.add_child(_skill_cover)
 	_skill_ready = UIKit.label("SHIFT", 6, UIKit.DIM, UIKit.font_latin())
 	_skill_ready.position = Vector2(4, 42)
-	_skill_ready.size = Vector2(24, 6)
 	_skill_ready.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# wp9-ui-fixes：size 必须在 add_child 之后设置——Label 在树外的 get_combined_minimum_size()
+	# 用 ThemeDB 默认字体（fallback_font_size=16）计算（主题覆盖不生效），set_size(24,6) 会被
+	# 钳到 (44,23)，全局底边 302+42+23=367 越出 360 逻辑高 7px（H/T/G V 同理出屏 3px）；
+	# 入树后 min 才是 silkscreen@6 的 (19,9)，此时再设 size 才会生效。
 	panel.add_child(_skill_ready)
+	_skill_ready.size = Vector2(24, 6)
 
 	var medkit_icon := UIKit.icon_rect("status_bw", 12.0)
 	medkit_icon.texture = UIKit.texture("res://assets/sprites/environment/pickup_medkit.png")
@@ -559,8 +563,8 @@ func _build_weapon_panel() -> void:
 	panel.add_child(_medkit_count)
 	var medkit_key := UIKit.label("H", 6, UIKit.DIM, UIKit.font_latin())
 	medkit_key.position = Vector2(54, 38)
-	medkit_key.size = Vector2(18, 6)
 	panel.add_child(medkit_key)
+	medkit_key.size = Vector2(18, 6)  # wp9：add_child 后设 size，避免树外 min 钳成 (18,23)
 
 	var pills_icon := UIKit.icon_rect("status_bw", 12.0)
 	pills_icon.texture = UIKit.texture("res://assets/sprites/environment/pickup_pills.png")
@@ -572,8 +576,8 @@ func _build_weapon_panel() -> void:
 	panel.add_child(_pills_count)
 	var pills_key := UIKit.label("T", 6, UIKit.DIM, UIKit.font_latin())
 	pills_key.position = Vector2(92, 38)
-	pills_key.size = Vector2(18, 6)
 	panel.add_child(pills_key)
+	pills_key.size = Vector2(18, 6)  # wp9：add_child 后设 size，避免树外 min 钳成 (18,23)
 
 	var kinds := ["grenade", "molotov", "bile"]
 	for i in 3:
@@ -591,8 +595,8 @@ func _build_weapon_panel() -> void:
 		_throw_counts.append(count_label)
 	var throw_key := UIKit.label("G  V", 6, UIKit.DIM, UIKit.font_latin())
 	throw_key.position = Vector2(128, 38)
-	throw_key.size = Vector2(52, 6)
 	panel.add_child(throw_key)
+	throw_key.size = Vector2(52, 6)  # wp9：add_child 后设 size，避免树外 min 钳成 (52,23)
 
 
 func _build_command_panel() -> void:
