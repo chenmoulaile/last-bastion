@@ -363,7 +363,9 @@ func _build_buildings() -> void:
 		if not bool(b.get("enterable", false)):
 			continue
 		interior_index += 1
-		var origin := Vector2(level_width + 700.0 + interior_index * 760.0, 288.0)
+		# wp4-interior-complex：室内升级为多房间复杂建筑（最宽 military 48 列=768px
+		# + 底板外扩 240px），实例间距 760→1300，防止相邻室内建筑/底板互相重叠。
+		var origin := Vector2(level_width + 700.0 + interior_index * 1300.0, 288.0)
 		var room: Dictionary = BuildingBuilder.build_interior(self, String(data.theme), origin, _rng)
 		b["interior"] = room
 		# 房间出口
@@ -415,15 +417,21 @@ func _build_buildings() -> void:
 		# 即弃，Area2D.body_entered 一发性信号在门未破时被门破复核消费后，
 		# 破门后没有任何路径能对仍驻留门洞的玩家补发进入判定。
 		_entry_areas.append({"b": b, "area": entry_area})
-		# 房间补给（掩体 + 弹药）
-		var room_x: float = (room["rect"] as Rect2).position.x
-		_spawn_pickup("ammo", Vector2(room_x + 120.0, 288.0 - 24.0), 1)
-		_spawn_pickup("medkit", Vector2(room_x + 200.0, 288.0 - 24.0), 1)
-		var crate := Sprite2D.new()
-		crate.texture = SpriteLibrary.prop_texture("crate")
-		crate.position = Vector2(room_x + 260.0, 288.0 - 18.0)
-		crate.z_index = 2
-		add_child(crate)
+		# 房间补给（wp4：点位由房间表 supply_spots 给出——弹药/医疗分布在不同
+		# 功能房间、迫使探索；旧单间矩形布局无该键时回退原固定偏移）
+		var spots: Array = room.get("supply_spots", [])
+		if spots.size() >= 2:
+			_spawn_pickup("ammo", spots[0], 1)
+			_spawn_pickup("medkit", spots[1], 1)
+		else:
+			var room_x: float = (room["rect"] as Rect2).position.x
+			_spawn_pickup("ammo", Vector2(room_x + 120.0, 288.0 - 24.0), 1)
+			_spawn_pickup("medkit", Vector2(room_x + 200.0, 288.0 - 24.0), 1)
+			var crate := Sprite2D.new()
+			crate.texture = SpriteLibrary.prop_texture("crate")
+			crate.position = Vector2(room_x + 260.0, 288.0 - 18.0)
+			crate.z_index = 2
+			add_child(crate)
 
 
 ## wp1：玩家主动走入可进入建筑的门洞 → 传送到内部房间。

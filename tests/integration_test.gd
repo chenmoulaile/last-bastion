@@ -27,6 +27,7 @@ func _ready() -> void:
 	await _test_crash_chain_regression()
 	await _test_interior_full_flow()
 	await _test_door_entry_residency()
+	await _test_interior_walkthrough()
 	await _test_scoring()
 	await _test_audio_layers()
 	await _test_save_persistence()
@@ -388,7 +389,8 @@ func _test_interior_rooms() -> void:
 	for b in enterable:
 		room_idx += 1
 		var room: Dictionary = b.get("interior", {})
-		# 断言1：房间建在 level_width+700+idx*760 的远端实例区（level_runner.gd:366）。
+		# 断言1：房间建在 level_width+700+idx*1300 的远端实例区（level_runner.gd
+		# _build_buildings；wp4 复杂室内占地最宽 768px，间距 760→1300）。
 		_check(not room.is_empty() and (room["rect"] as Rect2).position.x > level_width,
 			"interior: room#%d built at remote origin beyond level_width" % room_idx)
 	if enterable.is_empty():
@@ -825,6 +827,171 @@ func _test_door_entry_residency() -> void:
 				"door residency B: player placed at interior entry")
 	await _close_level(scene)
 	print("[INTEGRATION] door entry residency ok")
+
+
+## wp4-interior-complex：5 主题复杂室内走位验收——踢门（按门材踢到破门：wood 62/
+## glass 42 需 2 脚、metal 95 需 3 脚，每脚 36 伤）→ 真实输入走入门洞 → 两相导航
+## 依次走遍每个功能房间 → 出口 Area 回街 ±60px。两相导航：先横移到路标 x（被
+## 家具/矮台卡住 20 物理帧则小跳越障），需爬层（路标高于玩家）时松横移、原地
+## 起跳脉冲——室内台阶堆为 one-way 平台：上行穿过、下行被最高一级接住。
+## 路标序列来自 build_interior 的 room["path"]（每房间中心 + 每次爬层的台阶列
+## 中心，末点=出口）。dy 阈值放宽到 40px：房间中心可能落在 16-30px 高的家具顶上。
+func _test_interior_walkthrough() -> void:
+	var theme_levels := {"suburb": &"l01", "city": &"l04", "subway": &"l05",
+			"military": &"l08", "bridge": &"l02"}
+	for theme: String in theme_levels:
+		var scene := await _open_level(theme_levels[theme])
+		var player: Node2D = scene.get_player()
+		var level_width := float(scene.get("level_width"))
+		var buildings: Array = scene.get("_buildings")
+		var enterable: Array = buildings.filter(func(b): return bool(b.get("enterable", false)))
+		_check(not enterable.is_empty(), "walkthrough %s: enterable buildings exist" % theme)
+		if enterable.is_empty() or player == null:
+			await _close_level(scene)
+			continue
+		var b0: Dictionary = enterable[0]
+		var room: Dictionary = b0.get("interior", {})
+		var door_x := float(b0["door_x"])
+		var ground_y := float(b0["ground_y"])
+		var door: Node2D = null
+		for d in get_tree().get_nodes_in_group("doors"):
+			if absf(d.global_position.x - door_x) < 24.0:
+				door = d
+				break
+		_check(door != null and not room.is_empty(), "walkthrough %s: door + interior exist" % theme)
+		if door == null or room.is_empty():
+			await _close_level(scene)
+			continue
+		var room_infos: Array = room.get("rooms", [])
+		_check(room_infos.size() >= 2 and room_infos.size() <= 4,
+			"walkthrough %s: %d functional rooms in [2,4]" % [theme, room_infos.size()])
+		var rect: Rect2 = room["rect"]
+		_check(rect.position.x > level_width,
+			"walkthrough %s: complex built beyond level_width" % theme)
+		var last_rect: Rect2 = room_infos[room_infos.size() - 1]["rect"]
+		_check(last_rect.grow(8.0).has_point(room["exit"]),
+			"walkthrough %s: exit inside last room" % theme)
+		var spots: Array = room.get("supply_spots", [])
+		_check(spots.size() >= 2 and not last_rect.grow(8.0).has_point(spots[0])
+				and not last_rect.grow(8.0).has_point(spots[1]),
+			"walkthrough %s: supplies outside exit room" % theme)
+		# 踢到破门
+		player.global_position = Vector2(door_x - 30.0, ground_y - 2.0)
+		player.velocity = Vector2.ZERO
+		var kicks := 0
+		while (is_instance_valid(door) and not bool(door.get("broken"))) and kicks < 4:
+			door.set("kick_cd", 0.0)
+			door.call("interact", player)
+			kicks += 1
+		_check(not is_instance_valid(door) or bool(door.get("broken")),
+			"walkthrough %s: kicks (%d) break the door" % [theme, kicks])
+		# 真实输入走入门洞
+		Engine.time_scale = 3.0
+		Input.action_press("move_right")
+		var entered := false
+		for _i in 240:
+			await get_tree().physics_frame
+			if bool(scene.get("_in_interior")):
+				entered = true
+				break
+		Input.action_release("move_right")
+		Engine.time_scale = 1.0
+		_check(entered, "walkthrough %s: real-input doorway entry" % theme)
+		if not entered:
+			await _close_level(scene)
+			continue
+		_check(player.global_position.distance_to(room["entry"]) < 2.0,
+			"walkthrough %s: placed at entry" % theme)
+		# 走完 path 路标（末点=出口 Area，以 _in_interior 翻转为到达）
+		var path: Array = room.get("path", [])
+		Engine.time_scale = 3.0
+		var visited: Array = []
+		for _r in room_infos.size():
+			visited.append(false)
+		var walk_ok := true
+		for i in path.size():
+			var reached := await _walk_interior_path(scene, player, path[i], i == path.size() - 1)
+			if not reached:
+				walk_ok = false
+				break
+			for ri in room_infos.size():
+				if (room_infos[ri]["rect"] as Rect2).has_point(player.global_position):
+					visited[ri] = true
+		Engine.time_scale = 1.0
+		_check(walk_ok, "walkthrough %s: path fully walked" % theme)
+		for ri in room_infos.size():
+			_check(visited[ri], "walkthrough %s: visited room#%d %s"
+				% [theme, ri + 1, room_infos[ri]["name"]])
+		if not walk_ok:
+			await _close_level(scene)
+			continue
+		var back := Vector2(door_x - 26.0, ground_y - 2.0)
+		var exited := false
+		for _i in 120:
+			await get_tree().physics_frame
+			if not bool(scene.get("_in_interior")):
+				exited = true
+				break
+		_check(exited, "walkthrough %s: exit clears interior state" % theme)
+		_check(player.global_position.distance_to(back) <= 60.0,
+			"walkthrough %s: exit returns to street ±60px (dx=%.1f)"
+				% [theme, player.global_position.distance_to(back)])
+		await _close_level(scene)
+	print("[INTEGRATION] interior walkthrough ok")
+
+
+## wp4：室内走位导航器（与 Temp 验收脚本同款算法）。先横移到 target.x（被
+## 家具/矮台卡住 20 物理帧无横向位移则小跳越障），需爬层（target.y 高于玩家
+## 8px 以上）时松横移、以 12 帧周期原地起跳脉冲。on_last=true 时以
+## _in_interior 翻转（出口 Area 回街）作为到达判定。900 帧未到达返回 false。
+func _walk_interior_path(scene: Node, player: Node2D, target: Vector2, on_last: bool) -> bool:
+	var ok := false
+	var last_x := player.global_position.x
+	var stall := 0
+	var jump_cd := 0
+	for frame in range(0, 900):
+		await get_tree().physics_frame
+		if not is_instance_valid(player):
+			break
+		if on_last and not bool(scene.get("_in_interior")):
+			ok = true
+			break
+		var p := player.global_position
+		var dx := target.x - p.x
+		var dy := target.y - p.y
+		if absf(dx) < 12.0 and absf(dy) < 40.0:
+			ok = true
+			break
+		if absf(dx) >= 12.0:
+			Input.action_release("move_left")
+			Input.action_release("move_right")
+			Input.action_press("move_right" if dx > 0.0 else "move_left")
+			if absf(p.x - last_x) < 1.0:
+				stall += 1
+			else:
+				stall = 0
+				last_x = p.x
+			if jump_cd > 0:
+				jump_cd -= 1
+				if jump_cd == 20:
+					Input.action_release("jump")
+			elif stall >= 20:
+				jump_cd = 24
+				Input.action_press("jump")
+		else:
+			Input.action_release("move_left")
+			Input.action_release("move_right")
+			if dy < -8.0:
+				if frame % 12 < 3:
+					Input.action_press("jump")
+				else:
+					Input.action_release("jump")
+			else:
+				Input.action_release("jump")
+	Input.action_release("move_left")
+	Input.action_release("move_right")
+	Input.action_release("jump")
+	return ok
 
 
 func _test_scoring() -> void:
