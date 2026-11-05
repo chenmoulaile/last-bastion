@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/level_data.gd" id="1_data"]
 
@@ -10,17 +10,17 @@ chapter_name = "谣言"
 title = "锈帮码头"
 subtitle = "铁钩马洛的生意。"
 theme = &"bridge"
-length = 9500
+length = 13500
 default_mode = &"SQUAD"
 difficulty_scale = 1.0
 base_score = 100000
 par_score = 175000
-time_target = 260
+time_target = 370
 special_density = 0.7
 special_weights = {"hunter": 0.45, "boomer": 0.55}
 uncommon_weights = {"riot": 0.15}
 bosses = []
-events = [{"at": 0.08, "type": "dialogue", "id": "l02_marlo_meet"}, {"at": 0.25, "type": "horde", "count": 14, "alarm": false}, {"at": 0.45, "type": "humans", "faction": "rust", "kind": "gunner", "count": 4}, {"at": 0.6, "type": "horde", "count": 20, "alarm": false}, {"at": 0.82, "type": "special", "kind": "smoker"}, {"at": 0.14, "type": "archive", "id": "a02_01"}, {"at": 0.34, "type": "archive", "id": "a02_02"}, {"at": 0.54, "type": "archive", "id": "a02_03"}, {"at": 0.74, "type": "archive", "id": "a02_04"}, {"at": 0.35, "type": "weapon", "kind": "sledge", "text": "马洛扔给你一把大锤：仓库里翻出来的，趁手。"}]
+events = [{"at": 0.08, "type": "dialogue", "id": "l02_marlo_meet"}, {"at": 0.14, "type": "archive", "id": "a02_01"}, {"at": 0.25, "type": "horde", "count": 14, "alarm": false}, {"at": 0.34, "type": "archive", "id": "a02_02"}, {"at": 0.35, "type": "weapon", "kind": "sledge", "text": "马洛扔给你一把大锤：仓库里翻出来的，趁手。"}, {"at": 0.45, "type": "humans", "faction": "rust", "kind": "gunner", "count": 4}, {"at": 0.5, "type": "lore", "text": "失控货物的收货登记表上，签收人一栏全是同一个签名：铁钩。货品描述一栏只有两个字——会走。"}, {"at": 0.54, "type": "archive", "id": "a02_03"}, {"at": 0.6, "type": "horde", "count": 20, "alarm": false}, {"at": 0.68, "type": "broadcast", "text": "「货柜区 B-7 传感异常。巡逻组前往复查。发现侵入者，授权清除。」"}, {"at": 0.7, "type": "horde", "count": 14, "alarm": false}, {"at": 0.74, "type": "archive", "id": "a02_04"}, {"at": 0.82, "type": "special", "kind": "smoker"}, {"at": 0.88, "type": "dialogue", "id": "l02_aftermath"}]
 checkpoint_at = 0.5
 hidden_room_at = 0.35
 dark = false

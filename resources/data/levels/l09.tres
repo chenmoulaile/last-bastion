@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/level_data.gd" id="1_data"]
 
@@ -10,17 +10,17 @@ chapter_name = "共谋"
 title = "大厦底层"
 subtitle = "自毁程序已启动。"
 theme = &"city"
-length = 11000
+length = 16000
 default_mode = &"SQUAD"
 difficulty_scale = 1.0
 base_score = 100000
 par_score = 250000
-time_target = 340
+time_target = 490
 special_density = 1.0
 special_weights = {"hunter": 0.125, "smoker": 0.125, "boomer": 0.125, "charger": 0.125, "spitter": 0.125, "jockey": 0.125, "tank": 0.125, "witch": 0.125}
 uncommon_weights = {"scavenger": 0.2, "hardhat": 0.25, "riot": 0.25}
 bosses = []
-events = [{"at": 0.2, "type": "humans", "faction": "horizon", "kind": "guard", "count": 4}, {"at": 0.4, "type": "horde", "count": 16, "alarm": true}, {"at": 0.6, "type": "special", "kind": "charger"}, {"at": 0.78, "type": "boss", "kind": "ironface"}, {"at": 0.9, "type": "dialogue", "id": "l09_ironface_death"}, {"at": 0.95, "type": "broadcast", "text": "「自毁程序已启动，样本库将在 10 分钟后封闭。」"}, {"at": 0.14, "type": "archive", "id": "a09_01"}, {"at": 0.34, "type": "archive", "id": "a09_02"}, {"at": 0.54, "type": "archive", "id": "a09_03"}, {"at": 0.74, "type": "archive", "id": "a09_04"}]
+events = [{"at": 0.06, "type": "dialogue", "id": "l09_lobby"}, {"at": 0.14, "type": "archive", "id": "a09_01"}, {"at": 0.2, "type": "humans", "faction": "horizon", "kind": "guard", "count": 4}, {"at": 0.26, "type": "horde", "count": 14, "alarm": false}, {"at": 0.32, "type": "lore", "text": "电子铭牌还在滚动：欢迎来到地平线生物科学——今天，我们根治死亡。访客屏闪烁：访客：无。"}, {"at": 0.34, "type": "archive", "id": "a09_02"}, {"at": 0.4, "type": "horde", "count": 16, "alarm": true}, {"at": 0.5, "type": "broadcast", "text": "「样本库外围安全等级提升。非序列人员按入侵处理，进入净化流程。」"}, {"at": 0.54, "type": "archive", "id": "a09_03"}, {"at": 0.6, "type": "special", "kind": "charger"}, {"at": 0.68, "type": "tip", "text": "维克多：门禁记录显示「铁面」今早刷过样本库的门。他不是在巡逻——他是在等。"}, {"at": 0.72, "type": "special", "kind": "smoker"}, {"at": 0.74, "type": "archive", "id": "a09_04"}, {"at": 0.78, "type": "boss", "kind": "ironface"}, {"at": 0.9, "type": "dialogue", "id": "l09_ironface_death"}, {"at": 0.95, "type": "broadcast", "text": "「自毁程序已启动，样本库将在 10 分钟后封闭。」"}]
 checkpoint_at = 0.5
 hidden_room_at = 0.47
 dark = false

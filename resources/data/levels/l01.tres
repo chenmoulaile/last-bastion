@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/level_data.gd" id="1_data"]
 
@@ -10,17 +10,17 @@ chapter_name = "谣言"
 title = "潮汐隧道"
 subtitle = "锈蚀者先失声，再失控。"
 theme = &"suburb"
-length = 9000
+length = 13000
 default_mode = &"SQUAD"
 difficulty_scale = 1.0
 base_score = 100000
 par_score = 160000
-time_target = 240
-special_density = 0.6.0
+time_target = 350
+special_density = 0.6
 special_weights = {}
 uncommon_weights = {}
 bosses = []
-events = [{"at": 0.2, "type": "horde", "count": 12, "alarm": false}, {"at": 0.32, "type": "humans", "faction": "rust", "kind": "gunner", "count": 3}, {"at": 0.5, "type": "horde", "count": 16, "alarm": false}, {"at": 0.7, "type": "dialogue", "id": "amb_purifier"}, {"at": 0.14, "type": "archive", "id": "a01_01"}, {"at": 0.34, "type": "archive", "id": "a01_02"}, {"at": 0.54, "type": "archive", "id": "a01_03"}, {"at": 0.74, "type": "archive", "id": "a01_04"}]
+events = [{"at": 0.05, "type": "dialogue", "id": "l01_ingress"}, {"at": 0.14, "type": "archive", "id": "a01_01"}, {"at": 0.2, "type": "horde", "count": 12, "alarm": false}, {"at": 0.32, "type": "humans", "faction": "rust", "kind": "gunner", "count": 3}, {"at": 0.34, "type": "archive", "id": "a01_02"}, {"at": 0.42, "type": "lore", "text": "褪色的喷漆箭头指向港口：码头有活，找铁钩。红漆在下面补了一句——工钱足，命收得也快。"}, {"at": 0.5, "type": "horde", "count": 16, "alarm": false}, {"at": 0.54, "type": "archive", "id": "a01_03"}, {"at": 0.62, "type": "broadcast", "text": "「前方街区检测到未登记聚集。保持距离，等待净化小队抵达。」"}, {"at": 0.7, "type": "dialogue", "id": "amb_purifier"}, {"at": 0.74, "type": "archive", "id": "a01_04"}, {"at": 0.78, "type": "horde", "count": 14, "alarm": false}, {"at": 0.88, "type": "dialogue", "id": "l01_dawn"}]
 checkpoint_at = 0.5
 hidden_room_at = 0.42
 dark = false

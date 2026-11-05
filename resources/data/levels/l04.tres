@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/level_data.gd" id="1_data"]
 
@@ -10,17 +10,17 @@ chapter_name = "证据"
 title = "旧城废墟"
 subtitle = "两伙人正在互相残杀。"
 theme = &"city"
-length = 10000
+length = 14500
 default_mode = &"SQUAD"
 difficulty_scale = 1.0
 base_score = 100000
 par_score = 205000
-time_target = 290
+time_target = 420
 special_density = 0.9
 special_weights = {"spitter": 0.3, "hunter": 0.3, "smoker": 0.4}
 uncommon_weights = {"hazmat": 0.4}
 bosses = []
-events = [{"at": 0.1, "type": "dialogue", "id": "l04_standoff"}, {"at": 0.14, "type": "humans", "faction": "rust", "kind": "gunner", "count": 4}, {"at": 0.14, "type": "humans", "faction": "remnants", "kind": "remnants", "count": 4}, {"at": 0.4, "type": "horde", "count": 20, "alarm": true}, {"at": 0.65, "type": "special", "kind": "spitter"}, {"at": 0.8, "type": "horde", "count": 16, "alarm": false}, {"at": 0.14, "type": "archive", "id": "a04_01"}, {"at": 0.34, "type": "archive", "id": "a04_02"}, {"at": 0.54, "type": "archive", "id": "a04_03"}, {"at": 0.74, "type": "archive", "id": "a04_04"}]
+events = [{"at": 0.1, "type": "dialogue", "id": "l04_standoff"}, {"at": 0.14, "type": "humans", "faction": "rust", "kind": "gunner", "count": 4}, {"at": 0.14, "type": "humans", "faction": "remnants", "kind": "remnants", "count": 4}, {"at": 0.14, "type": "archive", "id": "a04_01"}, {"at": 0.24, "type": "tip", "text": "马库斯：别急着站队。让他们先打——我们穿过火线就行。"}, {"at": 0.34, "type": "archive", "id": "a04_02"}, {"at": 0.4, "type": "horde", "count": 20, "alarm": true}, {"at": 0.48, "type": "lore", "text": "旧城派出所外墙的最后一班岗记录：西街再次让给地平线的运尸车。雷耶斯队长说不记入档案。"}, {"at": 0.54, "type": "archive", "id": "a04_03"}, {"at": 0.58, "type": "horde", "count": 14, "alarm": false}, {"at": 0.65, "type": "special", "kind": "spitter"}, {"at": 0.7, "type": "broadcast", "text": "「第四区居民请注意：撤离班车已取消。重复：撤离班车已取消。」"}, {"at": 0.74, "type": "archive", "id": "a04_04"}, {"at": 0.8, "type": "horde", "count": 16, "alarm": false}, {"at": 0.86, "type": "special", "kind": "smoker"}, {"at": 0.9, "type": "dialogue", "id": "l04_fallout"}]
 checkpoint_at = 0.5
 hidden_room_at = 0.45
 dark = false

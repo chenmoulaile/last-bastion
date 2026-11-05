@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/level_data.gd" id="1_data"]
 
@@ -10,17 +10,17 @@ chapter_name = "深渊"
 title = "样本库"
 subtitle = "「爸爸别来。」"
 theme = &"military"
-length = 11000
+length = 16000
 default_mode = &"SQUAD"
 difficulty_scale = 1.0
 base_score = 100000
 par_score = 270000
-time_target = 360
+time_target = 520
 special_density = 1.2
 special_weights = {"hunter": 0.125, "smoker": 0.125, "boomer": 0.125, "charger": 0.125, "spitter": 0.125, "jockey": 0.125, "tank": 0.125, "witch": 0.125}
 uncommon_weights = {"riot": 0.2, "hazmat": 0.2, "mud": 0.15, "hardhat": 0.15, "clown": 0.15, "scavenger": 0.15}
 bosses = []
-events = [{"at": 0.12, "type": "humans", "faction": "horizon", "kind": "guard", "count": 4}, {"at": 0.32, "type": "dialogue", "id": "l10_xiaoman"}, {"at": 0.4, "type": "defense", "seconds": 40, "waves": 3, "count": 18}, {"at": 0.52, "type": "choice", "id": "choice_release_specimens"}, {"at": 0.6, "type": "horde", "count": 20, "alarm": true}, {"at": 0.8, "type": "special", "kind": "tank"}, {"at": 0.14, "type": "archive", "id": "a10_01"}, {"at": 0.34, "type": "archive", "id": "a10_02"}, {"at": 0.54, "type": "archive", "id": "a10_03"}, {"at": 0.74, "type": "archive", "id": "a10_04"}, {"at": 0.62, "type": "horde", "count": 12, "alarm": true, "requires_flag": "released_specimens"}, {"at": 0.7, "type": "special", "kind": "spitter", "requires_flag": "released_specimens"}, {"at": 0.74, "type": "horde", "count": 14, "alarm": true, "requires_flag": "released_specimens"}, {"at": 0.78, "type": "special", "kind": "hunter", "requires_flag": "released_specimens"}]
+events = [{"at": 0.06, "type": "dialogue", "id": "l10_vault_entry"}, {"at": 0.12, "type": "humans", "faction": "horizon", "kind": "guard", "count": 4}, {"at": 0.14, "type": "archive", "id": "a10_01"}, {"at": 0.18, "type": "special", "kind": "hunter"}, {"at": 0.24, "type": "lore", "text": "培养槽标签一排排掠过：批次 2041，锈蚀株-2.0。有一格标签字迹很新——11 号舱，保留个体。"}, {"at": 0.32, "type": "dialogue", "id": "l10_xiaoman"}, {"at": 0.34, "type": "archive", "id": "a10_02"}, {"at": 0.4, "type": "defense", "seconds": 40, "waves": 3, "count": 18}, {"at": 0.52, "type": "choice", "id": "choice_release_specimens"}, {"at": 0.54, "type": "archive", "id": "a10_03"}, {"at": 0.6, "type": "horde", "count": 20, "alarm": true}, {"at": 0.62, "type": "horde", "count": 12, "alarm": true, "requires_flag": "released_specimens"}, {"at": 0.68, "type": "horde", "count": 14, "alarm": true}, {"at": 0.7, "type": "special", "kind": "spitter", "requires_flag": "released_specimens"}, {"at": 0.74, "type": "archive", "id": "a10_04"}, {"at": 0.74, "type": "horde", "count": 14, "alarm": true, "requires_flag": "released_specimens"}, {"at": 0.78, "type": "special", "kind": "hunter", "requires_flag": "released_specimens"}, {"at": 0.8, "type": "special", "kind": "tank"}, {"at": 0.86, "type": "dialogue", "id": "l10_deeper"}]
 checkpoint_at = 0.5
 hidden_room_at = 0.6
 dark = true

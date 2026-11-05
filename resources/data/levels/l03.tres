@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/level_data.gd" id="1_data"]
 
@@ -10,17 +10,17 @@ chapter_name = "谣言"
 title = "铁钩的价码"
 subtitle = "有人出大价钱，让他们别问。"
 theme = &"bridge"
-length = 10000
+length = 14500
 default_mode = &"SQUAD"
 difficulty_scale = 1.0
 base_score = 100000
 par_score = 190000
-time_target = 280
+time_target = 410
 special_density = 0.8
 special_weights = {"smoker": 0.35, "hunter": 0.35, "boomer": 0.3}
 uncommon_weights = {"riot": 0.35}
 bosses = []
-events = [{"at": 0.08, "type": "dialogue", "id": "l03_marlo_betray"}, {"at": 0.25, "type": "horde", "count": 14, "alarm": false}, {"at": 0.45, "type": "humans", "faction": "horizon", "kind": "guard", "count": 4}, {"at": 0.62, "type": "horde", "count": 18, "alarm": true}, {"at": 0.8, "type": "boss", "kind": "armored_car"}, {"at": 0.14, "type": "archive", "id": "a03_01"}, {"at": 0.34, "type": "archive", "id": "a03_02"}, {"at": 0.54, "type": "archive", "id": "a03_03"}, {"at": 0.74, "type": "archive", "id": "a03_04"}, {"at": 0.82, "type": "humans", "faction": "horizon", "kind": "guard", "count": 2}]
+events = [{"at": 0.08, "type": "dialogue", "id": "l03_marlo_betray"}, {"at": 0.14, "type": "archive", "id": "a03_01"}, {"at": 0.25, "type": "horde", "count": 14, "alarm": false}, {"at": 0.34, "type": "archive", "id": "a03_02"}, {"at": 0.36, "type": "tip", "text": "维克多：运单的目的地一栏全是同一个编号——样本库。这批「医疗物资」不是药品。"}, {"at": 0.45, "type": "humans", "faction": "horizon", "kind": "guard", "count": 4}, {"at": 0.5, "type": "lore", "text": "收费站留言板钉着一张三天前的锈帮通缉令：露西亚·莫雷诺。罪名：偷走了不该知道的事。"}, {"at": 0.54, "type": "archive", "id": "a03_03"}, {"at": 0.62, "type": "horde", "count": 18, "alarm": true}, {"at": 0.65, "type": "special", "kind": "smoker"}, {"at": 0.74, "type": "archive", "id": "a03_04"}, {"at": 0.8, "type": "boss", "kind": "armored_car"}, {"at": 0.82, "type": "humans", "faction": "horizon", "kind": "guard", "count": 2}, {"at": 0.9, "type": "dialogue", "id": "l03_convoy_aftermath"}]
 checkpoint_at = 0.5
 hidden_room_at = 0.55
 dark = false

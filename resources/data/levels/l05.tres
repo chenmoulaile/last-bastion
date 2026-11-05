@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/level_data.gd" id="1_data"]
 
@@ -10,17 +10,17 @@ chapter_name = "证据"
 title = "地铁深处"
 subtitle = "列车还在运行，只是不再载客。"
 theme = &"subway"
-length = 10500
+length = 15000
 default_mode = &"SQUAD"
 difficulty_scale = 1.0
 base_score = 100000
 par_score = 215000
-time_target = 310
+time_target = 440
 special_density = 1.0
 special_weights = {"hunter": 0.4, "smoker": 0.35, "spitter": 0.25}
 uncommon_weights = {"mud": 0.5, "hazmat": 0.15}
 bosses = []
-events = [{"at": 0.3, "type": "dialogue", "id": "l05_chip_found"}, {"at": 0.45, "type": "horde", "count": 18, "alarm": false}, {"at": 0.62, "type": "special", "kind": "boomer"}, {"at": 0.82, "type": "boss", "kind": "nest_mother"}, {"at": 0.14, "type": "archive", "id": "a05_01"}, {"at": 0.34, "type": "archive", "id": "a05_02"}, {"at": 0.54, "type": "archive", "id": "a05_03"}, {"at": 0.74, "type": "archive", "id": "a05_04"}, {"at": 0.25, "type": "lore", "text": "墙上贴满寻人启事。最旧的一张：林小满，21 岁，留学生。右下角有红笔写的三个字——找到她。"}]
+events = [{"at": 0.06, "type": "dialogue", "id": "l05_descent"}, {"at": 0.14, "type": "archive", "id": "a05_01"}, {"at": 0.2, "type": "special", "kind": "hunter"}, {"at": 0.25, "type": "lore", "text": "墙上贴满寻人启事。最旧的一张：林小满，21 岁，留学生。右下角有红笔写的三个字——找到她。"}, {"at": 0.3, "type": "dialogue", "id": "l05_chip_found"}, {"at": 0.34, "type": "archive", "id": "a05_02"}, {"at": 0.45, "type": "horde", "count": 18, "alarm": false}, {"at": 0.52, "type": "broadcast", "text": "「观测站报告：1.7 GHz 载波强度异常。重复：异常。请各站上报读数。」"}, {"at": 0.54, "type": "archive", "id": "a05_03"}, {"at": 0.62, "type": "special", "kind": "boomer"}, {"at": 0.7, "type": "horde", "count": 14, "alarm": false}, {"at": 0.74, "type": "archive", "id": "a05_04"}, {"at": 0.82, "type": "boss", "kind": "nest_mother"}, {"at": 0.9, "type": "dialogue", "id": "l05_after_nest"}]
 checkpoint_at = 0.5
 hidden_room_at = 0.58
 dark = true

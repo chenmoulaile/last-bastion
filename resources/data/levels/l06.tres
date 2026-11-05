@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
+﻿[gd_resource type="Resource" script_class="LevelData" load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/level_data.gd" id="1_data"]
 
@@ -10,17 +10,17 @@ chapter_name = "证据"
 title = "雷耶斯的交易"
 subtitle = "我一直在帮他们擦信号。"
 theme = &"subway"
-length = 9500
+length = 13500
 default_mode = &"SQUAD"
 difficulty_scale = 1.0
 base_score = 100000
 par_score = 220000
-time_target = 300
+time_target = 430
 special_density = 1.0
 special_weights = {"jockey": 0.3, "boomer": 0.3, "hunter": 0.4}
 uncommon_weights = {"clown": 0.4, "hazmat": 0.2}
 bosses = []
-events = [{"at": 0.08, "type": "dialogue", "id": "l06_reyes_deal"}, {"at": 0.35, "type": "horde", "count": 16, "alarm": false}, {"at": 0.55, "type": "special", "kind": "jockey"}, {"at": 0.75, "type": "horde", "count": 20, "alarm": true}, {"at": 0.92, "type": "dialogue", "id": "l06_reyes_monologue"}, {"at": 0.14, "type": "archive", "id": "a06_01"}, {"at": 0.34, "type": "archive", "id": "a06_02"}, {"at": 0.54, "type": "archive", "id": "a06_03"}, {"at": 0.74, "type": "archive", "id": "a06_04"}]
+events = [{"at": 0.08, "type": "dialogue", "id": "l06_reyes_deal"}, {"at": 0.14, "type": "archive", "id": "a06_01"}, {"at": 0.2, "type": "tip", "text": "雷耶斯的电台底噪里有规律的脉冲——1.7 GHz，和芯片日志里的一模一样。"}, {"at": 0.28, "type": "special", "kind": "boomer"}, {"at": 0.34, "type": "archive", "id": "a06_02"}, {"at": 0.35, "type": "horde", "count": 16, "alarm": false}, {"at": 0.45, "type": "lore", "text": "地铁闸机旁的残警公告：本站安检口移交地平线安保。下面有人用口红划掉「移交」，写上：卖。"}, {"at": 0.54, "type": "archive", "id": "a06_03"}, {"at": 0.55, "type": "special", "kind": "jockey"}, {"at": 0.64, "type": "broadcast", "text": "「十七号观测站：载波相位漂移 0.3 秒，不是设备故障。请上级确认。请上级确认——」"}, {"at": 0.74, "type": "archive", "id": "a06_04"}, {"at": 0.75, "type": "horde", "count": 20, "alarm": true}, {"at": 0.84, "type": "horde", "count": 14, "alarm": false}, {"at": 0.92, "type": "dialogue", "id": "l06_reyes_monologue"}]
 checkpoint_at = 0.5
 hidden_room_at = 0.6
 dark = false
