@@ -6,11 +6,11 @@
 script = ExtResource("1_data")
 id = &"charger"
 display_name = "冲锋者"
-max_hp = 500
-walk_speed_min = 180
-walk_speed_max = 180
-attack_damage = 10
-attack_interval = 0.5
+max_hp = 625
+walk_speed_min = 198
+walk_speed_max = 198
+attack_damage = 12
+attack_interval = 0.45
 score_value = 1000
 behavior_id = &"charger"
 tint = Color(1.000, 1.000, 1.000, 1.000)

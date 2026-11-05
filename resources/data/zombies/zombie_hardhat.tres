@@ -6,11 +6,11 @@
 script = ExtResource("1_data")
 id = &"hardhat"
 display_name = "安全帽工"
-max_hp = 50
-walk_speed_min = 105
-walk_speed_max = 145
-attack_damage = 7
-attack_interval = 0.5
+max_hp = 65
+walk_speed_min = 118
+walk_speed_max = 163
+attack_damage = 8
+attack_interval = 0.45
 score_value = 240
 behavior_id = &"common"
 tint = Color(1.000, 0.900, 0.550, 1.000)

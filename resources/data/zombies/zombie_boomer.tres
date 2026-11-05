@@ -6,9 +6,9 @@
 script = ExtResource("1_data")
 id = &"boomer"
 display_name = "胖子"
-max_hp = 50
-walk_speed_min = 100
-walk_speed_max = 130
+max_hp = 65
+walk_speed_min = 110
+walk_speed_max = 143
 attack_damage = 0
 attack_interval = 1.0
 score_value = 600

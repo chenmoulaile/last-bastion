@@ -80,11 +80,12 @@ func _ready() -> void:
 	health = data.max_hp
 	max_health = data.max_hp
 	if data.id == &"tank":
+		# wp5：难度血量与 .tres 基线(3600)同步 ×1.2 上调（原 3000/4000/5000）。
 		var diff := GameManager.current_difficulty
 		if diff == &"HARD":
-			max_health = 4000
+			max_health = 4800
 		elif diff == &"EXPERT":
-			max_health = 5000
+			max_health = 6000
 		health = max_health
 	spawn_time = Time.get_ticks_msec() / 1000.0
 	attack_cooldown = randf_range(0.2, 0.8)

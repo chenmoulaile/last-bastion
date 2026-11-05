@@ -6,11 +6,11 @@
 script = ExtResource("1_data")
 id = &"ironface"
 display_name = "铁面"
-max_hp = 2000
-walk_speed_min = 140
-walk_speed_max = 180
-attack_damage = 26
-attack_interval = 1.0
+max_hp = 2400
+walk_speed_min = 155
+walk_speed_max = 198
+attack_damage = 31
+attack_interval = 0.9
 score_value = 30000
 behavior_id = &"ironface"
 tint = Color(1.000, 1.000, 1.000, 1.000)

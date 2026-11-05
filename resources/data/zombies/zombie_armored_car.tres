@@ -6,11 +6,11 @@
 script = ExtResource("1_data")
 id = &"armored_car"
 display_name = "改装装甲车"
-max_hp = 2600
-walk_speed_min = 150
-walk_speed_max = 210
-attack_damage = 30
-attack_interval = 1.6
+max_hp = 3120
+walk_speed_min = 165
+walk_speed_max = 230
+attack_damage = 36
+attack_interval = 1.5
 score_value = 25000
 behavior_id = &"armored_car"
 tint = Color(1.000, 1.000, 1.000, 1.000)

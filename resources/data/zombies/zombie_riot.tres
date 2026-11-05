@@ -6,11 +6,11 @@
 script = ExtResource("1_data")
 id = &"riot"
 display_name = "防暴僵尸"
-max_hp = 40
-walk_speed_min = 110
-walk_speed_max = 150
-attack_damage = 6
-attack_interval = 0.5
+max_hp = 52
+walk_speed_min = 123
+walk_speed_max = 168
+attack_damage = 7
+attack_interval = 0.45
 score_value = 220
 behavior_id = &"common"
 tint = Color(0.850, 0.900, 1.000, 1.000)

@@ -6,11 +6,11 @@
 script = ExtResource("1_data")
 id = &"nest_mother"
 display_name = "巢穴母体"
-max_hp = 2200
+max_hp = 2640
 walk_speed_min = 0
 walk_speed_max = 0
-attack_damage = 18
-attack_interval = 1.2
+attack_damage = 22
+attack_interval = 1.1
 score_value = 25000
 behavior_id = &"nest_mother"
 tint = Color(1.000, 1.000, 1.000, 1.000)

@@ -6,11 +6,11 @@
 script = ExtResource("1_data")
 id = &"common"
 display_name = "普通感染者"
-max_hp = 30
-walk_speed_min = 120
-walk_speed_max = 180
-attack_damage = 5
-attack_interval = 0.5
+max_hp = 39
+walk_speed_min = 135
+walk_speed_max = 200
+attack_damage = 6
+attack_interval = 0.45
 score_value = 100
 behavior_id = &"common"
 tint = Color(1.000, 1.000, 1.000, 1.000)

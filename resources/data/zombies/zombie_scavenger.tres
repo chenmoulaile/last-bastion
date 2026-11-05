@@ -6,11 +6,11 @@
 script = ExtResource("1_data")
 id = &"scavenger"
 display_name = "拾荒者"
-max_hp = 35
-walk_speed_min = 120
-walk_speed_max = 180
-attack_damage = 5
-attack_interval = 0.5
+max_hp = 46
+walk_speed_min = 135
+walk_speed_max = 200
+attack_damage = 6
+attack_interval = 0.45
 score_value = 300
 behavior_id = &"common"
 tint = Color(0.900, 0.850, 0.700, 1.000)

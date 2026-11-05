@@ -6,11 +6,11 @@
 script = ExtResource("1_data")
 id = &"mud"
 display_name = "泥人"
-max_hp = 25
-walk_speed_min = 130
-walk_speed_max = 190
-attack_damage = 5
-attack_interval = 0.5
+max_hp = 33
+walk_speed_min = 146
+walk_speed_max = 213
+attack_damage = 6
+attack_interval = 0.45
 score_value = 240
 behavior_id = &"common"
 tint = Color(0.800, 0.750, 0.650, 1.000)

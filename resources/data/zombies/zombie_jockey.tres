@@ -6,11 +6,11 @@
 script = ExtResource("1_data")
 id = &"jockey"
 display_name = "骑手"
-max_hp = 300
-walk_speed_min = 220
-walk_speed_max = 220
-attack_damage = 4
-attack_interval = 0.6
+max_hp = 375
+walk_speed_min = 242
+walk_speed_max = 242
+attack_damage = 5
+attack_interval = 0.55
 score_value = 800
 behavior_id = &"jockey"
 tint = Color(1.000, 1.000, 1.000, 1.000)

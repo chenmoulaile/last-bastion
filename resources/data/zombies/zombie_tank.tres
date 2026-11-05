@@ -6,11 +6,11 @@
 script = ExtResource("1_data")
 id = &"tank"
 display_name = "坦克"
-max_hp = 3000
-walk_speed_min = 180
-walk_speed_max = 220
-attack_damage = 24
-attack_interval = 1.4
+max_hp = 3600
+walk_speed_min = 198
+walk_speed_max = 242
+attack_damage = 29
+attack_interval = 1.3
 score_value = 30000
 behavior_id = &"tank"
 tint = Color(1.000, 1.000, 1.000, 1.000)

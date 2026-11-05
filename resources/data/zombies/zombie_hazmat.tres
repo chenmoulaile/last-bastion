@@ -6,11 +6,11 @@
 script = ExtResource("1_data")
 id = &"hazmat"
 display_name = "防护服僵尸"
-max_hp = 45
-walk_speed_min = 100
-walk_speed_max = 140
-attack_damage = 6
-attack_interval = 0.5
+max_hp = 59
+walk_speed_min = 112
+walk_speed_max = 157
+attack_damage = 7
+attack_interval = 0.45
 score_value = 220
 behavior_id = &"common"
 tint = Color(1.000, 0.950, 0.650, 1.000)

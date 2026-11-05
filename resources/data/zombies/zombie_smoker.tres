@@ -6,11 +6,11 @@
 script = ExtResource("1_data")
 id = &"smoker"
 display_name = "烟鬼"
-max_hp = 250
-walk_speed_min = 120
-walk_speed_max = 120
-attack_damage = 4
-attack_interval = 0.6
+max_hp = 315
+walk_speed_min = 132
+walk_speed_max = 132
+attack_damage = 5
+attack_interval = 0.55
 score_value = 800
 behavior_id = &"smoker"
 tint = Color(1.000, 1.000, 1.000, 1.000)

@@ -6,11 +6,11 @@
 script = ExtResource("1_data")
 id = &"signal_core"
 display_name = "信号核心"
-max_hp = 3200
+max_hp = 3840
 walk_speed_min = 0
 walk_speed_max = 0
-attack_damage = 22
-attack_interval = 1.0
+attack_damage = 26
+attack_interval = 0.9
 score_value = 40000
 behavior_id = &"signal_core"
 tint = Color(1.000, 1.000, 1.000, 1.000)

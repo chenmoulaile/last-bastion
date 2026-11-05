@@ -6,9 +6,9 @@
 script = ExtResource("1_data")
 id = &"witch"
 display_name = "女巫"
-max_hp = 1000
-walk_speed_min = 300
-walk_speed_max = 300
+max_hp = 1250
+walk_speed_min = 330
+walk_speed_max = 330
 attack_damage = 150
 attack_interval = 1.0
 score_value = 10000

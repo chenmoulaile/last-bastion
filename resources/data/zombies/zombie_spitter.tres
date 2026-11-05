@@ -6,9 +6,9 @@
 script = ExtResource("1_data")
 id = &"spitter"
 display_name = "呕吐者"
-max_hp = 100
-walk_speed_min = 150
-walk_speed_max = 150
+max_hp = 125
+walk_speed_min = 165
+walk_speed_max = 165
 attack_damage = 0
 attack_interval = 1.0
 score_value = 600
