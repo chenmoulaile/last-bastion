@@ -26,6 +26,7 @@ func _ready() -> void:
 	await _test_interior_rooms()
 	await _test_crash_chain_regression()
 	await _test_interior_full_flow()
+	await _test_door_entry_residency()
 	await _test_scoring()
 	await _test_audio_layers()
 	await _test_save_persistence()
@@ -641,6 +642,189 @@ func _test_interior_full_flow() -> void:
 			"interior flow: exit returns player to street ±60px (dx=%.1f)" % player.global_position.distance_to(back))
 	await _close_level(scene)
 	print("[INTEGRATION] interior full flow ok")
+
+
+## wp1-door-entry-fix：门洞一发性触发缺陷（双通道修复）的验收用例。
+## 缺陷：玩家贴门站位（碰撞体 12×28 与 26×48 entry_area 重叠约 2px）时
+## body_entered 在门未破时被 _try_enter_interior 的门破复核拒绝并消费，
+## Area2D 一发性不补发，破门后按住方向键走过门洞永不传送。
+## 旧 wp8 用例（_test_interior_full_flow）站位 door_x-30 不重叠且踢门时无输入，
+## body_entered 未被提前消费，恰好绕开了本缺陷——本用例补上该盲区。
+## 场景A：玩家真实输入走到门前顶住门（贴住）→ interact() 踢两脚破门 →
+##        不松方向键继续向门洞走 → 2 秒内 _in_interior == true 且落在 entry。
+## 场景B（回归护栏）：破门后玩家站门外 >30px → 走入门洞 → 断言传送
+##        （body_entered 新鲜触发路径仍工作；与 _test_interior_full_flow 同语义）。
+func _test_door_entry_residency() -> void:
+	# ---------- 场景 A：贴门站位破门后不松键继续走 ----------
+	var scene := await _open_level(&"l01")
+	var player: Node2D = scene.get_player()
+	var buildings: Array = scene.get("_buildings")
+	var enterable: Array = buildings.filter(func(b): return bool(b.get("enterable", false)))
+	_check(not enterable.is_empty(), "door residency: l01 has enterable buildings")
+	if not enterable.is_empty():
+		var b0: Dictionary = enterable[0]
+		var door_x := float(b0["door_x"])
+		var ground_y := float(b0["ground_y"])
+		var room: Dictionary = b0.get("interior", {})
+		var door: Node2D = null
+		for d in get_tree().get_nodes_in_group("doors"):
+			if absf(d.global_position.x - door_x) < 24.0:
+				door = d
+				break
+		# wp1-door-entry-fix 修复附带的登记表：按 door_x 找该门口 entry_area
+		# （Variant 接收：未修复代码上该成员不存在，get 返回 Nil，走下方兜底扫描）
+		var entry_area: Area2D = null
+		var areas_registered: Variant = scene.get("_entry_areas")
+		if areas_registered is Array:
+			for pair in areas_registered:
+				if absf(float(pair["b"]["door_x"]) - door_x) < 24.0:
+					entry_area = pair["area"]
+					break
+		if entry_area == null:
+			# 兜底：按位置直接扫描 LevelRunner 直接子 Area2D（entry_area 中心
+			# 恒为 (door_x, ground_y-24)，见 level_runner.gd _build_buildings）。
+			# 不依赖修复引入的登记表，未修复代码上也能定位触发区完成反向验证。
+			for child in scene.get_children():
+				if child is Area2D \
+						and absf((child as Area2D).global_position.x - door_x) < 1.0 \
+						and absf((child as Area2D).global_position.y - (ground_y - 24.0)) < 1.0:
+					entry_area = child
+					break
+		_check(door != null and not room.is_empty() and entry_area != null,
+			"door residency A: door, interior room and entry_area exist")
+		if door != null and not room.is_empty() and entry_area != null:
+			# 场景准备：清除门口 ±100px 内程序化随机生成的桶/箱——实测（run8）
+			# 桶偶发落在门口左侧 ~32px 挡死走位路径（玩家卡 door_x-32.1）。
+			# 门（LevelDoor）与补给/告示等其他 interactables 不动。
+			for child in scene.get_node("Interactables").get_children():
+				if (child is ExplosiveBarrel or child is BreakableCrate) \
+						and absf(child.global_position.x - door_x) < 100.0:
+					child.queue_free()
+			for _i in 2:
+				await get_tree().physics_frame
+			# ① 真实输入走到门前顶住门。物理顶死位 x≈door_x-17（玩家碰撞右缘
+			# door_x-11 贴门体碰撞左缘 door_x-11）；door_x-19 时碰撞已与区域重叠，
+			# 故到达顶死位前 body_entered 必已触发并在门未破时被消费（缺陷前提）。
+			# 出发位从 door_x-34 起向左扫描脚下有真实地面的 x（地形随机坑防御，
+			# 同 wp8 window_rappel 用例 get_ground_y<0 加固先例）。
+			var start_x := door_x - 34.0
+			for _s in 8:
+				if scene.get_ground_y(start_x) >= 0.0:
+					break
+				start_x -= 2.0
+			player.global_position = Vector2(start_x, ground_y - 2.0)
+			player.velocity = Vector2.ZERO
+			Input.action_press("move_right")
+			var pressed := false
+			for _i in 60:
+				await get_tree().physics_frame
+				if player.global_position.x >= door_x - 17.5:
+					pressed = true
+					break
+			_check(pressed,
+				"door residency A: player pressed against door (x=%.1f, door_x=%.0f)" % [player.global_position.x, door_x])
+			# 盲区前提实证：玩家驻留在 entry_area 内（body_entered 已消费的一发性状态）。
+			# await physics_frame 恢复在当帧物理 step 之前，跨边缘当帧 overlap 快照
+			# 可能滞后——弹性等待最多 10 帧。
+			var resident := false
+			for _i in 10:
+				await get_tree().physics_frame
+				if entry_area.get_overlapping_bodies().has(player):
+					resident = true
+					break
+			_check(resident,
+				"door residency A: player still overlaps entry_area (body_entered already consumed; px=%.1f ax=%.1f n=%d)" % [player.global_position.x, entry_area.global_position.x, entry_area.get_overlapping_bodies().size()])
+			# ② interact() 踢两脚破门（重置 kick_cd，与旧用例同规格）
+			for _k in 2:
+				door.set("kick_cd", 0.0)
+				door.call("interact", player)
+			_check(not is_instance_valid(door) or bool(door.get("broken")),
+				"door residency A: two kicks break the door")
+			# ③ 不松方向键继续向门洞走 → 2 秒（120 物理帧）内传送进室内
+			var entered := false
+			var frames_used := -1
+			for _i in 120:
+				await get_tree().physics_frame
+				if bool(scene.get("_in_interior")):
+					entered = true
+					frames_used = _i
+					break
+			Input.action_release("move_right")
+			_check(entered,
+				"door residency A: holding direction after break enters interior within 2s (frames=%d)" % frames_used)
+			# 传送落点为 room entry；玩家按住的 move_right 在传送当帧还会被
+			# LevelRunner(父)→Player(子) 的 _physics_process 顺序多推 1-2 帧
+			# （≈3.7-7.3px），故容忍 8px 内的输入残余漂移（精确 <2.0 断言
+			# 由 body_entered 路径的场景 B / 旧用例承担）。
+			_check(player.global_position.distance_to(room["entry"]) < 8.0,
+				"door residency A: player placed at interior entry (dist=%.1f)" % player.global_position.distance_to(room["entry"]))
+			_check((scene.get("_street_return") as Vector2).distance_to(
+					Vector2(door_x - 26.0, ground_y - 2.0)) < 0.5,
+				"door residency A: street return recorded at doorway")
+	await _close_level(scene)
+
+	# ---------- 场景 B：破门后站门外 >30px 走入门洞（新开一关，冷却干净） ----------
+	scene = await _open_level(&"l01")
+	player = scene.get_player()
+	buildings = scene.get("_buildings")
+	enterable = buildings.filter(func(b): return bool(b.get("enterable", false)))
+	if not enterable.is_empty():
+		var b1: Dictionary = enterable[0]
+		var door_x1 := float(b1["door_x"])
+		var ground_y1 := float(b1["ground_y"])
+		var room1: Dictionary = b1.get("interior", {})
+		var door1: Node2D = null
+		for d in get_tree().get_nodes_in_group("doors"):
+			if absf(d.global_position.x - door_x1) < 24.0:
+				door1 = d
+				break
+		_check(door1 != null and not room1.is_empty(), "door residency B: door and interior room exist")
+		if door1 != null and not room1.is_empty():
+			# 场景准备：同场景 A，清门口 ±100px 内随机桶/箱防走位路径被挡
+			for child in scene.get_node("Interactables").get_children():
+				if (child is ExplosiveBarrel or child is BreakableCrate) \
+						and absf(child.global_position.x - door_x1) < 100.0:
+					child.queue_free()
+			for _i in 2:
+				await get_tree().physics_frame
+			# 站门外 >30px（door_x-31：碰撞右缘 door_x-25，距区域左缘 door_x-13
+			# 还差 12px，不重叠——body_entered 未被消费）。出发点从 door_x-31 起向左
+			# 扫描脚下有真实地面的 x（随机地形坑防御；door_x-40 实测偶被地形/道具
+			# 挡路导致偶发失败，故贴近旧用例 door_x-30 的已验证稳定邻域）。
+			var start_bx := door_x1 - 31.0
+			for _s in 10:
+				if scene.get_ground_y(start_bx) >= 0.0:
+					break
+				start_bx -= 2.0
+			player.global_position = Vector2(start_bx, ground_y1 - 2.0)
+			player.velocity = Vector2.ZERO
+			for _k in 2:
+				door1.set("kick_cd", 0.0)
+				door1.call("interact", player)
+			_check(not is_instance_valid(door1) or bool(door1.get("broken")),
+				"door residency B: two kicks break the door")
+			for _i in 3:
+				await get_tree().physics_frame
+			_check(not bool(scene.get("_in_interior")),
+				"door residency B: player outside entry_area is NOT auto-teleported on break")
+			# 真实输入走入门洞 → body_entered 新鲜触发 → 传送
+			Input.action_press("move_right")
+			var entered_b := false
+			var reached_zone := false
+			for _i in 120:
+				await get_tree().physics_frame
+				if player.global_position.x > door_x1 - 19.0:
+					reached_zone = true
+				if bool(scene.get("_in_interior")):
+					entered_b = true
+					break
+			Input.action_release("move_right")
+			_check(entered_b,
+				"door residency B: walking into doorway from >30px teleports (body_entered path intact; reached=%s px=%.1f door=%.0f)" % [str(reached_zone), player.global_position.x, door_x1])
+			_check(player.global_position.distance_to(room1["entry"]) < 2.0,
+				"door residency B: player placed at interior entry")
+	await _close_level(scene)
+	print("[INTEGRATION] door entry residency ok")
 
 
 func _test_scoring() -> void:

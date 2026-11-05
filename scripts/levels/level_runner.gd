@@ -410,6 +410,11 @@ func _build_buildings() -> void:
 			if body.is_in_group("player"):
 				_try_enter_interior(b, entry_area, true))
 		add_child(entry_area)
+		# wp1-door-entry-fix：登记 enterable 门口触发区，供「破门瞬间补查」与
+		# _physics_process 驻留轮询按 door_x 查找。原实现 add_child 后局部变量
+		# 即弃，Area2D.body_entered 一发性信号在门未破时被门破复核消费后，
+		# 破门后没有任何路径能对仍驻留门洞的玩家补发进入判定。
+		_entry_areas.append({"b": b, "area": entry_area})
 		# 房间补给（掩体 + 弹药）
 		var room_x: float = (room["rect"] as Rect2).position.x
 		_spawn_pickup("ammo", Vector2(room_x + 120.0, 288.0 - 24.0), 1)
@@ -426,12 +431,15 @@ func _build_buildings() -> void:
 ## 该函数唯一调用入口是门洞 Area2D 的 body_entered（且仅玩家 body 通过过滤），
 ## initiated_by_player 只在该路径传 true——破门信号不再触发传送。
 func _try_enter_interior(b: Dictionary, area: Area2D = null, initiated_by_player: bool = false) -> void:
-	# 进入后 0.6s 内该 Area 不重复触发
+	# 进入成功后 0.6s 内该 Area 不重复触发（防传送落点物理回弹/驻留重复触发）。
+	# wp1-door-entry-fix：冷却标记改为只在真正传送成功时写入——原实现把
+	# set_meta 放在下方门破复核之前，门未破时被拒绝的 body_entered 也会消耗
+	# 600ms 冷却，把破门瞬间补查与驻留轮询的补偿窗口全部堵死（玩家 220px/s
+	# 穿过 26px 门洞仅约 0.16s，冷却未过玩家已走出触发区）。
 	if area != null:
 		var now := Time.get_ticks_msec()
 		if int(area.get_meta("wp1_entry_cd_until", 0)) > now:
 			return
-		area.set_meta("wp1_entry_cd_until", now + 600)
 	if player == null or not is_instance_valid(player):
 		return
 	if player.get("is_dead"):
@@ -452,6 +460,9 @@ func _try_enter_interior(b: Dictionary, area: Area2D = null, initiated_by_player
 	_street_return = Vector2(door_x - 26.0, float(b["ground_y"]) - 2.0)
 	# wp2：进入室内 → 置室内态（_street_return 已是出口落点，供导演投放改址与验收比对）
 	_in_interior = true
+	# wp1-door-entry-fix：成功传送此刻才消耗 0.6s 触发冷却（说明见函数开头）
+	if area != null:
+		area.set_meta("wp1_entry_cd_until", Time.get_ticks_msec() + 600)
 	player.global_position = room["entry"]
 	# wp5：房间建在 level_width+700 远端实例区，进门后放宽相机右界让房间可见
 	var cam := player.get_viewport().get_camera_2d()
@@ -463,6 +474,11 @@ func _try_enter_interior(b: Dictionary, area: Area2D = null, initiated_by_player
 
 
 var _buildings: Array = []
+## wp1-door-entry-fix：enterable 建筑的门口触发区登记表
+## （元素 {b: Dictionary, area: Area2D}，b 含 door_x/ground_y/interior）。
+## 破门补查（_on_door_broken_enterable）与 _physics_process 驻留轮询按
+## door_x 在此查找对应 entry_area；非 enterable 建筑不登记。
+var _entry_areas: Array = []
 var _street_return: Vector2 = Vector2.ZERO
 ## wp2：室内态状态机标记。玩家经门洞 Area2D 进入内部房间时置 true，
 ## 从房间出口 Area2D 回到街道时置 false。室内期间：
@@ -818,7 +834,15 @@ func _connect_events() -> void:
 	# 最终抉择信号（P0-2）：缺了这条 4-2 选完结局没有任何反应
 	EventBus.story_choice_made.connect(_on_story_choice_made)
 	EventBus.signal_agent_requested.connect(_on_signal_agent_requested)
-	# wp1：door_broken 不再连接传送——破门只留开放门洞，进入改为玩家主动走入门洞 Area2D
+	# wp1：door_broken 不做「破门即传送」（防 P1-4 崩溃链）——破门只留开放门洞，
+	# 进入由玩家主动走入门洞 Area2D 发起。
+	# wp1-door-entry-fix：连接破门信号做「破门瞬间补查」（_on_door_broken_enterable）。
+	# 玩家贴门站位时 body_entered 已在门未破时被 _try_enter_interior 的门破复核
+	# 消费且一发性不补发；破门时对此刻物理站在该门 entry_area 内的玩家补一次
+	# 进入判定。enterable 门免疫僵尸挠（door.gd zombie_scratch 只播火花），只可能
+	# 被玩家 kick/combat 破——语义仍属玩家发起，不重引入 P1-4 链；非 enterable 门
+	# 按 door_x 匹配不上 _entry_areas（只登记 enterable 建筑），自然无操作。
+	EventBus.door_broken.connect(_on_door_broken_enterable)
 
 
 func _exit_tree() -> void:
@@ -890,6 +914,42 @@ func _process(delta: float) -> void:
 	# wp2：室内态绝不触发撤离（室内 x 恒 > level_width-120，否则进屋即结算）。
 	if not _extraction_started and not _in_interior and player.global_position.x > level_width - 120.0:
 		_on_extraction_trigger(player)
+
+
+## wp1-door-entry-fix（接入点②驻留轮询兜底）：Area2D.body_entered 是一发性信号，
+## 玩家贴门站位时它已在门未破时被 _try_enter_interior 的门破复核消费，破门后
+## 永不补发（破门瞬间补查 _recover_entry_after_break 只覆盖「破门的同一时刻仍
+## 站在门洞内」；若玩家破门后绕开、冷却后重新靠近等边缘时序仍会漏）。此处每
+## 物理帧对每个 enterable 门口补查：门已破（doors 组查无该 door_x）且玩家仍
+## 驻留在 entry_area 内 → 补发起进入判定。兜底断言不变（_try_enter_interior
+## 内部复核玩家存活 + 距门 ≤80px + initiated_by_player=true），成功传送后
+## 0.6s 冷却防落点回弹/驻留重复触发；室内态玩家已传送至远端房间、不再与
+## 街道门口区域重叠，轮询自然静默。
+func _physics_process(_delta: float) -> void:
+	if _entry_areas.is_empty():
+		return
+	if GameManager.state != GameManager.State.PLAYING or _finishing:
+		return
+	if player == null or not is_instance_valid(player):
+		return
+	var doors := get_tree().get_nodes_in_group("doors")
+	for pair in _entry_areas:
+		var b: Dictionary = pair["b"]
+		var door_x := float(b["door_x"])
+		var door_alive := false
+		for d in doors:
+			if absf(d.global_position.x - door_x) < 24.0:
+				door_alive = true
+				break
+		if door_alive:
+			continue
+		var area: Area2D = pair["area"]
+		if not is_instance_valid(area):
+			continue
+		for body in area.get_overlapping_bodies():
+			if body == player:
+				_try_enter_interior(b, area, true)
+				break
 
 
 # --- 锈蚀频率：剧情事件 -------------------------------------------------------
@@ -1166,12 +1226,39 @@ func _spawn_humans(faction: StringName, kind: StringName, count: int, at: float)
 	return first
 
 
-## wp1：破门不再传送（废除「破门即传送」）。门破后门口只留开放门洞，
-## 进入由门洞 Area2D + _try_enter_interior 处理。保留此空实现以维持
-## door_broken(pos, source) 信号语义的文档锚点；door_broken 的 source 参数
-## （&"kick"/&"combat"/&"zombie"）由 door.gd 广播，供后续按来源分流。
+## wp1：破门不做「破门即传送」（废除 P1-4 崩溃链入口）。门破后门口只留开放门洞，
+## 进入由门洞 Area2D + _try_enter_interior 处理；door_broken 的 source 参数
+## （&"kick"/&"combat"/&"zombie"）由 door.gd 广播。
+## wp1-door-entry-fix：本函数改为「破门瞬间补查」——玩家贴门站位（碰撞体 12×28
+## 与 26×48 entry_area 重叠约 2px）时 body_entered 在门未破时已被消费，破门后
+## 需要对此刻仍站在门洞内的玩家补一次进入判定。兜底断言不变：由 _try_enter_interior
+## 内部复核玩家存活 + 距门 ≤80px + initiated_by_player=true + 门已破。
+## 注意：door.gd._break() 先 emit(:120) 后才 remove_from_group("doors")(:131)，
+## 信号同步处理器运行时门仍在 doors 组、门破复核会拒绝——故 defer 到帧末执行
+## （彼时 _break 已执行完毕、门已出组）。LevelRunner 经 _swap_view 的 queue_free
+## 重建，实例析构时 Godot 自动断开本连接，无需手动清理。
 func _on_door_broken_enterable(pos: Vector2, source: StringName = &"kick") -> void:
-	pass  # 废除破门即传送：不允许任何由破门信号发起的室内传送
+	call_deferred("_recover_entry_after_break", pos.x)
+
+
+## wp1-door-entry-fix：破门补查的实际执行（帧末 deferred）。
+## 只处理玩家此刻物理站在其中的 enterable 门口；非 enterable 门匹配不上。
+func _recover_entry_after_break(broken_door_x: float) -> void:
+	if GameManager.state != GameManager.State.PLAYING or _finishing:
+		return
+	if player == null or not is_instance_valid(player):
+		return
+	for pair in _entry_areas:
+		var b: Dictionary = pair["b"]
+		if absf(float(b["door_x"]) - broken_door_x) >= 24.0:
+			continue
+		var area: Area2D = pair["area"]
+		if not is_instance_valid(area):
+			continue
+		for body in area.get_overlapping_bodies():
+			if body == player:
+				_try_enter_interior(b, area, true)
+				break
 
 
 func _on_story_choice_made(choice_id: StringName, option: int) -> void:
