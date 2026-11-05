@@ -21,6 +21,11 @@ const ARM_TURN_SPEED := 14.0          # 手臂追踪速率 rad/s（规格要求 
 const ARM_MAX_REL := 1.3089969        # 手臂相对朝向限幅 ±75°（rad）
 const ARM_HEIGHT_STAND := -22.0
 const ARM_HEIGHT_CROUCH := -16.0      # 蹲下时肩/手随身体下移 6px
+# wp3-crouch-size：蹲立碰撞体规格。站姿 12x28 @ y=-14 ↔ 蹲姿 12x18 @ y=-9，
+# 两者底边都落在原点 y=0（与 sprite 帧底行对齐），脚底不悬空不陷入。
+# 新 crouch 条带内容高 30px（=站姿 44px 的 68%），18px 碰撞体覆盖其腿部/躯干。
+const STAND_SHAPE_SIZE := Vector2(12.0, 28.0)
+const CROUCH_SHAPE_SIZE := Vector2(12.0, 18.0)
 const LAND_DIP_TIME := 0.09           # 着弹脚 1px 下沉帧持续时长
 const BRAKE_TIME := 0.1               # 松开方向后的刹车姿势窗口
 
@@ -126,6 +131,9 @@ var _muzzle_local := Vector2(20, -18)
 
 func _ready() -> void:
 	add_to_group("player")
+	# wp3-crouch-size：碰撞 shape 取独立副本（player.tscn 的 sub_resource 默认
+	# 多实例共享），蹲立切换改 size 时不会波及其他实例。
+	collision.shape = collision.shape.duplicate()
 	character = GameManager.get_character(GameManager.selected_character)
 	if character == null:
 		character = GameManager.get_character(&"assault")
@@ -377,8 +385,45 @@ func _physics_process(delta: float) -> void:
 	_tick_gait(delta)
 	_tick_actions(delta)
 	_tick_movement(delta)
+	_sync_crouch_shape()
 	_update_animation()
 	_update_weapon_visual()
+
+
+## wp3-crouch-size：蹲立切换时同步碰撞体高度/位置——站立 12x28 @ y=-14 ↔
+## 蹲姿 12x18 @ y=-9，两者底边都在原点 y=0，脚底与地面线（sprite 帧底行）
+## 恒对齐，不悬空不陷入。蹲下瞬间的视觉头部高度由 crouch 条带内容（30px，
+## 站姿 44px 的 68%）保证；sprite.position/offset 不需要随蹲立变化，因为
+## 条带内容在 48px 帧内永远底对齐。起身前用站姿矩形做空间查询检查头顶
+## 净空，被挡则本帧保持蹲姿碰撞体（下一帧再试），避免在低矮处起身卡进障碍。
+func _sync_crouch_shape() -> void:
+	var rect := collision.shape as RectangleShape2D
+	if rect == null:
+		return
+	var target := CROUCH_SHAPE_SIZE if is_crouching else STAND_SHAPE_SIZE
+	if rect.size == target:
+		return
+	var old_size := rect.size
+	var old_pos := collision.position
+	rect.size = target
+	collision.position = Vector2(0.0, -target.y * 0.5)
+	if target.y > old_size.y and not _stand_headroom_free():
+		rect.size = old_size
+		collision.position = old_pos
+
+
+## wp3-crouch-size：起身净空——站姿矩形（底部抬高 0.5px 避开地板触面）
+## 与世界做相交查询，空则可起身。
+func _stand_headroom_free() -> bool:
+	var shape := RectangleShape2D.new()
+	shape.size = Vector2(STAND_SHAPE_SIZE.x, STAND_SHAPE_SIZE.y - 1.0)
+	var params := PhysicsShapeQueryParameters2D.new()
+	params.shape = shape
+	params.transform = Transform2D(0.0, global_position
+			+ Vector2(0.0, -(STAND_SHAPE_SIZE.y * 0.5) - 0.5))
+	params.exclude = [get_rid()]
+	params.collision_mask = collision_mask
+	return get_world_2d().direct_space_state.intersect_shape(params, 1).is_empty()
 
 
 func _tick_timers(delta: float) -> void:

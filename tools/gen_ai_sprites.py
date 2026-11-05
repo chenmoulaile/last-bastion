@@ -26,6 +26,8 @@ PREVIEW = ROOT / "tools" / "_preview"
 # --- target geometry --------------------------------------------------------
 FRAME = 48           # character frame size (48x48)
 BODY_H = 44          # standing pose content height inside the frame
+CROUCH_H = 30        # wp3-crouch-size: crouching pose height (~68% of BODY_H,
+                     # so crouch reads clearly shorter than standing)
 COLLAPSE_H = 34      # collapsing pose height
 DEAD_W = 44          # lying-dead pose width
 
@@ -321,6 +323,19 @@ def shift(img: Image.Image, dy: int = 0, dx: int = 0, squash: float = 1.0) -> Im
     return out
 
 
+def squash_bottom(img: Image.Image, squash: float) -> Image.Image:
+    """wp3-crouch-size: crop content, squash its height, re-place bottom-anchored.
+
+    shift(squash=...) shrinks the whole 48px frame and strip() composites frames
+    top-aligned, which lifts the feet 1-2px off the ground line (frame bottom
+    row 47). Squashing the cropped content and re-placing bottom-anchored keeps
+    every frame's feet planted while the head dips.
+    """
+    content = crop_content(img)
+    nh = max(1, round(content.height * squash))
+    return place(content.resize((content.width, nh), Image.NEAREST))
+
+
 # --- wp2-run-anim-rework：程序化跑步腿部循环 --------------------------------
 # 美术审计实测：mirror_legs 绕腿带质心水平镜像会产生膝反关节 + 髋线错位
 # （f5 质心差达 5-6px）+ 相邻帧腿带 XOR 高达 258-321px 的跳变。本节改为：
@@ -467,7 +482,9 @@ def assemble(poses: dict[str, Image.Image], char_id: str = "assault") -> dict[st
     strips["hurt"] = strip([hurt, shift(hurt, dx=-1)])
     strips["die"] = strip([collapse, shift(collapse, dy=-2),
                            shift(dead, squash=0.85), dead, shift(dead, dy=-1), dead])
-    strips["crouch"] = strip([crouch, shift(crouch, squash=0.96), shift(crouch, dy=-1)])
+    # wp3-crouch-size：蹲姿呼吸帧改为「裁内容→压高→底对齐重放」，三帧脚底都钉在
+    # frame 底行（旧 shift(squash=0.96)/shift(dy=-1) 会把脚底抬离地面线 1-2px）。
+    strips["crouch"] = strip([crouch, squash_bottom(crouch, 0.96), squash_bottom(crouch, 0.92)])
     strips["slide"] = strip([rot_fit(crouch, -10), rot_fit(crouch, -16)])
     strips["jump"] = strip([shift(jump, dy=-2), shift(jump, dy=1)])
     return strips
@@ -504,8 +521,13 @@ def process_character(char_id: str, filename: str) -> None:
 
     # pixelize with per-pose target geometry
     poses = {}
-    for key in ("idle", "run_a", "run_b", "run_c", "run_d", "aim", "melee", "hurt", "crouch", "jump"):
+    for key in ("idle", "run_a", "run_b", "run_c", "run_d", "aim", "melee", "hurt", "jump"):
         poses[key] = place(pixelize(poses_raw[key], FRAME, BODY_H))
+    # wp3-crouch-size：蹲姿用独立 CROUCH_H 目标高度（同 COLLAPSE_H 机制）——
+    # 源表蹲姿格与站姿格内容高度相同（AI 没画矮），若继续走 BODY_H 归一化，
+    # 蹲姿成品与站姿同为 44px 高、只向两侧变宽（实测宽 1.4-1.8 倍），即
+    # 「蹲下明显更大」的根因；压到 CROUCH_H=30（≈站姿 68%）后蹲姿明确变矮。
+    poses["crouch"] = place(pixelize(poses_raw["crouch"], FRAME, CROUCH_H))
     poses["collapse"] = place(pixelize(poses_raw["collapse"], FRAME, COLLAPSE_H))
     poses["dead"] = place(pixelize(poses_raw["dead"], DEAD_W, FRAME // 2))
     poses["shoot"] = poses["aim"]  # 瞄准姿势即射击姿势（武器由 WeaponSprite 叠加）
