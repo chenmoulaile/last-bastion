@@ -20,6 +20,8 @@ func _ready() -> void:
 	await _test_ui_wiring()
 	await _test_signal_agent()
 	await _test_agent_bands()
+	_test_level_story()
+	_test_zombie_values()
 	print("[NARR] checks=%d failures=%d" % [_passed + _failed, _failed])
 	print("[NARR] RESULT: %s" % ("PASS" if _failed == 0 else "FAIL"))
 	get_tree().quit()
@@ -527,3 +529,92 @@ func _test_agent_bands() -> void:
 	if is_instance_valid(scene):
 		scene.queue_free()
 	await get_tree().process_frame
+
+
+# --- wp11-tests-ci：wp6-level-story 剧情/数值断言整合 ---------------------------
+## 关卡加长（length 42.1%-45.8%，time_target 联动）、事件总数 >=188、
+## 每关事件间隔 maxgap <=0.15（含首尾 gap）、lore/broadcast/tip 数量、
+## dialogue 事件 id 引用完整性 + wp6 新增 14 段对话存在 + dialogues.json 27 段。
+func _test_level_story() -> void:
+	var expect_len := {"l01": 13000, "l02": 13500, "l03": 14500, "l04": 14500,
+		"l05": 15000, "l06": 13500, "l07": 13000, "l08": 15000,
+		"l09": 16000, "l10": 16000, "l11": 17500}
+	var expect_time := {"l01": 350.0, "l02": 370.0, "l03": 410.0, "l04": 420.0,
+		"l05": 440.0, "l06": 430.0, "l07": 430.0, "l08": 460.0,
+		"l09": 490.0, "l10": 520.0, "l11": 610.0}
+	var total_events := 0
+	var type_totals := {}
+	var dialogue_refs := {}   # dialogue 事件 id -> 所在关卡
+	for lid: String in expect_len.keys():
+		var lvl := GameManager.get_level(StringName(lid))
+		check(lvl != null, "[story] %s 数据加载" % lid)
+		if lvl == null:
+			continue
+		check(int(lvl.length) == int(expect_len[lid]),
+			"[story] %s length=%d（wp6 加长后精确值）" % [lid, lvl.length])
+		check(is_equal_approx(float(lvl.time_target), float(expect_time[lid])),
+			"[story] %s time_target=%.0f 与 length 联动" % [lid, lvl.time_target])
+		var ats: Array = []
+		for ev in lvl.events:
+			ats.append(float(ev.get("at", 0.0)))
+			total_events += 1
+			var t := String(ev.get("type", ""))
+			type_totals[t] = int(type_totals.get(t, 0)) + 1
+			if t == "dialogue":
+				dialogue_refs[String(ev.get("id", ""))] = lid
+		ats.sort()
+		# maxgap 含首事件 at 与尾事件到 1.0 的收尾 gap（进度推进全覆盖）
+		var maxgap := 0.0
+		if not ats.is_empty():
+			maxgap = maxf(maxgap, float(ats[0]))
+			maxgap = maxf(maxgap, 1.0 - float(ats[ats.size() - 1]))
+			for i in range(1, ats.size()):
+				maxgap = maxf(maxgap, float(ats[i]) - float(ats[i - 1]))
+		check(maxgap <= 0.15, "[story] %s 事件间隔 maxgap=%.3f <= 0.15" % [lid, maxgap])
+	check(total_events >= 188, "[story] 11 关事件总数 >= 188（实际 %d）" % total_events)
+	var type_minimums := {"lore": 10, "broadcast": 11, "tip": 4}
+	for t: String in type_minimums.keys():
+		check(int(type_totals.get(t, 0)) >= int(type_minimums[t]),
+			"[story] wp6 %s 事件 >= %d（实际 %d）" % [t, type_minimums[t], type_totals.get(t, 0)])
+	var convos: Dictionary = JSON.parse_string(
+		FileAccess.open("res://resources/data/dialogues.json", FileAccess.READ).get_as_text())
+	for cid: String in dialogue_refs.keys():
+		check(convos.has(cid),
+			"[story] dialogue 事件引用存在: %s（%s）" % [cid, dialogue_refs[cid]])
+	var new_convos := ["l01_ingress", "l01_dawn", "l02_aftermath", "l03_convoy_aftermath",
+		"l04_fallout", "l05_descent", "l05_after_nest", "l07_split_tension",
+		"l08_purifier_edge", "l08_after_battle", "l09_lobby", "l10_vault_entry",
+		"l10_deeper", "l11_core_descent"]
+	for cid: String in new_convos:
+		check(convos.has(cid), "[story] wp6 新对话存在: " + cid)
+		if convos.has(cid):
+			var lines: Array = convos[cid].get("lines", [])
+			check(lines.size() >= 3, "[story] %s 至少 3 行台词（实际 %d）" % [cid, lines.size()])
+	check(convos.size() == 27, "[story] dialogues.json 共 27 段（实际 %d）" % convos.size())
+
+
+# --- wp11-tests-ci：wp5-zombie-pacing-buff 僵尸数值断言（.tres 精确值） ---------
+## 普通系 HP +30%/伤害 +20%/速度 +12%/攻击间隔 0.5→0.45；特感 HP +25%；
+## Boss .tres HP +20%（wp7 的 LEVEL_CFG 层 HP 断言在 integration 套件）。
+func _test_zombie_values() -> void:
+	var common := GameManager.get_zombie(&"common")
+	check(common != null, "[values] 普通感染者数据存在")
+	if common != null:
+		check(int(common.max_hp) == 39, "[values] 普通 HP=39（wp5 +30%）")
+		check(int(common.attack_damage) == 6, "[values] 普通伤害=6（wp5 +20%）")
+		check(int(common.walk_speed_min) == 135 and int(common.walk_speed_max) == 200,
+			"[values] 普通速度 135-200（wp5 +12%）")
+		check(is_equal_approx(float(common.attack_interval), 0.45),
+			"[values] 普通攻击间隔 0.45s（0.5→0.45）")
+	var special_hp := {&"hunter": 315, &"smoker": 315, &"boomer": 65, &"charger": 625,
+		&"jockey": 375, &"spitter": 125, &"witch": 1250}
+	for kind: StringName in special_hp.keys():
+		var zd := GameManager.get_zombie(kind)
+		check(zd != null and int(zd.max_hp) == int(special_hp[kind]),
+			"[values] 特感 %s HP=%d（wp5 +25%%）" % [kind, special_hp[kind]])
+	var boss_hp := {&"tank": 3600, &"armored_car": 3120, &"ironface": 2400,
+		&"nest_mother": 2640, &"signal_core": 3840}
+	for kind: StringName in boss_hp.keys():
+		var bd := GameManager.get_zombie(kind)
+		check(bd != null and int(bd.max_hp) == int(boss_hp[kind]) and bd.is_boss,
+			"[values] Boss %s HP=%d 且 is_boss（wp5 +20%%）" % [kind, boss_hp[kind]])

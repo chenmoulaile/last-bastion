@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================
-REM wp8-tests-ci: local CI chain (Windows, run from repo root)
+REM wp11-tests-ci: local CI chain (Windows, run from repo root)
 REM
 REM Usage:
 REM     tools\ci_checks.bat
@@ -9,8 +9,12 @@ REM
 REM Steps:
 REM   1. smoke        headless res://tests/smoke.tscn
 REM   2. narrative    headless res://tests/narrative.tscn
+REM      (wp11: now also asserts wp6-level-story lengths/events/maxgap/dialogues
+REM       and wp5 buffed zombie/boss .tres values)
 REM   3. integration  headless res://tests/integration.tscn
-REM      (contains wp8 crash-chain regression + interior full-flow tests)
+REM      (wp8 crash-chain regression + interior full-flow + wp1 door entry
+REM       scenarios A/B + wp4 interior walkthrough (5 themes) + wp7 boss
+REM       rework (static cfg + 5 live boss fights) + wp5 pacing assertions)
 REM   4. py -3.14 tools\assert_no_baked_weapons.py  (character frames must not bake weapons)
 REM   5. py -3.14 tools\assert_weapon_clean.py      (weapon sprite stray-dot assertion)
 REM   6. py -3.14 tools\assert_no_stray_dots.py     (wp10: characters+weapons full stray-dot assertion)

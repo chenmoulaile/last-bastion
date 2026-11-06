@@ -8,6 +8,12 @@ extends Node
 var _failures: Array[String] = []
 var _checks: int = 0
 var _original_save: Dictionary = {}
+## wp11：测试布局种子。start_level 内部按时间重掷 run_seed（game_manager.gd:172），
+## 场景 _ready 在 level_runner.gd:119 读它生成地形——随机门口坑/障碍会让真实输入
+## 走位用例偶发卡死（CI 实测两次：interior full flow+residency A 9 项、walkthrough
+## suburb 1 项，单独重跑即过）。在 start_level 之后、instantiate 之前覆写为固定值，
+## 布局完全确定性；若该布局恰好不可走，测试显式失败而非 flaky。
+const LAYOUT_SEED := 20261111
 
 
 func _ready() -> void:
@@ -32,6 +38,8 @@ func _ready() -> void:
 	await _test_audio_layers()
 	await _test_save_persistence()
 	await _test_extraction()
+	await _test_boss_rework()
+	await _test_pacing_stats()
 	# Never leave test progress behind in the player's real save.
 	SaveSystem.data = _original_save
 	SaveSystem.save()
@@ -91,6 +99,7 @@ func _open_level(id: StringName, mode: StringName = &"SQUAD") -> Node:
 	GameManager.selected_squad = []
 	GameManager.selected_soldiers = []
 	GameManager.start_level(id, mode, &"NORMAL")
+	GameManager.run_seed = LAYOUT_SEED   # wp11：固定布局（见 LAYOUT_SEED 注释）
 	var path := "res://scenes/levels/%s.tscn" % String(id)
 	var scene: Node = load(path).instantiate()
 	add_child(scene)
@@ -567,15 +576,22 @@ func _test_crash_chain_regression() -> void:
 ## （进度/剧情事件/教程提示/撤离全部冻结）→ 出口返回街道 ±60px。
 ## 全程由外部 CI 扫描本测试日志确认 0 条 SCRIPT ERROR（tools/ci_checks.bat）。
 func _test_interior_full_flow() -> void:
-	var scene := await _open_level(&"l01")
-	var player: Node2D = scene.get_player()
-	var buildings: Array = scene.get("_buildings")
-	var enterable: Array = buildings.filter(func(b): return bool(b.get("enterable", false)))
-	_check(not enterable.is_empty(), "interior flow: l01 has enterable buildings")
-	if enterable.is_empty():
+	# wp11 加固：同 _test_door_entry_residency——挑门口地面连续完好的建筑，
+	# 随机布局门口有坑/障碍时最多重开 3 关。
+	var scene: Node = null
+	var b0: Dictionary = {}
+	for _attempt in 3:
+		scene = await _open_level(&"l01")
+		b0 = _pick_clear_doorway(scene, scene.get("_buildings"))
+		if not b0.is_empty():
+			break
+		await _close_level(scene)
+		scene = null
+	_check(not b0.is_empty(), "interior flow: l01 has enterable building with clear doorway")
+	if b0.is_empty():
 		await _close_level(scene)
 		return
-	var b0: Dictionary = enterable[0]
+	var player: Node2D = scene.get_player()
 	var door_x := float(b0["door_x"])
 	var ground_y := float(b0["ground_y"])
 	var room: Dictionary = b0.get("interior", {})
@@ -658,13 +674,23 @@ func _test_interior_full_flow() -> void:
 ##        （body_entered 新鲜触发路径仍工作；与 _test_interior_full_flow 同语义）。
 func _test_door_entry_residency() -> void:
 	# ---------- 场景 A：贴门站位破门后不松键继续走 ----------
-	var scene := await _open_level(&"l01")
-	var player: Node2D = scene.get_player()
-	var buildings: Array = scene.get("_buildings")
-	var enterable: Array = buildings.filter(func(b): return bool(b.get("enterable", false)))
-	_check(not enterable.is_empty(), "door residency: l01 has enterable buildings")
-	if not enterable.is_empty():
-		var b0: Dictionary = enterable[0]
+	# wp11 加固：关卡布局按 run_seed 每局随机（game_manager.gd:172），门口 ±40px
+	# 可能随机出地形坑/障碍（get_ground_y<0），玩家真实输入走位会被卡死 →
+	# 「贴门/走入门洞」断言整组失败（CI 首跑实测 9 项失败、重跑即过的根因）。
+	# 故挑选门口地面连续完好的建筑，最多重开 3 关。
+	var scene: Node = null
+	var b0: Dictionary = {}
+	var player: Node2D = null
+	for _attempt in 3:
+		scene = await _open_level(&"l01")
+		b0 = _pick_clear_doorway(scene, scene.get("_buildings"))
+		if not b0.is_empty():
+			break
+		await _close_level(scene)
+		scene = null
+	_check(not b0.is_empty(), "door residency: l01 has enterable building with clear doorway")
+	if not b0.is_empty():
+		player = scene.get_player()
 		var door_x := float(b0["door_x"])
 		var ground_y := float(b0["ground_y"])
 		var room: Dictionary = b0.get("interior", {})
@@ -766,12 +792,17 @@ func _test_door_entry_residency() -> void:
 	await _close_level(scene)
 
 	# ---------- 场景 B：破门后站门外 >30px 走入门洞（新开一关，冷却干净） ----------
-	scene = await _open_level(&"l01")
-	player = scene.get_player()
-	buildings = scene.get("_buildings")
-	enterable = buildings.filter(func(b): return bool(b.get("enterable", false)))
-	if not enterable.is_empty():
-		var b1: Dictionary = enterable[0]
+	var b1: Dictionary = {}
+	for _attempt in 3:
+		scene = await _open_level(&"l01")
+		b1 = _pick_clear_doorway(scene, scene.get("_buildings"))
+		if not b1.is_empty():
+			break
+		await _close_level(scene)
+		scene = null
+	player = scene.get_player() if scene != null else null
+	_check(not b1.is_empty(), "door residency B: enterable building with clear doorway")
+	if not b1.is_empty():
 		var door_x1 := float(b1["door_x"])
 		var ground_y1 := float(b1["ground_y"])
 		var room1: Dictionary = b1.get("interior", {})
@@ -1094,3 +1125,623 @@ func _test_extraction() -> void:
 		"extraction result carries level id")
 	await _close_level(scene)
 	print("[INTEGRATION] extraction ok")
+
+
+## wp11-tests-ci：wp7-boss-rework 断言整合（原 tests/wp7_boss_audit.gd 独立套件
+## 并入本套件，_check 语义与套件计数统一）。覆盖：
+## 静态配置（11 关 LEVEL_CFG：HP>=2400 且逐关递增且 >=15x 普通 39HP、每关 2-3 个
+## 招式且前摇>0 带安全位提示、全部有 <=50% 阶段、每关 .tres 至少 1 个 boss 事件
+## 且 kind 接到薄壳脚本）+ 5 个动态 boss 战（l01 近战：前摇 telegraph 可见/前摇
+## 期零伤害/结算掉血/50% 阶段切换+新招/死亡掉落；l07 远程：迫击齐射命中+风筝
+## 距离；l05 冲撞命中+装甲 85% 减伤；l09 正面免伤/狂暴解除+普通 charger 不被
+## boss 化；l11 多阶段+干扰开/关+掉落）。
+var _boss_notifies: Array[String] = []
+var _boss_interference: Array[bool] = []
+
+
+func _on_boss_notify(t: String) -> void:
+	_boss_notifies.append(t)
+
+
+func _on_boss_interference(active: bool) -> void:
+	_boss_interference.append(active)
+
+
+func _pframes(count: int) -> void:
+	for _i in count:
+		await get_tree().physics_frame
+
+
+func _boss_mind_holder() -> Node:
+	for z in get_tree().get_nodes_in_group("zombies"):
+		if z != null and is_instance_valid(z) and z.get("_mind") != null:
+			return z
+	return null
+
+
+func _engine_fx(scene: Node) -> Array:
+	var out: Array = []
+	for c in scene.fx_layer.get_children():
+		if is_instance_valid(c) and (c is BossEngine.TelegraphRing \
+				or c is BossEngine.TelegraphLine or c is BossEngine.BossLob):
+			out.append(c)
+	return out
+
+
+func _test_boss_rework() -> void:
+	EventBus.notify.connect(_on_boss_notify)
+	EventBus.signal_interference.connect(_on_boss_interference)
+	_boss_static_cfg_checks()
+	await _boss_l01_melee()
+	await _boss_l07_ranged()
+	await _boss_l05_charge_armor()
+	await _boss_l09_ironface_charger()
+	await _boss_l11_multiphase()
+	EventBus.notify.disconnect(_on_boss_notify)
+	EventBus.signal_interference.disconnect(_on_boss_interference)
+	print("[INTEGRATION] boss rework ok")
+
+
+func _boss_static_cfg_checks() -> void:
+	print("== boss rework: static LEVEL_CFG")
+	var cfg_all: Dictionary = BossEngine.LEVEL_CFG
+	_check(cfg_all.size() == 11, "boss cfg: LEVEL_CFG covers 11 levels (got %d)" % cfg_all.size())
+	var prev_hp := 0
+	for i in range(1, 12):
+		var key := "l%02d" % i
+		_check(cfg_all.has(key), "boss cfg: %s exists" % key)
+		if not cfg_all.has(key):
+			continue
+		var cfg: Dictionary = cfg_all[key]
+		var hp := int(cfg.get("hp", 0))
+		_check(hp >= 2400, "boss cfg: %s hp=%d >= 2400" % [key, hp])
+		_check(float(hp) / 39.0 >= 15.0, "boss cfg: %s hp mult %.1fx >= 15x common(39)" % [key, float(hp) / 39.0])
+		_check(hp > prev_hp, "boss cfg: %s hp %d > previous %d (per-level increase)" % [key, hp, prev_hp])
+		prev_hp = hp
+		var moves: Array = cfg.get("moves", [])
+		_check(moves.size() >= 2 and moves.size() <= 3,
+			"boss cfg: %s has 2-3 signature moves (got %d)" % [key, moves.size()])
+		var has_phase := false
+		for ph in cfg.get("phases", []):
+			if float(ph.get("below", 1.0)) <= 0.5:
+				has_phase = true
+		_check(has_phase, "boss cfg: %s has <=50%% phase" % key)
+		for m in moves:
+			_check(float(m.get("windup", 0.0)) > 0.0, "boss cfg: %s/%s windup>0" % [key, m.get("id")])
+			_check(String(m.get("hint", "")).length() > 0, "boss cfg: %s/%s has safe-spot hint" % [key, m.get("id")])
+	# 每关 boss 事件 kind 接到薄壳脚本
+	var scene_map := {
+		"ironface": "res://scripts/zombies/boss_ironface.gd",
+		"nest_mother": "res://scripts/zombies/boss_nest_mother.gd",
+		"signal_core": "res://scripts/zombies/boss_signal_core.gd",
+		"tank": "res://scripts/zombies/zombie_tank.gd",
+		"armored_car": "res://scripts/zombies/boss_armored_car.gd",
+		"charger": "res://scripts/zombies/zombie_charger.gd",
+	}
+	for i in range(1, 12):
+		var txt := String(FileAccess.get_file_as_string("res://resources/data/levels/l%02d.tres" % i))
+		var boss_count := 0
+		var km_all := RegEx.create_from_string("\\{\"at\": [\\d.]+, \"type\": \"boss\", \"kind\": \"(\\w+)\"")
+		for km in km_all.search_all(txt):
+			boss_count += 1
+			var kind := km.get_string(1)
+			_check(scene_map.has(kind), "boss cfg: l%02d boss kind '%s' wired to thin-shell" % [i, kind])
+		_check(boss_count >= 1, "boss cfg: l%02d has >=1 boss event (got %d)" % [i, boss_count])
+
+
+func _boss_l01_melee() -> void:
+	print("== boss rework: l01 锈钩屠夫 (melee)")
+	var scene := await _open_level(&"l01")
+	scene.spawn_boss(&"ironface")
+	await _pframes(3)
+	var boss := _boss_mind_holder()
+	_check(boss != null, "boss l01: spawned and has BossMind")
+	if boss == null:
+		await _close_level(scene)
+		return
+	var mind = boss.get("_mind")
+	_check(String(boss.data.display_name) == "锈钩屠夫", "boss l01: display_name override")
+	_check(int(boss.max_health) == 2400, "boss l01: max_hp=2400 (got %d)" % int(boss.max_health))
+	_check(String(boss.data.sprite_prefix) == "riot", "boss l01: sprite_prefix=riot (visual rework)")
+	_check(boss.data.is_boss, "boss l01: data.is_boss (HUD bar + stagger immunity)")
+	var px: float = float(boss.global_position.x) - 80.0
+	var gy: float = float(scene.call("get_ground_y", px))
+	scene.get_player().global_position = Vector2(px, gy - 2.0)
+	await _pframes(2)
+	var slam: Dictionary = {}
+	for m in mind.moves:
+		if String(m.get("id")) == "cleave":
+			slam = m
+	_check(not slam.is_empty(), "boss l01: cleave move present")
+	mind.moves = [slam]
+	mind.notified = {}
+	slam["cd"] = 0.0
+	_boss_notifies.clear()
+	var entered_windup := false
+	for i in 420:
+		await get_tree().physics_frame
+		if String(mind.state) == "windup":
+			entered_windup = true
+			break
+	_check(entered_windup, "boss l01: enters windup")
+	if not entered_windup:
+		await _close_level(scene)
+		return
+	var player_hp0 := int(scene.get_player().get("hp"))
+	var ring_seen := false
+	var windup_leak := false
+	# 只观察前 12 帧（< windup 0.5s=30 物理帧），此窗口内绝不会有 cast 结算
+	for i in 12:
+		await get_tree().physics_frame
+		if int(scene.get_player().get("hp")) < player_hp0:
+			windup_leak = true
+		if _engine_fx(scene).size() > 0:
+			ring_seen = true
+	_check(ring_seen, "boss l01: telegraph visible during windup")
+	_check(not windup_leak, "boss l01: no damage settles during windup (safe window)")
+	var settled := false
+	for i in 120:
+		await get_tree().physics_frame
+		if int(scene.get_player().get("hp")) < player_hp0:
+			settled = true
+			break
+	_check(settled, "boss l01: slam settles damage after windup (hp %d -> %d)"
+		% [player_hp0, int(scene.get_player().get("hp"))])
+	# 阶段切换 50%
+	var hp1: int = int(boss.health)
+	boss.apply_damage(int(ceil(hp1 * 0.55)), Vector2.RIGHT, false, &"player", &"bullet")
+	await _pframes(3)
+	_check(int(mind.phase) == 1, "boss l01: phase switches at <=50%% (phase=%d)" % int(mind.phase))
+	var phase_note_ok := false
+	for t in _boss_notifies:
+		if t.contains("狂怒"):
+			phase_note_ok = true
+	_check(phase_note_ok, "boss l01: phase notify fired")
+	_check(mind.moves.size() == 2, "boss l01: phase adds quake_stomp (moves=%d)" % mind.moves.size())
+	# 死亡掉落
+	var pickups_before: int = scene.get("pickups").get_child_count()
+	_boss_notifies.clear()
+	boss.apply_damage(99999, Vector2.RIGHT, false, &"player", &"bullet")
+	await _pframes(5)
+	var loot_note := false
+	for t in _boss_notifies:
+		if t.contains("掉落了战利品"):
+			loot_note = true
+	var pickups_after: int = scene.get("pickups").get_child_count()
+	_check(pickups_after >= pickups_before + 5,
+		"boss l01: death drops loot (pickups %d -> %d)" % [pickups_before, pickups_after])
+	_check(loot_note, "boss l01: loot notify fired")
+	await _close_level(scene)
+	await _pframes(2)
+
+
+func _boss_l07_ranged() -> void:
+	print("== boss rework: l07 泵站迫击兽 (ranged)")
+	var scene := await _open_level(&"l07")
+	scene.spawn_boss(&"charger")
+	await _pframes(3)
+	var boss := _boss_mind_holder()
+	_check(boss != null, "boss l07: charger spawns as boss via LEVEL_CFG")
+	if boss == null:
+		await _close_level(scene)
+		return
+	var mind = boss.get("_mind")
+	_check(String(boss.data.display_name) == "泵站迫击兽", "boss l07: display_name override")
+	# LEVEL_CFG 覆写的是 max_health（boss_engine.gd setup）；health 会在出生后
+	# 被场上无关单位（人类敌人开火等）扣减——audit 独立跑时干净为 3240，
+	# 全套件下用 max_health 断言覆写生效，对环境伤害鲁棒。
+	_check(int(boss.max_health) == 3240, "boss l07: max_hp=3240 (got %d)" % int(boss.max_health))
+	_check(String(boss.data.sprite_prefix) == "spitter", "boss l07: sprite_prefix=spitter")
+	_check(String(mind.cfg.get("role", "")) == "kite", "boss l07: role=kite (ranged pressure)")
+	var px: float = float(boss.global_position.x) - 420.0
+	var gy: float = float(scene.call("get_ground_y", px))
+	scene.get_player().global_position = Vector2(px, gy - 2.0)
+	await _pframes(2)
+	var volley: Dictionary = {}
+	for m in mind.moves:
+		if String(m.get("id")) == "mortar_volley":
+			volley = m
+	mind.moves = [volley]
+	mind.notified = {}
+	volley["cd"] = 0.0
+	var entered := false
+	for i in 420:
+		await get_tree().physics_frame
+		if String(mind.state) == "windup":
+			entered = true
+			break
+	_check(entered, "boss l07: enters volley windup")
+	if not entered:
+		await _close_level(scene)
+		return
+	var player_hp0 := int(scene.get_player().get("hp"))
+	var settled := false
+	for i in 300:
+		await get_tree().physics_frame
+		if int(scene.get_player().get("hp")) < player_hp0:
+			settled = true
+			break
+	_check(settled, "boss l07: volley impacts player after windup (hp %d -> %d)"
+		% [player_hp0, int(scene.get_player().get("hp"))])
+	var dx: float = absf(float(boss.global_position.x) - float(scene.get_player().global_position.x))
+	_check(dx > 180.0, "boss l07: boss keeps ranged distance (dx=%.0f)" % dx)
+	await _close_level(scene)
+	await _pframes(2)
+
+
+func _boss_l05_charge_armor() -> void:
+	print("== boss rework: l05 铁蹄 (charge hit + armor)")
+	var scene := await _open_level(&"l05")
+	scene.spawn_boss(&"armored_car")
+	await _pframes(3)
+	var boss := _boss_mind_holder()
+	_check(boss != null, "boss l05: armored_car spawns as boss")
+	if boss == null:
+		await _close_level(scene)
+		return
+	var mind = boss.get("_mind")
+	_check(String(boss.data.display_name) == "铁蹄", "boss l05: display_name override")
+	_check(int(boss.max_health) == 3120, "boss l05: max_hp=3120 (got %d)" % int(boss.max_health))
+	# 装甲减伤：非弱点期正面伤害 85% 减伤（100 -> 15）
+	var hp0: int = int(boss.health)
+	boss.apply_damage(100, Vector2(float(boss.facing), 0.0), false, &"player", &"bullet")
+	await _pframes(2)
+	var dmg_taken := hp0 - int(boss.health)
+	_check(dmg_taken >= 1 and dmg_taken <= 40,
+		"boss l05: armor reduces 100 -> %d (front_reduce=0.85)" % dmg_taken)
+	# 冲撞命中：玩家放冲撞直线上，锁定 ram
+	var px: float = float(boss.global_position.x) - 260.0
+	var gy: float = float(scene.call("get_ground_y", px))
+	scene.get_player().global_position = Vector2(px, gy - 2.0)
+	await _pframes(2)
+	var ram: Dictionary = {}
+	for m in mind.moves:
+		if String(m.get("id")) == "ram":
+			ram = m
+	mind.moves = [ram]
+	mind.notified = {}
+	ram["cd"] = 0.0
+	var entered := false
+	for i in 420:
+		await get_tree().physics_frame
+		if String(mind.state) == "windup":
+			entered = true
+			break
+	_check(entered, "boss l05: enters ram windup")
+	if not entered:
+		await _close_level(scene)
+		return
+	var player_hp0 := int(scene.get_player().get("hp"))
+	var hit := false
+	for i in 200:
+		await get_tree().physics_frame
+		if int(scene.get_player().get("hp")) < player_hp0:
+			hit = true
+			break
+	_check(hit, "boss l05: ram charge hits player after windup (hp %d -> %d)"
+		% [player_hp0, int(scene.get_player().get("hp"))])
+	await _close_level(scene)
+	await _pframes(2)
+
+
+func _boss_l09_ironface_charger() -> void:
+	print("== boss rework: l09 铁面 (front immunity) + 普通 charger 回归")
+	var scene := await _open_level(&"l09")
+	scene.spawn_boss(&"ironface")
+	await _pframes(3)
+	var boss := _boss_mind_holder()
+	_check(boss != null, "boss l09: ironface spawns as boss")
+	if boss == null:
+		await _close_level(scene)
+		return
+	var mind = boss.get("_mind")
+	_check(String(boss.data.display_name) == "铁面", "boss l09: display_name override")
+	_check(int(boss.max_health) == 3420, "boss l09: max_hp=3420 (got %d)" % int(boss.max_health))
+	_check(String(boss.data.sprite_prefix) == "riot", "boss l09: sprite_prefix=riot")
+	# 正面免伤：伤害方向与朝向同向（正面打来）→ 格挡
+	var hp0: int = int(boss.health)
+	boss.apply_damage(100, Vector2(float(boss.facing), 0.0), false, &"player", &"bullet")
+	await _pframes(2)
+	_check(int(boss.health) == hp0, "boss l09: front shot blocked (hp %d -> %d)" % [hp0, int(boss.health)])
+	# 绕背：方向相反 → 生效
+	boss.apply_damage(100, Vector2(-float(boss.facing), 0.0), false, &"player", &"bullet")
+	await _pframes(2)
+	_check(int(boss.health) < hp0, "boss l09: back shot damages (hp %d -> %d)" % [hp0, int(boss.health)])
+	# 50% 丢盾狂暴：绕背方向打大伤害（正面会被免伤格挡，无法降血）
+	boss.apply_damage(int(3420 * 0.6), Vector2(-float(boss.facing), 0.0), false, &"player", &"bullet")
+	await _pframes(3)
+	_check(int(mind.phase) == 1, "boss l09: phase at <=50%% (phase=%d)" % int(mind.phase))
+	var hp1: int = int(boss.health)
+	boss.apply_damage(100, Vector2(float(boss.facing), 0.0), false, &"player", &"bullet")
+	await _pframes(2)
+	_check(int(boss.health) < hp1, "boss l09: front immunity OFF after enrage (hp %d -> %d)" % [hp1, int(boss.health)])
+	# 普通 charger（l09 special_weights 有 charger）保持普通特感 AI
+	scene.spawn_special(&"charger")
+	await _pframes(3)
+	var plain: Node = null
+	for z in get_tree().get_nodes_in_group("zombies"):
+		if z != null and is_instance_valid(z) and not bool(z.get("dead")) \
+				and String(z.data.id) == "charger" and z.get("_mind") == null:
+			plain = z
+	_check(plain != null, "boss l09: special charger stays plain AI (no BossMind)")
+	_check(plain != null and plain.data.is_special, "boss l09: special charger keeps data.is_special")
+	await _close_level(scene)
+	await _pframes(2)
+
+
+func _boss_l11_multiphase() -> void:
+	print("== boss rework: l11 信号核心·终焉体 (multi-phase)")
+	var scene := await _open_level(&"l11")
+	scene.spawn_boss(&"signal_core")
+	await _pframes(3)
+	var boss := _boss_mind_holder()
+	_check(boss != null, "boss l11: signal_core spawns as boss")
+	if boss == null:
+		await _close_level(scene)
+		return
+	var mind = boss.get("_mind")
+	_check(String(boss.data.display_name) == "信号核心·终焉体", "boss l11: display_name override")
+	_check(int(boss.max_health) == 4200, "boss l11: max_hp=4200 (got %d)" % int(boss.max_health))
+	var inter_on := false
+	for b in _boss_interference:
+		if b:
+			inter_on = true
+	_check(inter_on, "boss l11: signal interference ON during fight")
+	_boss_notifies.clear()
+	boss.apply_damage(int(4200 * 0.4), Vector2.RIGHT, false, &"player", &"bullet")
+	await _pframes(3)
+	_check(int(mind.phase) == 1, "boss l11: phase 2 at <=66%% (phase=%d)" % int(mind.phase))
+	_check(mind.moves.size() == 4, "boss l11: phase2 adds volley+drain (moves=%d)" % mind.moves.size())
+	var p2_note := false
+	for t in _boss_notifies:
+		if t.contains("第二形态"):
+			p2_note = true
+	_check(p2_note, "boss l11: phase2 notify fired")
+	_boss_notifies.clear()
+	boss.apply_damage(int(4200 * 0.32), Vector2.RIGHT, false, &"player", &"bullet")
+	await _pframes(3)
+	_check(int(mind.phase) == 2, "boss l11: phase 3 at <=33%% (phase=%d)" % int(mind.phase))
+	_check(mind.moves.size() == 5, "boss l11: phase3 adds death_scream (moves=%d)" % mind.moves.size())
+	var p3_note := false
+	for t in _boss_notifies:
+		if t.contains("终焉形态"):
+			p3_note = true
+	_check(p3_note, "boss l11: phase3 notify fired")
+	_boss_notifies.clear()
+	boss.apply_damage(99999, Vector2.RIGHT, false, &"player", &"bullet")
+	await _pframes(5)
+	var off_seen := false
+	for b in _boss_interference:
+		if not b:
+			off_seen = true
+	_check(off_seen, "boss l11: interference OFF after boss death")
+	var loot_note := false
+	for t in _boss_notifies:
+		if t.contains("掉落了战利品"):
+			loot_note = true
+	_check(loot_note, "boss l11: loot notify fired")
+	await _close_level(scene)
+	await _pframes(2)
+
+
+## wp11-tests-ci：wp5-zombie-pacing-buff 节奏断言整合（原 Temp 5 分钟真速率模拟
+## 的 CI 化，单元级断言 + 75 游戏秒统计窗）。
+## ① 单元级（直接驱动 DirectorSystem._tick，确定性）：
+##    intensity 重建 0.05/s；intensity>=0.85 潮概率 1.0 必发 30 只且潮后 rest=3s；
+##    horde_ended → rest=3s/intensity-0.10/涓流接力 cd=0.5s；
+##    min_alive 涓流：场上 < min_alive+intensity*6 时投 3-10 只、不弹「尸潮来袭」
+##    横幅（horde_started 不发）、intensity 顶到 >=0.45、cd 重排 4-6s；
+##    主动休止：cd 到期挂起 → 场上 <=2 只时启动 10-18s（期间涓流/大潮/特感全
+##    冻结）→ 结束涓流接力 <=1s + cd 重排 60-90s；挂起超 45s 放弃；
+##    特感计时移出「潮进行中」gate（horde_active=true 仍倒计时发射）。
+## ② 75 游戏秒统计窗（time_scale=3 加速，玩家站桩锁 hp、不开火不清怪）：
+##    场上普通僵尸最长连续空窗 <=25s（设计上限）、有怪时间占比 >=55%
+##    （设计目标 75-85%，保守阈值）。
+func _test_pacing_stats() -> void:
+	print("== pacing: unit-level director behavior")
+	var scene := await _open_level(&"l01")
+	var player: Node2D = scene.get_player()
+	_check(player != null, "pacing: player exists")
+	# 全程锁玩家血量：单元级大潮（30 只）与统计窗围殴都不得打死玩家——
+	# 玩家死亡会令 GameManager.state 离开 PLAYING，涓流的 state gate
+	# （director_system.gd _tick_trickle）将全程封死投放。
+	if player != null:
+		player.set("hp", 9999.0)
+	await _kill_all_zombies()
+	# 单元级段落禁用导演自动 tick：_process 的 _tick_accum 会在 _kill_all_zombies
+	# 等真实等待间隙插入自动 _tick，打乱下方手动驱动的状态序列（实测涓流 cd 被
+	# 自动 tick 重排成 4.1s）；统计窗开始前恢复，由真实 _process 驱动。
+	DirectorSystem.set_process(false)
+	# 重启导演到真实关卡起点状态（begin_level 内 reset 全部节奏状态）
+	DirectorSystem.begin_level(GameManager.get_level(&"l01"), &"NORMAL")
+	_check(int(DirectorSystem._min_alive) == 10, "pacing: NORMAL min_alive=10")
+	_check(is_equal_approx(float(DirectorSystem._rest_timer), 3.0)
+		and is_equal_approx(float(DirectorSystem._trickle_cd), 5.0),
+		"pacing: level start rest=3s trickle_cd=5s")
+
+	var horde_reqs: Array = []
+	var special_reqs: Array = []
+	var horde_started_count := [0]
+	var notes: Array[String] = []
+	var on_horde := func(count: int) -> void: horde_reqs.append(count)
+	var on_special := func(kind: StringName) -> void: special_reqs.append(kind)
+	var on_started := func(_count: int) -> void: horde_started_count[0] += 1
+	var on_notify := func(t: String) -> void: notes.append(t)
+	EventBus.director_request_horde.connect(on_horde)
+	EventBus.director_request_special.connect(on_special)
+	EventBus.horde_started.connect(on_started)
+	EventBus.notify.connect(on_notify)
+
+	# intensity 重建 0.05/s
+	DirectorSystem._rest_timer = 0.0
+	DirectorSystem.intensity = 0.20
+	DirectorSystem._tick()
+	_check(is_equal_approx(float(DirectorSystem.intensity), 0.25),
+		"pacing: intensity rebuilds 0.05/s (0.20 -> %.2f)" % float(DirectorSystem.intensity))
+
+	# 高强度潮必发（chance=1.0 档），count=30，潮后 rest=3s
+	DirectorSystem._downtime_left = 0.0
+	DirectorSystem._downtime_pending = false
+	DirectorSystem.horde_active = false
+	DirectorSystem.intensity = 0.9
+	DirectorSystem._tick()
+	_check(horde_reqs.size() == 1 and int(horde_reqs[0]) == 30,
+		"pacing: intensity>=0.85 always horde of 30 (got %s)" % str(horde_reqs))
+	_check(is_equal_approx(float(DirectorSystem._rest_timer), 3.0),
+		"pacing: big horde forces rest=3s")
+	await _kill_all_zombies()
+
+	# 潮结束：rest=3s、intensity-0.10、涓流接力 cd=0.5s
+	var pre_i := float(DirectorSystem.intensity)
+	EventBus.horde_ended.emit()
+	_check(is_equal_approx(float(DirectorSystem._rest_timer), 3.0)
+		and is_equal_approx(float(DirectorSystem._trickle_cd), 0.5)
+		and is_equal_approx(float(DirectorSystem.intensity), pre_i - 0.10),
+		"pacing: horde_ended -> rest=3s trickle=0.5s intensity-0.10")
+
+	# min_alive 涓流（intensity 0.29+0.05=0.34 <0.35 不掷潮；target=10+2=12>0）
+	DirectorSystem.horde_active = false
+	DirectorSystem.intensity = 0.29
+	DirectorSystem._rest_timer = 0.0
+	DirectorSystem._downtime_left = 0.0
+	DirectorSystem._downtime_pending = false
+	DirectorSystem._trickle_cd = 0.0
+	horde_started_count[0] = 0
+	DirectorSystem._tick()
+	await _wait(0.2)
+	var commons := int(DirectorSystem._count_common_zombies())
+	_check(commons >= 3 and commons <= 10, "pacing: trickle drops 3-10 commons (got %d)" % commons)
+	_check(float(DirectorSystem.intensity) >= 0.45,
+		"pacing: trickle floors intensity at 0.45 (%.2f)" % float(DirectorSystem.intensity))
+	var tcd := float(DirectorSystem._trickle_cd)
+	_check(tcd >= 4.0 and tcd <= 6.0, "pacing: trickle cd re-armed 4-6s (%.1f)" % tcd)
+	_check(horde_started_count[0] == 0, "pacing: trickle never fires horde_started banner")
+
+	# 主动休止：cd 到期挂起（场上 >2 只）→ 清场后启动 10-18s + notify
+	DirectorSystem._downtime_cd = 0.0
+	DirectorSystem._downtime_left = 0.0
+	notes.clear()
+	DirectorSystem._tick()
+	_check(bool(DirectorSystem._downtime_pending),
+		"pacing: downtime requested when cd expires (commons above trigger)")
+	await _kill_all_zombies()
+	DirectorSystem._tick()
+	var dleft := float(DirectorSystem._downtime_left)
+	_check(dleft >= 10.0 and dleft <= 18.0,
+		"pacing: downtime starts 10-18s when field is clear (got %.1f)" % dleft)
+	var quiet_note := false
+	for t in notes:
+		if t.contains("四周暂时安静下来"):
+			quiet_note = true
+	_check(quiet_note, "pacing: downtime notify fired")
+
+	# 休止期：涓流/大潮/特感全冻结
+	DirectorSystem._trickle_cd = 99.0
+	DirectorSystem._special_timer = 1.0
+	DirectorSystem.intensity = 0.5
+	horde_reqs.clear()
+	special_reqs.clear()
+	DirectorSystem._tick()
+	_check(is_equal_approx(float(DirectorSystem._trickle_cd), 99.0)
+		and special_reqs.is_empty() and horde_reqs.is_empty(),
+		"pacing: downtime freezes trickle/specials/hordes")
+
+	# 休止结束：涓流立刻接管 + 休止周期重排 60-90s。游戏真实行为：_tick_downtime
+	# 先把涓流 cd 压到 <=1，同一 tick 末尾常规涓流路径（commons=0 < target）立即
+	# 投怪并把 cd 重排为 [4,6]——「接管」的证据是 cd 回到涓流带而非保持 99。
+	DirectorSystem._downtime_left = 1.0
+	DirectorSystem._tick()
+	_check(float(DirectorSystem._downtime_left) == 0.0
+		and float(DirectorSystem._trickle_cd) <= 6.0
+		and float(DirectorSystem._downtime_cd) >= 60.0,
+		"pacing: downtime end rearms cd 60-90s and trickle takes over (tc=%.1f)"
+			% float(DirectorSystem._trickle_cd))
+
+	# 挂起超 45s 放弃
+	DirectorSystem._downtime_pending = true
+	DirectorSystem._downtime_pending_for = 45.0
+	DirectorSystem._tick()
+	_check(not bool(DirectorSystem._downtime_pending)
+		and float(DirectorSystem._downtime_cd) >= 60.0,
+		"pacing: pending downtime abandoned after 45s")
+
+	# 特感计时移出「潮进行中」gate
+	DirectorSystem.horde_active = true
+	DirectorSystem._downtime_left = 0.0
+	DirectorSystem._downtime_pending = false
+	DirectorSystem.intensity = 0.5
+	DirectorSystem._special_timer = 0.5
+	special_reqs.clear()
+	DirectorSystem._tick()
+	_check(not special_reqs.is_empty() and float(DirectorSystem._special_timer) >= 6.0,
+		"pacing: specials timer runs during horde_active (gate removed)")
+
+	EventBus.director_request_horde.disconnect(on_horde)
+	EventBus.director_request_special.disconnect(on_special)
+	EventBus.horde_started.disconnect(on_started)
+	EventBus.notify.disconnect(on_notify)
+	await _kill_all_zombies()
+
+	# ② 75 游戏秒统计窗（真实 LevelRunner + DirectorSystem 联动）
+	print("== pacing: 75 game-second statistics")
+	DirectorSystem.set_process(true)   # 恢复真实 _process 驱动（单元级段落已禁）
+	scene.set("_horde_alive", [])
+	scene.set("_horde_active", false)
+	DirectorSystem.horde_active = false
+	DirectorSystem.begin_level(GameManager.get_level(&"l01"), &"NORMAL")
+	Engine.time_scale = 3.0
+	var sample_dt := 0.5
+	var total_time := 0.0
+	var max_dry := 0.0
+	var dry_run := 0.0
+	var alive_time := 0.0
+	var last_commons := -1
+	for _i in 150:
+		if player != null and is_instance_valid(player):
+			player.set("hp", 9999.0)  # 统计窗内锁玩家存活（被围殴不影响投放 gate）
+		await _wait_game(sample_dt)
+		total_time += sample_dt
+		last_commons = int(DirectorSystem._count_common_zombies())
+		if last_commons == 0:
+			dry_run += sample_dt
+			max_dry = maxf(max_dry, dry_run)
+		else:
+			dry_run = 0.0
+			alive_time += sample_dt
+	Engine.time_scale = 1.0
+	var alive_ratio := alive_time / total_time
+	print("[INTEGRATION] pacing stats: max_dry=%.1fs alive_ratio=%.1f%% last_commons=%d"
+		% [max_dry, alive_ratio * 100.0, last_commons])
+	_check(max_dry <= 25.0, "pacing stats: longest dry window <= 25s (got %.1fs)" % max_dry)
+	_check(alive_ratio >= 0.55, "pacing stats: zombies-on-field ratio >= 55%% (got %.1f%%)"
+		% [alive_ratio * 100.0])
+	await _close_level(scene)
+	print("[INTEGRATION] pacing ok")
+
+
+## wp11-tests-ci：测试辅助——用正常伤害链清场（走 die 信号，LevelRunner 的
+## _horde_alive 计数与 horde_ended 通路保持一致；queue_free 会绕过计数）。
+func _kill_all_zombies() -> void:
+	for z in get_tree().get_nodes_in_group("zombies"):
+		if z != null and is_instance_valid(z) and not bool(z.get("dead")):
+			z.call("apply_damage", 99999, Vector2.ZERO, false, &"player", &"bullet")
+	await _wait(0.35)
+
+
+## wp11-tests-ci：走位类用例的建筑选择加固。关卡布局按 run_seed 每局随机
+## （game_manager.gd:172 run_seed=unix_time^randi），门口 ±40px 可能随机出
+## 地形坑（get_ground_y<0）/障碍卡死真实输入走位——实测 CI 首跑 interior
+## full flow + door residency A 共 9 项失败、单独重跑即过的根因。返回第一个
+## 门口 x±40px 采样点地面全部完好的 enterable 建筑；没有返回空字典
+## （调用方 _close_level 后重开一关再挑，最多 3 次）。
+func _pick_clear_doorway(scene: Node, buildings: Array) -> Dictionary:
+	for b in buildings.filter(func(x): return bool(x.get("enterable", false))):
+		var dx := float(b["door_x"])
+		var clear := true
+		for off in [-40.0, -24.0, -12.0, 0.0, 12.0, 24.0, 40.0]:
+			if float(scene.call("get_ground_y", dx + off)) < 0.0:
+				clear = false
+				break
+		if clear:
+			return b
+	return {}
