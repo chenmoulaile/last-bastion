@@ -188,7 +188,11 @@ func _build_background() -> void:
 	var bg := ParallaxBackground.new()
 	bg.name = "Background"
 	add_child(bg)
-	_add_parallax(bg, "bg_%s_sky" % theme, 0.03, 640.0, false)
+	# v3.4.6：sky 层必须 mirror 平铺——单张 640 宽 + motion_scale 0.03 时，
+	# 相机右移 x 后屏幕右侧留下宽 x*0.03 的无天空黑带（l10@50% cam=8000 → 240px，
+	# wp6 关卡延长后暗关亮度断言 near_black 0.247→0.343 越线暴露）。
+	# 实测 5 张 bg_*_sky 纹理左右边缘均值差 ≤1/255，平铺无缝。
+	_add_parallax(bg, "bg_%s_sky" % theme, 0.03, 640.0, true)
 	_add_parallax(bg, "bg_%s_far" % theme, 0.14, 960.0, true)
 	_add_parallax(bg, "bg_%s_mid" % theme, 0.34, 960.0, true)
 	if dark:

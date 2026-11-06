@@ -129,3 +129,10 @@
 - [2026-11-05] [发布] 版本递增只改实际存在字段：`project.godot:9` `config/version`、Windows preset `file_version/product_version`、macOS preset `short_version/version`，共 5 行。 | Linux/Web preset 无独立版本号字段，导出时随 `config/version` 走；不为凑数新造字段。
 - [2026-11-05] [发布] v3.4.4 从未发过 GitHub Release，CHANGELOG 条目原样保留（仅把标题里已过时的「本轮」改为「v3.4.5 前一轮」），不并入 v3.4.5。 | 版本史逐条可追溯，发行说明可直接引用旧条目。
 - [2026-11-05] [发布] 本轮不做任何 gameplay 代码改动：发布准备包只动版本号与两份文档；不 push、不打 tag、不发 Release、不自行导出 EXE/ZIP，导出由流程统一执行。 | 沿用 v3.4.4 收尾轮约定，对外动作等用户确认。
+
+## v3.4.6 发布准备（2026-11-07）
+- [2026-11-07] [发布] 版本递增沿用 v3.4.5 约定，只改实际存在字段：`project.godot:9` `config/version`、Windows preset `file_version/product_version`、macOS preset `short_version/version`，共 5 行；Linux/Web preset 无独立版本号字段，导出时随 `config/version` 走。 | 不为凑数新造字段。
+- [2026-11-07] [发布] CHANGELOG v3.4.6 条目按 v3.4.5 之后实际落库的 wp1–wp12 施工提交归纳；wp12 实操未达成撤离/结算（Boss 卡 91%）如实写入，不美化。 | 版本史与 git log 一一对应，发行说明可直接引用。
+- [2026-11-07] [发布] 沿用 v3.4.5 惯例，仅把 v3.4.5 条目标题里已过时的「本轮」改为「v3.4.6 前一轮」，条目正文不动。 | 与 v3.4.4 标题的同类处理保持一致。
+- [2026-11-07] [发布] `building_builder.gd:244` 注释中的「v3.4.5 契约」指该返回结构契约建立于 v3.4.5 时代，不随本次版本递增改写。 | 注释锚定的是代码演化时点而非发行版本号，全仓 grep 仅此一处代码侧 3.4.5 残留，属预期保留。
+- [2026-11-07] [发布] 本轮发布准备包本身只动版本号与两份文档；随后全量验收门第 1/3 轮暴露 l10@50% 暗关亮度断言越线（near_black 0.343>0.30），定位为 `level_runner.gd:191` sky 视差层单张不平铺的真实渲染缺陷（相机右移后屏幕右侧留下宽 cam*0.03 的无天空黑带，wp6 关卡延长 42-46% 使黑带变宽 40%+ 越线），按用户指示修复该 1 行（mirror 平铺）。 | 断言守护的正是「画面不可读」类缺陷，修游戏侧而非放宽 v3.4.2 阈值；不 push、不打 tag、不发 Release、不自行导出 EXE/ZIP、不 commit，重跑与落库由流程统一执行。
