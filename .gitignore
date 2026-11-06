@@ -23,6 +23,10 @@ desktop.ini
 *.tmp
 *.log
 
+# Python bytecode from sprite tooling (tools/assert_no_stray_dots.py imports
+# tools/clean_weapon_sprites.py for its shared stray-dot primitives)
+tools/__pycache__/
+
 # Defensive (this project is GDScript-only)
 .mono/
 data_*/

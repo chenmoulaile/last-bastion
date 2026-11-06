@@ -1,10 +1,14 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/player/player.gd" id="1_player"]
 [ext_resource type="Script" path="res://scripts/utils/camera_shake.gd" id="2_camera"]
+[ext_resource type="Shader" path="res://shaders/player_outline.gdshader" id="3_outline"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_body"]
 size = Vector2(12, 28)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_outline"]
+shader = ExtResource("3_outline")
 
 [node name="Player" type="CharacterBody2D"]
 collision_layer = 2
@@ -13,6 +17,7 @@ floor_snap_length = 8.0
 script = ExtResource("1_player")
 
 [node name="Sprite" type="AnimatedSprite2D" parent="."]
+material = SubResource("ShaderMaterial_outline")
 position = Vector2(0, -24)
 z_index = 5
 

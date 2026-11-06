@@ -13,6 +13,7 @@ REM   3. integration  headless res://tests/integration.tscn
 REM      (contains wp8 crash-chain regression + interior full-flow tests)
 REM   4. py -3.14 tools\assert_no_baked_weapons.py  (character frames must not bake weapons)
 REM   5. py -3.14 tools\assert_weapon_clean.py      (weapon sprite stray-dot assertion)
+REM   6. py -3.14 tools\assert_no_stray_dots.py     (wp10: characters+weapons full stray-dot assertion)
 REM
 REM Every step's stdout/stderr is kept in build\ci_logs\<step>.log.
 REM Godot steps are additionally scanned for "SCRIPT ERROR" - any hit fails the step.
@@ -30,7 +31,7 @@ set "LOGDIR=build\ci_logs"
 if not exist "%LOGDIR%" mkdir "%LOGDIR%"
 set /a FAILURES=0
 
-echo [CI] [1/5] smoke ...
+echo [CI] [1/6] smoke ...
 "%GODOT_EXE%" --headless --path . res://tests/smoke.tscn > "%LOGDIR%\1_smoke.log" 2>&1
 if errorlevel 1 (
     echo [CI] FAIL 1_smoke ^(log: %LOGDIR%\1_smoke.log^)
@@ -39,7 +40,7 @@ if errorlevel 1 (
     call :scan_log 1_smoke.log
 )
 
-echo [CI] [2/5] narrative ...
+echo [CI] [2/6] narrative ...
 "%GODOT_EXE%" --headless --path . res://tests/narrative.tscn > "%LOGDIR%\2_narrative.log" 2>&1
 if errorlevel 1 (
     echo [CI] FAIL 2_narrative ^(log: %LOGDIR%\2_narrative.log^)
@@ -48,7 +49,7 @@ if errorlevel 1 (
     call :scan_log 2_narrative.log
 )
 
-echo [CI] [3/5] integration ...
+echo [CI] [3/6] integration ...
 "%GODOT_EXE%" --headless --path . res://tests/integration.tscn > "%LOGDIR%\3_integration.log" 2>&1
 if errorlevel 1 (
     echo [CI] FAIL 3_integration ^(log: %LOGDIR%\3_integration.log^)
@@ -57,7 +58,7 @@ if errorlevel 1 (
     call :scan_log 3_integration.log
 )
 
-echo [CI] [4/5] assert_no_baked_weapons ...
+echo [CI] [4/6] assert_no_baked_weapons ...
 py -3.14 tools\assert_no_baked_weapons.py > "%LOGDIR%\4_no_baked_weapons.log" 2>&1
 if errorlevel 1 (
     echo [CI] FAIL 4_no_baked_weapons ^(log: %LOGDIR%\4_no_baked_weapons.log^)
@@ -66,13 +67,22 @@ if errorlevel 1 (
     echo [CI] PASS 4_no_baked_weapons
 )
 
-echo [CI] [5/5] assert_weapon_clean ...
+echo [CI] [5/6] assert_weapon_clean ...
 py -3.14 tools\assert_weapon_clean.py > "%LOGDIR%\5_weapon_clean.log" 2>&1
 if errorlevel 1 (
     echo [CI] FAIL 5_weapon_clean ^(log: %LOGDIR%\5_weapon_clean.log^)
     set /a FAILURES+=1
 ) else (
     echo [CI] PASS 5_weapon_clean
+)
+
+echo [CI] [6/6] assert_no_stray_dots ...
+py -3.14 tools\assert_no_stray_dots.py > "%LOGDIR%\6_no_stray_dots.log" 2>&1
+if errorlevel 1 (
+    echo [CI] FAIL 6_no_stray_dots ^(log: %LOGDIR%\6_no_stray_dots.log^)
+    set /a FAILURES+=1
+) else (
+    echo [CI] PASS 6_no_stray_dots
 )
 
 echo.
