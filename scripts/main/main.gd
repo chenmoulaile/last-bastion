@@ -36,6 +36,8 @@ func _boot() -> void:
 	_show_screen(&"menu")
 	if OS.get_environment("LB_AUTOCAP") != "":
 		_auto_capture()
+	if OS.get_environment("LB_WP12") != "":
+		_wp12_live_probe()
 
 
 ## Debug helper: LB_AUTOCAP=<seconds> launches, waits, saves a screenshot of the
@@ -50,6 +52,30 @@ func _auto_capture() -> void:
 	image.save_png(out + "/autocap.png")
 	print("[AUTOCAP] saved build/autocap.png")
 	get_tree().quit()
+
+
+## wp12-live-play debug helper (env-gated, no-op without LB_WP12):
+## LB_WP12=<interval seconds> saves the live viewport to build/wp12_live/
+## every <interval> wall seconds while the game runs normally, and echoes
+## received InputEventKey physical/keycode pairs to stdout for input-pipeline
+## diagnosis (this machine's GL windows are invisible to OS captures).
+func _wp12_live_probe() -> void:
+	var interval := maxf(1.0, float(OS.get_environment("LB_WP12")))
+	var out := ProjectSettings.globalize_path("res://build") + "/wp12_live"
+	DirAccess.make_dir_recursive_absolute(out)
+	var frame_idx := 0
+	while true:
+		await get_tree().create_timer(interval, true, false, true).timeout
+		await RenderingServer.frame_post_draw
+		var image := get_viewport().get_texture().get_image()
+		if image != null:
+			image.save_png("%s/shot_%04d.png" % [out, frame_idx])
+			frame_idx += 1
+			if frame_idx % 10 == 1:
+				var win := get_window()
+				print("[WP12] live shot %d saved | win_size=%s content_scale=%.2f vp_mouse=%s visible_rect=%s" % [
+					frame_idx, win.size, win.content_scale_factor,
+					str(get_viewport().get_mouse_position()), str(get_viewport().get_visible_rect().size)])
 
 
 func _build_fade() -> void:
@@ -171,3 +197,10 @@ func _on_return_to_menu() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_debug"):
 		EventBus.debug_panel_toggled.emit()
+	if OS.get_environment("LB_WP12") != "":
+		var key := event as InputEventKey
+		if key != null and key.pressed and not key.echo:
+			print("[WP12-KEY] keycode=%s physical=%s" % [
+				OS.get_keycode_string(key.keycode),
+				OS.get_keycode_string(key.physical_keycode),
+			])
